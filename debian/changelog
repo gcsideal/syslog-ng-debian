@@ -1,3 +1,10 @@
+syslog-ng (3.13.2-4.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * [ebb81d1] Ignore PEP8 W504 warning (Closes: #910896)
+
+ -- Vincent Bernat <bernat@debian.org>  Mon, 15 Oct 2018 08:22:59 +0200
+
 syslog-ng (3.13.2-4.1) unstable; urgency=medium
 
   * Non-maintainer upload.
