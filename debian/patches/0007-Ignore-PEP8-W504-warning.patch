@@ -1,0 +1,21 @@
+From: Vincent Bernat <vincent@bernat.ch>
+Date: Mon, 15 Oct 2018 08:13:52 +0200
+Subject: Ignore PEP8 W504 warning
+
+---
+ modules/python/pylib/Makefile.am | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/modules/python/pylib/Makefile.am b/modules/python/pylib/Makefile.am
+index ef8ed3c..a17f26a 100644
+--- a/modules/python/pylib/Makefile.am
++++ b/modules/python/pylib/Makefile.am
+@@ -69,7 +69,7 @@ python-unit:
+ 	nosetests $(PYLIB_SRCDIR)/syslogng
+ 
+ python-pep8:
+-	pep8 --ignore=E501 $(PYLIB_SRCDIR)/syslogng
++	pep8 --ignore=E501,W504 $(PYLIB_SRCDIR)/syslogng
+ 
+ python-pylint:
+ 	pylint -r n --rcfile=$(PYLIB_SRCDIR)/pylintrc $(PYLIB_SRCDIR)/syslogng

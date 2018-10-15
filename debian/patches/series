@@ -4,3 +4,4 @@
 0004-Removed-two-typo-from-the-get_path_max-code.patch
 0005-Fixed-python-issue-R1710.patch
 0006-Make-the-the-data-type-explicit-in-transport-mock.patch
+0007-Ignore-PEP8-W504-warning.patch
