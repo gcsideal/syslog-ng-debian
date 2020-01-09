@@ -1,3 +1,1 @@
 lib/systemd/system/syslog-ng@.service
-usr/share/syslog-ng/include/scl/hdfs/plugin.conf
-usr/share/syslog-ng/include/scl/elasticsearch/elastic-java.conf

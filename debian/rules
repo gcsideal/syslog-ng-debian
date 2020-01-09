@@ -195,7 +195,7 @@ override_dh_python3:
 ##
 
 override_dh_missing:
-	dh_missing $(shell awk '{sub(/.*\//, "", $$1); print "-X"$$2$$1}' debian/syslog-ng-mod-extra.install) --fail-missing
+	dh_missing --fail-missing
 
 # By default, the arch:all syslog-ng package does not need anything
 # built, so build-indep shall be empty. This avoids triggering another
