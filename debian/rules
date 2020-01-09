@@ -134,13 +134,6 @@ override_dh_auto_install:
 	[ ! -f $(CURDIR)/debian/tmp/usr/share/syslog-ng/tools/merge-grammar.py ] || \
 		sed -i 's/ python$$/ python3/' \
 		$(CURDIR)/debian/tmp/usr/share/syslog-ng/tools/merge-grammar.py
-	# installed manually
-	rm -rf debian/tmp/usr/share/syslog-ng/include/scl/checkpoint/ \
-		debian/tmp/usr/share/syslog-ng/include/scl/collectd/ \
-		debian/tmp/usr/share/syslog-ng/include/scl/elasticsearch/ \
-		debian/tmp/usr/share/syslog-ng/include/scl/junos/ \
-		debian/tmp/usr/share/syslog-ng/include/scl/netskope/ \
-		debian/tmp/usr/share/syslog-ng/include/scl/websense/
 
 # To get better test results, and actually see failing tests, we need
 # to pass VERBOSE=1 to make when running the tests. Do that here.
