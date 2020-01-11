@@ -101,8 +101,9 @@ override_dh_auto_configure:
 		--enable-amqp \
 		$(PACCT_CONFIGURE_OPTS) \
 		--enable-python \
-		--with-python=3 \
+		--enable-snmp-dest \
 		\
+		--with-python=3 \
 		--with-mongoc=system \
 		--with-ivykis=system \
 		--with-jsonc=system \
