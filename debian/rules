@@ -94,7 +94,6 @@ override_dh_auto_configure:
 		--enable-tcp-wrapper \
 		--enable-sql \
 		--enable-json \
-		--disable-java \
 		--enable-manpages \
 		$(PACCT_CONFIGURE_OPTS) \
 		--enable-python \
@@ -105,6 +104,7 @@ override_dh_auto_configure:
 		--enable-amqp=auto \
 		--enable-kafka=auto \
 		--enable-riemann=auto \
+		--enable-java=auto \
 		\
 		--with-python=3 \
 		--with-mongoc=system \
