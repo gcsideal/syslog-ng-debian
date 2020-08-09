@@ -1,3 +1,40 @@
+syslog-ng (3.28.1-1) unstable; urgency=medium
+
+  [ SZALAY Attila ]
+  * [fb28861] New upstream version 3.28.1
+  * [47b589a] Remove patches applied upstream
+  * [6e316b7] Follow upstream renaming to slogimport to slogencrypt
+  * [c3e32f7] Added new manpage secure-logging.7
+  * [469b9e4] Fix lintian warning about direct maintscript usage
+
+  [ Balazs Scheidler ]
+  * [d27702d] add azure-auth-header build products into mod-http
+  * [c66540c] drop pylint3 as a Build-Dependency.
+    We are not running pylint3 in debian packaging anyway and Ubuntu eoan does
+    not have this package.
+
+  [ SZALAY Attila ]
+  * [bea2687] Clean up the packaging a bit.
+    Fixed the dh_missing exclude magic, so both the rm command can be removed
+    from the rules file and the related lines can be removed from the
+    not-installed file.
+
+  [ Balazs Scheidler ]
+  * [e66c7f0] move the python packages under syslog-ng specific directory
+
+  [ SZALAY Attila ]
+  * [50e604b] Fix dh_python3 call.
+    As syslog-ng use a different directory (a sub directory) of what the
+    dh_python3 expects, after changing the python directory structure in the
+    previous patch, the dh_python3 call had to be adjusted too.
+  * [ce93883] Made some other changes suggested by lintian
+    * Stop using dpkg-parsechangelog to get the package version
+    * Remove/change entries in the copyright file
+  * [01dc303] Remove github specific files from upstream archive
+  * [c85fed1] Factor out syslog-ng-mod-slog
+
+ -- SZALAY Attila <sasa@debian.org>  Sun, 23 Aug 2020 22:50:55 +0200
+
 syslog-ng (3.27.1-3) unstable; urgency=medium
 
   * Fix sumologic.conf installation.
