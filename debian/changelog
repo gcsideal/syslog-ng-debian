@@ -1,3 +1,13 @@
+syslog-ng (3.27.1-4) unstable; urgency=medium
+
+  * [fb28861] New upstream version 3.28.1
+  * [47b589a] Remove patches applied upstream
+  * [6e316b7] Follow upstream renaming to slogimport to slogencrypt
+  * [c3e32f7] Added new manpage secure-logging.7
+  * [469b9e4] Fix lintian warning about direct maintscript usage
+
+ -- SZALAY Attila <sasa@debian.org>  Mon, 10 Aug 2020 21:39:01 +0200
+
 syslog-ng (3.27.1-3) unstable; urgency=medium
 
   * Fix sumologic.conf installation.
