@@ -188,7 +188,7 @@ override_dh_gencontrol:
 # Sadly, dh_python3 barfs on --dbg-package=, so we work it around by
 # clearing DH_OPTIONS here.
 override_dh_python3:
-	DH_OPTIONS="" dh_python3
+	DH_OPTIONS="" dh_python3 usr/lib/syslog-ng/${UMAJOR}
 
 ##
 #* Other, non-override targets
