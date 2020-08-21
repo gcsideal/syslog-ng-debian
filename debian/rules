@@ -5,6 +5,7 @@
 ##
 ## Released under the GPLv2+, see /usr/share/common-licenses/GPL-2 on
 ## Debian systems.
+include /usr/share/dpkg/pkg-info.mk
 
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
@@ -37,7 +38,7 @@ endif
 # sources are in a submodule, in syslog-ng-*. Since we do not wish to
 # update the rules for every major version if it can be helped, figure
 # it out from the changelog instead.
-UMAJOR		   = $(shell dpkg-parsechangelog | sed -n '/^Version:/s/^Version: //p' | cut -d. -f1,2)
+UMAJOR		= $(shell echo ${DEB_VERSION_UPSTREAM} | cut -d. -f1,2)
 
 export DH_OPTIONS += -O-Bdebian/build-tree --dbg-package=syslog-ng-dbg
 
@@ -77,8 +78,7 @@ endif
 override_dh_auto_configure:
 	install -d debian/build-tree
 	-rm -rf doc/man/*.?
-	SOURCE_REVISION="$(shell dpkg-parsechangelog | \
-			  sed -n '/^Version:/s/^Version: //p')"; \
+	SOURCE_REVISION="${DEB_VERSION}"; \
 	dh_auto_configure -- \
 		--build=$(dpkg-architecture -qDEB_BUILD_GNU_TYPE) \
 		--prefix=/usr \

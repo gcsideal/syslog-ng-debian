@@ -18,11 +18,11 @@ Copyright: Copyright (C) Balázs Scheidler
            Copyright (C) BalaBit IT Security Ltd.
 License: LGPL-2.1+ with OpenSSL exception
 
-Files: lib/ack-tracker.h
-       lib/bookmark.h
-       lib/early_ack_tracker.c
+Files: lib/ack-tracker/ack_tracker.h
+       lib/ack-tracker/bookmark.h
+       lib/ack-tracker/early_ack_tracker.c
        lib/host-id.*
-       lib/late_ack_tracker.c
+       lib/ack-tracker/late_ack_tracker.c
        lib/ringbuffer.*
        lib/template/common-template-typedefs.h
 Copyright: Copyright (C) BalaBit IT Ltd.
@@ -31,13 +31,12 @@ License: LGPL-2.1+ with OpenSSL exception
 
 Files: lib/compat/time.h
        lib/filter/filter-in-list.*
-       lib/logproto-indented-multiline-server.*
-       lib/logthrdestdrv.*
+       lib/logproto/logproto-indented-multiline-server.*
+       lib/logthrdest/logthrdestdrv.*
        lib/scratch-buffers.*
        lib/tests/test_cfg_tree.c
        lib/type-hinting.*
-       lib/value-pairs.*
-       lib/vptransform.*
+       lib/value-pairs/value-pairs.*
        scl/graphite/*
 Copyright: Copyright (C) BalaBit IT Security Ltd.
            Copyright (C) Gergely Nagy
@@ -95,7 +94,7 @@ Files: lib/cache.*
        lib/tests/test_cfg_lexer_subst.c
        lib/tests/test_hostname.c
        lib/tests/test_host_resolve.c
-       lib/tests/test_log_message.c
+       lib/logmsg/tests/test_log_message.c
        lib/tests/test_parse_number.c
        lib/tests/test_reloc.c
        lib/tests/test_type_hints.c
@@ -104,40 +103,6 @@ Files: lib/cache.*
        scl/nodejs/*
 Copyright: Copyright (C) BalaBit IT Security Ltd.
 License: LGPL-2.1+ with OpenSSL exception
-
-Files: lib/ivykis/*
-Copyright: Copyright (C) Lennert Buytenhek <buytenh@wantstofly.org>
-License: LGPL-2.1+
-
-Files: lib/ivykis/lib/man3/* lib/ivykis/modules/man3/*
-Copyright: Copyright (C) Lennert Buytenhek <buytenh@wantstofly.org>
-License: ivykis-man
- Permission is granted to distribute possibly modified copies
- of this page provided the header is included verbatim,
- and in case of nontrivial modification author and date
- of the modification is added to the header.
-
-Files: lib/jsonc/*
-Copyright: Copyright (C) Metaparadigm Pte. Ltd
-           Copyright (C) Eric Haszlakiewicz
-License: Expat
-
-Files: lib/jsonc/debug.h
-       lib/jsonc/json.h
-       lib/jsonc/json_object.*
-       lib/jsonc/json_object_iterator.*
-       lib/jsonc/linkhash.*
-Copyright: Copyright (C) Hewlett-Packard Development Company, L.P
-           Copyright (C) Metaparadigm Pte. Ltd
-           Copyright (C) Eric Haszlakiewicz
-License: Expat
-
-Files: lib/jsonc/json_tokener.c
-       lib/jsonc/printbuf.*
-Copyright: Copyright (C) Yahoo! Inc.
-           Copyright (C) Metaparadigm Pte. Ltd
-           Copyright (C) Eric Haszlakiewicz
-License: Expat
 
 Files: modules/*
 Copyright: Copyright (C) Balázs Scheidler
@@ -149,19 +114,6 @@ Copyright: Copyright (C) BalaBit IT Security Ltd.
            Copyright (C) Nagy, Attila <bra@fsn.hu>
            Copyright (C) Gergely Nagy
 License: GPL-2+ with OpenSSL exception
-
-Files: modules/afamqp/rabbitmq-c/*
-Copyright: Copyright (C) VMWare, Inc. and Tony Garnock-Jones
-License: Expat
-
-Files: modules/afamqp/rabbitmq-c/codegen/*
-Copyright: Copyright (C) VMWare, Inc.
-License: MPL
-
-Files: modules/afamqp/rabbitmq-c/librabbitmq/win32/msinttypes/stdint.h
-       modules/afamqp/rabbitmq-c/tests/win32/msinttypes/inttypes.h
-Copyright: Copyright (C) Alexander Chemeris
-License: BSD-3-clause
 
 Files: modules/afmongodb/*
        modules/afsmtp/*
@@ -181,10 +133,6 @@ Files: modules/afmongodb/*
 Copyright: Copyright (c) BalaBit IT Ltd.
            Copyright (C) Gergely Nagy
 License: GPL-2+ with OpenSSL exception
-
-Files: modules/afmongodb/libmongo-client/*
-Copyright: Copyright (C) Gergely Nagy
-License: Apache-2.0
 
 Files: modules/afsocket/systemd-syslog-source.*
 Copyright: Copyright (C) BalaBit IT Ltd.
@@ -231,26 +179,14 @@ Copyright: Copyright (C) Péter Gyöngyösi
            Copyright (C) BalaBit IT Security Ltd.
 License: GPL-2+ with OpenSSL exception
 
-Files: modules/geoip/*
+Files: modules/geoip2/*
        scl/*
 Copyright: Copyright (C) BalaBit IT Security Ltd.
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/geoip/geoip-parser.*
-       modules/geoip/geoip-parser-parser.*
-       modules/geoip/geoip-plugin.c
-Copyright: Copyright (C) Gergely Nagy
 License: GPL-2+ with OpenSSL exception
 
 Files: modules/graphite/*
 Copyright: Copyright (C) BalaBit IT Ltd.
            Copyright (C) Viktor Tusa
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/java-modules/http/src/main/java/org/syslog_ng/http/HTTPDestinationOptions.java
-Copyright: Copyright (C) BalaBit IT Security Ltd.
-           Copyright (C) Adam Arsenault
-           Copyright (C) Viktor Juhasz
 License: GPL-2+ with OpenSSL exception
 
 Files: modules/json/format-json.c
@@ -263,6 +199,12 @@ Files: modules/systemd-journal/*
        modules/java-modules/*
        modules/java/*
 Copyright: Copyright (C) BalaBit IT Security Ltd.
+           Copyright (C) Viktor Juhasz
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/java-modules/http/src/main/java/org/syslog_ng/http/HTTPDestinationOptions.java
+Copyright: Copyright (C) BalaBit IT Security Ltd.
+           Copyright (C) Adam Arsenault
            Copyright (C) Viktor Juhasz
 License: GPL-2+ with OpenSSL exception
 
@@ -360,69 +302,3 @@ License: LGPL-2.1+ with OpenSSL exception
  .
  On Debian systems, the complete text of the GNU Lesser General Public
  License can be found in the file `/usr/share/common-licenses/LGPL-2.1'.
-
-License: Apache-2.0
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
- .
-     https://www.apache.org/licenses/LICENSE-2.0
- .
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
- .
- On Debian systems, the complete text of the Apache License can be found in
- the file `/usr/share/common-licenses/Apache-2.0'.
-
-License: Expat
- Permission is hereby granted, free of charge, to any person
- obtaining a copy of this software and associated documentation
- files (the "Software"), to deal in the Software without
- restriction, including without limitation the rights to use, copy,
- modify, merge, publish, distribute, sublicense, and/or sell copies
- of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
- .
- The above copyright notice and this permission notice shall be
- included in all copies or substantial portions of the Software.
- .
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- SOFTWARE.
-
-License: MPL
- The complete text of the Mozilla Public License can be found in
- the `MPL' file in the same directory as this file.
-
-License: BSD-3-clause
- Redistribution and use in source and binary forms, with or without
- modification, are permitted provided that the following conditions are met:
- .
-   1. Redistributions of source code must retain the above copyright notice,
-      this list of conditions and the following disclaimer.
- .
-   2. Redistributions in binary form must reproduce the above copyright
-      notice, this list of conditions and the following disclaimer in the
-      documentation and/or other materials provided with the distribution.
- .
-   3. The name of the author may be used to endorse or promote products
-      derived from this software without specific prior written permission.
- .
- THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
- OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
