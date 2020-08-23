@@ -1,7 +1,11 @@
 #! /usr/bin/dh-exec
 
 etc/syslog-ng/*
-usr/bin/*
+usr/bin/pdbtool
+usr/bin/loggen
+usr/bin/dqtool
+usr/bin/update-patterndb
+usr/bin/persist-tool
 usr/sbin/*
 usr/lib/syslog-ng/libsyslog-ng-*.so.*
 usr/lib/syslog-ng/libevtlog-*.so.*
@@ -21,7 +25,6 @@ usr/lib/syslog-ng/*/libkvformat.so
 usr/lib/syslog-ng/*/libtags-parser.so
 usr/lib/syslog-ng/*/liblinux-kmsg-format.so
 usr/lib/syslog-ng/*/libpseudofile.so
-usr/lib/syslog-ng/*/libsecure-logging.so
 usr/lib/syslog-ng/*/libsyslogformat.so
 usr/lib/syslog-ng/*/libsystem-source.so
 usr/lib/syslog-ng/*/libtimestamp.so
