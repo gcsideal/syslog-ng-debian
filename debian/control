@@ -512,8 +512,8 @@ Description: Enhanced system logging daemon (SNMP plugin)
   * hand on messages for further processing using message queues (like
     AMQP), files or databases (like PostgreSQL or MongoDB).
  .
- This package provides the SNMP destination plugin, which allows one
- to send messages to an snmp server.
+ This package provides the SNMP source/destination plugins, which allows one
+ to send/receive SNMP traps.
 
 Package: syslog-ng-mod-xml-parser
 Architecture: any
