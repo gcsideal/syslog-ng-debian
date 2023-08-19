@@ -3,3 +3,7 @@ usr/share/syslog-ng/include/scl/hdfs/plugin.conf
 usr/share/syslog-ng/include/scl/elasticsearch/elastic-java.conf
 usr/lib/syslog-ng/syslog-ng/libtest/libsyslog-ng-test.a
 usr/lib/*/pkgconfig/syslog-ng-test.pc
+usr/bin/syslog-ng-update-virtualenv
+usr/lib/syslog-ng/4.3/libcorrelation.so
+usr/lib/syslog-ng/4.3/libmetrics-probe.so
+usr/share/syslog-ng/smart-multi-line.fsm
