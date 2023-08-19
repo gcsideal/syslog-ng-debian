@@ -27,7 +27,6 @@ scl/syslogconf/README usr/share/syslog-ng/include/scl/syslogconf/
 scl/syslogconf/plugin.conf usr/share/syslog-ng/include/scl/syslogconf/
 scl/syslogconf/convert-syslogconf.awk usr/share/syslog-ng/include/scl/syslogconf/
 scl/ewmm/ewmm.conf usr/share/syslog-ng/include/scl/ewmm/
-scl/kubernetes/kubernetes.conf usr/share/syslog-ng/include/scl/kubernetes/
 scl/logmatic/logmatic.conf usr/share/syslog-ng/include/scl/logmatic/
 scl/hdfs/plugin.conf usr/share/syslog-ng/include/scl/hdfs/
 scl/osquery/plugin.conf usr/share/syslog-ng/include/scl/osquery/
