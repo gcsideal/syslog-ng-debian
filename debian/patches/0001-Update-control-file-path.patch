@@ -9,7 +9,7 @@ upstream default /var/run
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/doc/man/syslog-ng.8.xml b/doc/man/syslog-ng.8.xml
-index d8ca6c5..6977bbb 100644
+index a5fd30d..aa6220a 100644
 --- a/doc/man/syslog-ng.8.xml
 +++ b/doc/man/syslog-ng.8.xml
 @@ -81,7 +81,7 @@
