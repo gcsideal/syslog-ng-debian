@@ -45,3 +45,7 @@ scl/elasticsearch/elastic-http.conf usr/share/syslog-ng/include/scl/elasticsearc
 scl/graphite/README usr/share/syslog-ng/include/scl/graphite/
 scl/graphite/plugin.conf usr/share/syslog-ng/include/scl/graphite/
 scl/netskope/plugin.conf usr/share/syslog-ng/include/scl/netskope/
+scl/logscale/logscale.conf usr/share/syslog-ng/include/scl/logscale/
+scl/opensearch/opensearch.conf usr/share/syslog-ng/include/scl/opensearch/
+scl/python/python-modules.conf usr/share/syslog-ng/include/scl/python/
+scl/splunk/splunk.conf usr/share/syslog-ng/include/scl/splunk/
