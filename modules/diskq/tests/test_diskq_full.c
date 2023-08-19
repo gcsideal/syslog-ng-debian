@@ -55,41 +55,48 @@ test_diskq_become_full(gboolean reliable, const gchar *filename)
 
   const gchar *persist_name = "test_diskq";
 
+  StatsClusterKeyBuilder *driver_sck_builder = stats_cluster_key_builder_new();
+  StatsClusterKeyBuilder *queue_sck_builder = stats_cluster_key_builder_new();
   options.reliable = reliable;
   if (reliable)
     {
       _construct_options(&options, 1000, 1000, reliable);
-      q = log_queue_disk_reliable_new(&options, persist_name);
+      q = log_queue_disk_reliable_new(&options, filename, persist_name, STATS_LEVEL0, driver_sck_builder,
+                                      queue_sck_builder);
     }
   else
     {
       _construct_options(&options, 1000, 0, reliable);
-      q = log_queue_disk_non_reliable_new(&options, persist_name);
+      q = log_queue_disk_non_reliable_new(&options, filename, persist_name, STATS_LEVEL0, driver_sck_builder,
+                                          queue_sck_builder);
     }
+  stats_cluster_key_builder_free(driver_sck_builder);
+  stats_cluster_key_builder_free(queue_sck_builder);
 
   log_queue_set_use_backlog(q, TRUE);
 
-  stats_lock();
-  StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_DESTINATION, q->persist_name, NULL);
-  stats_register_counter(0, &sc_key, SC_TYPE_DROPPED, &q->dropped_messages);
-  stats_counter_set(q->dropped_messages, 0);
-  stats_unlock();
   unlink(filename);
-  log_queue_disk_load_queue(q, filename);
+  log_queue_disk_start(q);
   feed_some_messages(q, 1000);
 
-  cr_assert_eq(atomic_gssize_racy_get(&q->dropped_messages->value), 1000, "Bad dropped message number (reliable: %s)",
+  cr_assert_eq(atomic_gssize_racy_get(&q->metrics.shared.dropped_messages->value), 1000,
+               "Bad dropped message number (reliable: %s)",
                reliable ? "TRUE" : "FALSE");
 
+  gboolean persistent;
+  log_queue_disk_stop(q, &persistent);
   log_queue_unref(q);
   disk_queue_options_destroy(&options);
   unlink(filename);
 }
 
-Test(diskq_full, diskq_become_full)
+Test(diskq_full, diskq_become_full_reliable)
 {
   test_diskq_become_full(TRUE, DISKQ_FILENAME_RELIABLE);
+}
+
+Test(diskq_full, diskq_become_full_non_reliable)
+{
   test_diskq_become_full(FALSE, DISKQ_FILENAME_NOT_RELIABLE);
 }
 

@@ -142,6 +142,7 @@ static void
 log_driver_init_instance(LogDriver *self, GlobalConfig *cfg)
 {
   log_pipe_init_instance(&self->super, cfg);
+  self->super.flags |= PIF_CONFIG_RELATED;
   self->super.free_fn = log_driver_free;
   self->super.pre_init = log_driver_pre_init_method;
   self->super.init = log_driver_init_method;
@@ -166,6 +167,21 @@ log_src_driver_pre_init_method(LogPipe *s)
   return log_driver_pre_init_method(s);
 }
 
+static void
+_log_src_driver_register_counters(LogSrcDriver *self)
+{
+  gint level = log_pipe_is_internal(&self->super.super) ? STATS_LEVEL3 : STATS_LEVEL0;
+
+  stats_lock();
+  StatsClusterKey sc_key;
+  stats_cluster_logpipe_key_legacy_set(&sc_key, SCS_SOURCE | SCS_GROUP, self->super.group, NULL );
+  stats_register_counter(level, &sc_key, SC_TYPE_PROCESSED,
+                         &self->super.processed_group_messages);
+  stats_cluster_logpipe_key_legacy_set(&sc_key,  SCS_CENTER, NULL, "received" );
+  stats_register_counter(level, &sc_key, SC_TYPE_PROCESSED, &self->received_global_messages);
+  stats_unlock();
+}
+
 gboolean
 log_src_driver_init_method(LogPipe *s)
 {
@@ -174,16 +190,22 @@ log_src_driver_init_method(LogPipe *s)
   if (!log_driver_init_method(s))
     return FALSE;
 
-  stats_lock();
-  StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_SOURCE | SCS_GROUP, self->super.group, NULL );
-  stats_register_counter(0, &sc_key, SC_TYPE_PROCESSED,
-                         &self->super.processed_group_messages);
-  stats_cluster_logpipe_key_set(&sc_key,  SCS_CENTER, NULL, "received" );
-  stats_register_counter(0, &sc_key, SC_TYPE_PROCESSED, &self->received_global_messages);
-  stats_unlock();
+  _log_src_driver_register_counters(self);
 
   return TRUE;
+}
+
+static void
+_log_src_driver_unregister_counters(LogSrcDriver *self)
+{
+  stats_lock();
+  StatsClusterKey sc_key;
+  stats_cluster_logpipe_key_legacy_set(&sc_key, SCS_SOURCE | SCS_GROUP, self->super.group, NULL );
+  stats_unregister_counter(&sc_key, SC_TYPE_PROCESSED,
+                           &self->super.processed_group_messages);
+  stats_cluster_logpipe_key_legacy_set(&sc_key, SCS_CENTER, NULL, "received" );
+  stats_unregister_counter(&sc_key, SC_TYPE_PROCESSED, &self->received_global_messages);
+  stats_unlock();
 }
 
 gboolean
@@ -194,14 +216,8 @@ log_src_driver_deinit_method(LogPipe *s)
   if (!log_driver_deinit_method(s))
     return FALSE;
 
-  stats_lock();
-  StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_SOURCE | SCS_GROUP, self->super.group, NULL );
-  stats_unregister_counter(&sc_key, SC_TYPE_PROCESSED,
-                           &self->super.processed_group_messages);
-  stats_cluster_logpipe_key_set(&sc_key, SCS_CENTER, NULL, "received" );
-  stats_unregister_counter(&sc_key, SC_TYPE_PROCESSED, &self->received_global_messages);
-  stats_unlock();
+  _log_src_driver_unregister_counters(self);
+
   return TRUE;
 }
 
@@ -242,7 +258,8 @@ log_src_driver_free(LogPipe *s)
 /* LogDestDriver */
 
 static LogQueue *
-_create_memory_queue(LogDestDriver *self, const gchar *persist_name)
+_create_memory_queue(LogDestDriver *self, const gchar *persist_name, gint stats_level,
+                     const StatsClusterKeyBuilder *driver_sck_builder, StatsClusterKeyBuilder *queue_sck_builder)
 {
   GlobalConfig *cfg = log_pipe_get_config(&self->super.super);
 
@@ -256,15 +273,17 @@ _create_memory_queue(LogDestDriver *self, const gchar *persist_name)
                        "flags(flow-control) option set.) To enable the new behaviour, update the @version string in "
                        "your configuration and consider lowering the value of log-fifo-size().");
 
-      return log_queue_fifo_legacy_new(log_fifo_size, persist_name);
+      return log_queue_fifo_legacy_new(log_fifo_size, persist_name, stats_level, driver_sck_builder, queue_sck_builder);
     }
 
-  return log_queue_fifo_new(log_fifo_size, persist_name);
+  return log_queue_fifo_new(log_fifo_size, persist_name, stats_level, driver_sck_builder, queue_sck_builder);
 }
 
 /* returns a reference */
 static LogQueue *
-log_dest_driver_acquire_memory_queue(LogDestDriver *self, const gchar *persist_name)
+log_dest_driver_acquire_memory_queue(LogDestDriver *self, const gchar *persist_name, gint stats_level,
+                                     const StatsClusterKeyBuilder *driver_sck_builder,
+                                     StatsClusterKeyBuilder *queue_sck_builder)
 {
   GlobalConfig *cfg = log_pipe_get_config(&self->super.super);
   LogQueue *queue = NULL;
@@ -280,7 +299,7 @@ log_dest_driver_acquire_memory_queue(LogDestDriver *self, const gchar *persist_n
 
   if (!queue)
     {
-      queue = _create_memory_queue(self, persist_name);
+      queue = _create_memory_queue(self, persist_name, stats_level, driver_sck_builder, queue_sck_builder);
       log_queue_set_throttle(queue, self->throttle);
     }
   return queue;
@@ -295,7 +314,7 @@ log_dest_driver_release_queue_method(LogDestDriver *self, LogQueue *q)
   /* we only save the LogQueue instance if it contains data */
   if (q->persist_name && log_queue_keep_on_reload(q) > 0)
     {
-      cfg_persist_config_add(cfg, q->persist_name, q, (GDestroyNotify) log_queue_unref, FALSE);
+      cfg_persist_config_add(cfg, q->persist_name, q, (GDestroyNotify) log_queue_unref);
     }
   else
     {
@@ -327,6 +346,21 @@ log_dest_driver_pre_init_method(LogPipe *s)
   return log_driver_pre_init_method(s);
 }
 
+static void
+_log_dest_driver_register_counters(LogDestDriver *self)
+{
+  gint level = log_pipe_is_internal(&self->super.super) ? STATS_LEVEL3 : STATS_LEVEL0;
+
+  stats_lock();
+  StatsClusterKey sc_key;
+  stats_cluster_logpipe_key_legacy_set(&sc_key, SCS_DESTINATION | SCS_GROUP, self->super.group, NULL );
+  stats_register_counter(level, &sc_key, SC_TYPE_PROCESSED,
+                         &self->super.processed_group_messages);
+  stats_cluster_logpipe_key_legacy_set(&sc_key, SCS_CENTER, NULL, "queued" );
+  stats_register_counter(level, &sc_key, SC_TYPE_PROCESSED, &self->queued_global_messages);
+  stats_unlock();
+}
+
 gboolean
 log_dest_driver_init_method(LogPipe *s)
 {
@@ -335,16 +369,22 @@ log_dest_driver_init_method(LogPipe *s)
   if (!log_driver_init_method(s))
     return FALSE;
 
-  stats_lock();
-  StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_DESTINATION | SCS_GROUP, self->super.group, NULL );
-  stats_register_counter(0, &sc_key, SC_TYPE_PROCESSED,
-                         &self->super.processed_group_messages);
-  stats_cluster_logpipe_key_set(&sc_key, SCS_CENTER, NULL, "queued" );
-  stats_register_counter(0, &sc_key, SC_TYPE_PROCESSED, &self->queued_global_messages);
-  stats_unlock();
+  _log_dest_driver_register_counters(self);
 
   return TRUE;
+}
+
+static void
+_log_dest_driver_unregister_counters(LogDestDriver *self)
+{
+  stats_lock();
+  StatsClusterKey sc_key;
+  stats_cluster_logpipe_key_legacy_set(&sc_key, SCS_DESTINATION | SCS_GROUP, self->super.group, NULL );
+  stats_unregister_counter(&sc_key, SC_TYPE_PROCESSED,
+                           &self->super.processed_group_messages);
+  stats_cluster_logpipe_key_legacy_set(&sc_key, SCS_CENTER, NULL, "queued" );
+  stats_unregister_counter(&sc_key, SC_TYPE_PROCESSED, &self->queued_global_messages);
+  stats_unlock();
 }
 
 gboolean
@@ -366,14 +406,7 @@ log_dest_driver_deinit_method(LogPipe *s)
     }
   g_assert(self->queues == NULL);
 
-  stats_lock();
-  StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_DESTINATION | SCS_GROUP, self->super.group, NULL );
-  stats_unregister_counter(&sc_key, SC_TYPE_PROCESSED,
-                           &self->super.processed_group_messages);
-  stats_cluster_logpipe_key_set(&sc_key, SCS_CENTER, NULL, "queued" );
-  stats_unregister_counter(&sc_key, SC_TYPE_PROCESSED, &self->queued_global_messages);
-  stats_unlock();
+  _log_dest_driver_unregister_counters(self);
 
   if (!log_driver_deinit_method(s))
     return FALSE;

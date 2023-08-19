@@ -43,7 +43,9 @@ log_filter_pipe_init(LogPipe *s)
 
   stats_lock();
   StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_FILTER, self->name, NULL );
+  StatsClusterLabel labels[] = { stats_cluster_label("id", self->name) };
+  stats_cluster_logpipe_key_set(&sc_key, "filtered_events_total", labels, G_N_ELEMENTS(labels));
+  stats_cluster_logpipe_key_add_legacy_alias(&sc_key, SCS_FILTER, self->name, NULL );
   stats_register_counter(1, &sc_key, SC_TYPE_MATCHED, &self->matched);
   stats_register_counter(1, &sc_key, SC_TYPE_NOT_MATCHED, &self->not_matched);
   stats_unlock();
@@ -104,7 +106,9 @@ log_filter_pipe_free(LogPipe *s)
 
   stats_lock();
   StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_FILTER, self->name, NULL );
+  StatsClusterLabel labels[] = { stats_cluster_label("id", self->name) };
+  stats_cluster_logpipe_key_set(&sc_key, "filtered_events_total", labels, G_N_ELEMENTS(labels));
+  stats_cluster_logpipe_key_add_legacy_alias(&sc_key, SCS_FILTER, self->name, NULL );
   stats_unregister_counter(&sc_key, SC_TYPE_MATCHED, &self->matched);
   stats_unregister_counter(&sc_key, SC_TYPE_NOT_MATCHED, &self->not_matched);
   stats_unlock();
@@ -120,6 +124,7 @@ log_filter_pipe_new(FilterExprNode *expr, GlobalConfig *cfg)
   LogFilterPipe *self = g_new0(LogFilterPipe, 1);
 
   log_pipe_init_instance(&self->super, cfg);
+  self->super.flags |= PIF_CONFIG_RELATED;
   self->super.init = log_filter_pipe_init;
   self->super.queue = log_filter_pipe_queue;
   self->super.free_fn = log_filter_pipe_free;

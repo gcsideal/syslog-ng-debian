@@ -27,6 +27,7 @@
 #include "template/macros.h"
 #include "template/escaping.h"
 #include "template/repr.h"
+#include "timeutils/format.h"
 #include "cfg.h"
 
 gboolean
@@ -197,9 +198,9 @@ log_template_compile(LogTemplate *self, const gchar *template, GError **error)
   g_return_val_if_fail(error == NULL || *error == NULL, FALSE);
 
   log_template_reset_compiled(self);
-  if (self->template)
-    g_free(self->template);
-  self->template = g_strdup(template);
+  if (self->template_str)
+    g_free(self->template_str);
+  self->template_str = g_strdup(template);
 
   log_template_compiler_init(&compiler, self);
   result = log_template_compiler_compile(&compiler, &self->compiled_template, error);
@@ -208,6 +209,13 @@ log_template_compile(LogTemplate *self, const gchar *template, GError **error)
   self->literal = _calculate_if_literal(self);
   self->trivial = _calculate_if_trivial(self);
   return result;
+}
+
+void
+log_template_forget_template_string(LogTemplate *self)
+{
+  g_free(self->template_str);
+  self->template_str = NULL;
 }
 
 static void
@@ -272,8 +280,8 @@ void
 log_template_compile_literal_string(LogTemplate *self, const gchar *literal)
 {
   log_template_reset_compiled(self);
-  g_free(self->template);
-  self->template = g_strdup(literal);
+  g_free(self->template_str);
+  self->template_str = g_strdup(literal);
   self->compiled_template = g_list_append(self->compiled_template,
                                           log_template_elem_new_macro(literal, M_NONE, NULL, 0));
 
@@ -367,7 +375,7 @@ log_template_free(LogTemplate *self)
 {
   log_template_reset_compiled(self);
   g_free(self->name);
-  g_free(self->template);
+  g_free(self->template_str);
   g_free(self);
 }
 
@@ -455,6 +463,15 @@ log_template_options_defaults(LogTemplateOptions *options)
   options->use_fqdn = FALSE;
 }
 
+void
+log_template_options_global_defaults(LogTemplateOptions *options)
+{
+  log_template_options_defaults(options);
+  options->ts_format = TS_FMT_BSD;
+  options->frac_digits = 0;
+  options->on_error = ON_ERROR_DROP_MESSAGE;
+}
+
 GQuark
 log_template_error_quark(void)
 {
@@ -513,12 +530,12 @@ log_template_options_set_on_error(LogTemplateOptions *options, gint on_error)
 }
 
 EVTTAG *
-evt_tag_template(const gchar *name, LogTemplate *template, LogMessage *msg, LogTemplateEvalOptions *options)
+evt_tag_template(const gchar *name, LogTemplate *template_obj, LogMessage *msg, LogTemplateEvalOptions *options)
 {
   /* trying to avoid scratch-buffers here, this is only meant to be used in trace messages */
   GString *buf = g_string_sized_new(256);
 
-  log_template_format(template, msg, options, buf);
+  log_template_format(template_obj, msg, options, buf);
 
   EVTTAG *result = evt_tag_str(name, buf->str);
   g_string_free(buf, TRUE);

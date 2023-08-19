@@ -38,9 +38,6 @@ function install_dbld_dependencies()
         debian|ubuntu)
             apt-get update
             $APT_INSTALL wget gnupg2
-            if [ "${OS_DISTRIBUTION_CODE_NAME}" = "xenial" ]; then
-                $APT_INSTALL -t xenial-backports debhelper dh-systemd
-            fi
             ;;
         fedora)
             $DNF_INSTALL -y wget dnf-plugins-core
@@ -84,6 +81,11 @@ function install_gosu() {
     chmod +x /usr/local/bin/gosu
 }
 
+function set_jvm_paths() {
+    find / -name 'libjvm.so' | sed 's@/libjvm.so@@g' | tee --append /etc/ld.so.conf.d/openjdk-libjvm.conf
+    ldconfig
+}
+
 function install_gradle {
     GRADLE_VERSION=4.10
     download_target "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" /tmp/gradle.zip
@@ -109,6 +111,12 @@ function download_target() {
 function filter_packages_by_platform {
     FILENAME=$1
     grep -v "#" ${FILENAME} | grep -e "${IMAGE_PLATFORM}" -e "${OS_DISTRIBUTION}[^-]" | cut -d"[" -f1
+}
+
+function filter_pip_packages_by_platform_and_python_version {
+    FILENAME=$1
+    PYTHON_VERSION=$2
+    grep -v "#" ${FILENAME} | grep -e "${IMAGE_PLATFORM}" -e "${OS_DISTRIBUTION}[^-]" | grep -e "${PYTHON_VERSION}" | cut -d"[" -f1
 }
 
 function add_copr_repo {
@@ -169,38 +177,12 @@ function install_yum_packages {
 }
 
 function install_pip_packages {
-    case "${IMAGE_PLATFORM}" in
-        ubuntu-xenial|ubuntu-bionic)
-            python_executables="python2"
-            ;;
-        debian-stretch|debian-buster)
-            python_executables="python2"
-            ;;
-        devshell|kira)
-            python_executables="python2 python3"
-            ;;
-        *)
-            python_executables="python3"
-            ;;
-    esac
+    local python_executables="python2 python3"
     for python_executable in ${python_executables}; do
-        case "${IMAGE_PLATFORM}" in
-            centos-7|ubuntu-xenial)
-                $python_executable -m pip install --no-cache-dir --upgrade "pip < 21.0"
-                $python_executable -m pip install --no-cache-dir --upgrade setuptools
-                filter_packages_by_platform $DBLD_DIR/pip_packages.manifest | xargs $python_executable -m pip install --no-cache-dir --ignore-installed -U
-                ;;
-            fedora-*)
-                # don't update pip/setuptools on Fedora as RPM installed
-                # instances cause an error, at least in Fedora-35
-                filter_packages_by_platform $DBLD_DIR/pip_packages.manifest | xargs $python_executable -m pip install --no-cache-dir --ignore-installed -U
-                ;;
-            *)
-                $python_executable -m pip install --no-cache-dir --upgrade pip
-                $python_executable -m pip install --no-cache-dir --upgrade setuptools
-                filter_packages_by_platform $DBLD_DIR/pip_packages.manifest | xargs $python_executable -m pip install --no-cache-dir --ignore-installed -U
-                ;;
-        esac
+        local pip_install="${python_executable} -m pip install --ignore-installed --no-cache-dir --upgrade"
+        ${pip_install} "pip"
+        ${pip_install} "setuptools<66.0"
+        filter_pip_packages_by_platform_and_python_version $DBLD_DIR/pip_packages.manifest ${python_executable} | xargs ${pip_install}
     done
 }
 

@@ -23,6 +23,8 @@
 #include "python-persist.h"
 #include "persistable-state-header.h"
 #include "python-helpers.h"
+#include "python-types.h"
+#include "python-main.h"
 #include "syslog-ng.h"
 #include "driver.h"
 #include "mainloop.h"
@@ -58,7 +60,7 @@ entry_to_pyobject(guint8 type, gchar *value)
   switch (type)
     {
     case ENTRY_TYPE_STRING:
-      return _py_string_from_string(value, -1);
+      return py_string_from_string(value, -1);
     case ENTRY_TYPE_LONG:
       return PyLong_FromString(value, NULL, 10);
     case ENTRY_TYPE_BYTES:
@@ -71,7 +73,7 @@ entry_to_pyobject(guint8 type, gchar *value)
 static PyObject *
 _call_generate_persist_name_method(PythonPersistMembers *options)
 {
-  PyObject *py_options = options->options ? _py_create_arg_dict(options->options) : NULL;
+  PyObject *py_options = options->options ? python_options_create_py_dict(options->options) : NULL;
   PyObject *ret = _py_invoke_function(options->generate_persist_name_method, py_options,
                                       options->class, options->id);
   Py_XDECREF(py_options);
@@ -93,7 +95,11 @@ copy_stats_instance(const LogPipe *self, const gchar *module, PythonPersistMembe
 
   PyObject *ret = _call_generate_persist_name_method(options);
   if (ret)
-    g_snprintf(buffer, size, "%s,%s", module, _py_get_string_as_string(ret));
+    {
+      const gchar *ret_as_c_str;
+      py_bytes_or_string_to_string(ret, &ret_as_c_str);
+      g_snprintf(buffer, size, "%s,%s", module, ret_as_c_str);
+    }
   else
     {
       format_default_stats_instance(buffer, size, module, options->class);
@@ -107,10 +113,43 @@ copy_stats_instance(const LogPipe *self, const gchar *module, PythonPersistMembe
   PyGILState_Release(gstate);
 }
 
+static void
+copy_instance_name(const LogPipe *self, const gchar *module, PythonPersistMembers *options,
+                   gchar *buffer, gsize size)
+{
+  PyGILState_STATE gstate;
+  gstate = PyGILState_Ensure();
+
+  PyObject *ret = _call_generate_persist_name_method(options);
+  if (ret)
+    {
+      const gchar *ret_as_c_str;
+      py_bytes_or_string_to_string(ret, &ret_as_c_str);
+      g_snprintf(buffer, size, "%s", ret_as_c_str);
+    }
+  else
+    {
+      g_strlcpy(buffer, "", size);
+    }
+  Py_XDECREF(ret);
+
+  PyGILState_Release(gstate);
+}
+
 const gchar *
-python_format_stats_instance(LogPipe *p, const gchar *module, PythonPersistMembers *options)
+python_format_stats_key(LogPipe *p, StatsClusterKeyBuilder *kb, const gchar *module, PythonPersistMembers *options)
 {
   static gchar persist_name[1024];
+
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("driver", module));
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("class", options->class));
+
+  if (options->generate_persist_name_method)
+    {
+      copy_instance_name(p, module, options, persist_name, sizeof(persist_name));
+      stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("instance", persist_name));
+    }
+
 
   if (p->persist_name)
     format_default_stats_instance(persist_name, sizeof(persist_name), module, p->persist_name);
@@ -143,7 +182,11 @@ copy_persist_name(const LogPipe *self, const gchar *module, PythonPersistMembers
 
   PyObject *ret =_call_generate_persist_name_method(options);
   if (ret)
-    g_snprintf(buffer, size, "%s.%s", module, _py_get_string_as_string(ret));
+    {
+      const gchar *ret_as_c_str;
+      py_bytes_or_string_to_string(ret, &ret_as_c_str);
+      g_snprintf(buffer, size, "%s.%s", module, ret_as_c_str);
+    }
   else
     {
       format_default_persist_name_with_class(buffer, size, module, options->class);
@@ -220,26 +263,25 @@ prepare_master_entry(PersistState *persist_state, const gchar *persist_name)
 static int
 _persist_type_init(PyObject *s, PyObject *args, PyObject *kwds)
 {
-  PyPersist *self =(PyPersist *)s;
-  const gchar *persist_name=NULL;
-
-  self->persist_state = PyCapsule_Import("_syslogng.persist_state", FALSE);
-  if (!self->persist_state)
-    {
-      gchar buf[256];
-      _py_format_exception_text(buf, sizeof(buf));
-
-      msg_error("Error importing persist_state",
-                evt_tag_str("exception", buf));
-      _py_finish_exception_handling();
-
-      g_assert_not_reached();
-    }
+  PyPersist *self = (PyPersist *) s;
+  const gchar *persist_name = NULL;
+  GlobalConfig *cfg = python_get_associated_config();
 
   static char *kwlist[] = {"persist_name", NULL};
 
   if (! PyArg_ParseTupleAndKeywords(args, kwds, "s", kwlist, &persist_name))
     return -1;
+
+  self->persist_state = cfg->state;
+  if (!self->persist_state)
+    {
+      msg_error("Attempting to use persist_state while the configuration is not yet initialized, please use Persist() in or after the init() method",
+                evt_tag_str("name", persist_name));
+      _py_finish_exception_handling();
+      PyErr_SetString(PyExc_RuntimeError, "persist_state is not yet available");
+      return -1;
+    }
+
 
   if (g_strstr_len(persist_name, -1, SUBKEY_DELIMITER))
     {
@@ -324,12 +366,18 @@ _serialize(guint8 type, PyObject *v)
   switch (type)
     {
     case ENTRY_TYPE_STRING:
-      return g_strdup(_py_get_string_as_string(v));
+    {
+      const gchar *str;
+      py_bytes_or_string_to_string(v, &str);
+      return g_strdup(str);
+    }
     case ENTRY_TYPE_LONG:
     {
       PyObject *as_str = PyObject_Str(v);
       g_assert(as_str);
-      gchar *result = g_strdup(_py_get_string_as_string(as_str));
+      const gchar *as_c_str;
+      py_bytes_or_string_to_string(as_str, &as_c_str);
+      gchar *result = g_strdup(as_c_str);
       Py_DECREF(as_str);
       return result;
     }
@@ -345,7 +393,7 @@ _store_entry(PyPersist *self, const gchar *key, guint8 type, PyObject *v)
 {
   gchar *query_key = _build_key(self, key);
   gchar *value = _serialize(type, v);
-  gsize value_len = strlen(value) + sizeof(type);
+  gsize value_len = strlen(value) + 1 + sizeof(type);
 
   PersistEntryHandle handle = _allocate_persist_entry(self->persist_state, query_key, value, value_len);
   if (!handle)
@@ -371,13 +419,13 @@ _py_persist_type_get(PyObject *o, PyObject *key)
 {
   PyPersist *self = (PyPersist *)o;
 
-  if (!_py_is_string(key))
+  const gchar *name;
+  if (!py_bytes_or_string_to_string(key, &name))
     {
       PyErr_SetString(PyExc_TypeError, "key is not a string object");
       return NULL;
     }
 
-  const gchar *name = _py_get_string_as_string(key);
   guint8 type;
   gchar *value = _lookup_entry(self, name, &type);
 
@@ -405,7 +453,8 @@ _py_persist_type_set(PyObject *o, PyObject *k, PyObject *v)
   PyPersist *self = (PyPersist *)o;
   guint8 type;
 
-  if (!_py_is_string(k))
+  const gchar *key;
+  if (!py_bytes_or_string_to_string(k, &key))
     {
       PyErr_SetString(PyExc_TypeError, "key is not a string object");
       return -1;
@@ -413,17 +462,15 @@ _py_persist_type_set(PyObject *o, PyObject *k, PyObject *v)
 
   if (PyBytes_Check(v))
     type = ENTRY_TYPE_BYTES;
-  else if (_py_is_string(v))
+  else if (is_py_obj_bytes_or_string_type(v))
     type = ENTRY_TYPE_STRING;
-  else if (py_object_is_integer(v))
+  else if (PyLong_Check(v))
     type = ENTRY_TYPE_LONG;
   else
     {
       PyErr_SetString(PyExc_TypeError, "Value must be either string, integer or bytes");
       return -1;
     }
-
-  const gchar *key = _py_get_string_as_string(k);
 
   if (!_store_entry(self, key, type, v))
     {
@@ -457,7 +504,7 @@ _insert_to_dict(gchar *key, gint entry_size, Entry *entry, gpointer *user_data)
   if (entry->type >= ENTRY_TYPE_MAX)
     return;
 
-  PyObject *key_object = _py_string_from_string(start + strlen(SUBKEY_DELIMITER), -1);
+  PyObject *key_object = py_string_from_string(start + strlen(SUBKEY_DELIMITER), -1);
   PyObject *value_object = entry_to_pyobject(entry->type, entry->data);
   PyDict_SetItem(entries, key_object, value_object);
   Py_XDECREF(key_object);
@@ -497,7 +544,7 @@ PyTypeObject py_persist_type =
 };
 
 void
-py_persist_init(void)
+py_persist_global_init(void)
 {
   PyType_Ready(&py_persist_type);
   PyModule_AddObject(PyImport_AddModule("_syslogng"), "Persist", (PyObject *) &py_persist_type);

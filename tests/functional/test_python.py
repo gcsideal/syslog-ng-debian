@@ -29,6 +29,8 @@ import os
 
 config = """@version: %(syslog_ng_version)s
 
+@module mod-python use-virtualenv(no)
+
 options { keep-hostname(yes); };
 
 source s_int { internal(); };
@@ -43,7 +45,9 @@ log { source(s_tcp); destination(d_python); };
 
 python {
 
-class MyParser(object):
+from syslogng import LogParser
+
+class MyParser(LogParser):
   def init(self, options):
       return True
 

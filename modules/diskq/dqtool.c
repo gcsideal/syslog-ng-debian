@@ -123,19 +123,17 @@ open_queue(char *filename, LogQueue **lq, DiskQueueOptions *options)
 
   if (options->reliable)
     {
-      options->disk_buf_size = 128;
-      options->mem_buf_size = 1024 * 1024;
-      *lq = log_queue_disk_reliable_new(options, NULL);
+      options->flow_control_window_bytes = 1024 * 1024;
+      *lq = log_queue_disk_reliable_new(options, filename, NULL, STATS_LEVEL0, NULL, NULL);
     }
   else
     {
-      options->disk_buf_size = 1;
-      options->mem_buf_size = 128;
-      options->qout_size = 1000;
-      *lq = log_queue_disk_non_reliable_new(options, NULL);
+      options->flow_control_window_bytes = 128;
+      options->front_cache_size = 1000;
+      *lq = log_queue_disk_non_reliable_new(options, filename, NULL, STATS_LEVEL0, NULL, NULL);
     }
 
-  if (!log_queue_disk_load_queue(*lq, filename))
+  if (!log_queue_disk_start(*lq))
     {
       fprintf(stderr, "Error restoring disk buffer file.\n");
       return FALSE;
@@ -152,6 +150,7 @@ dqtool_cat(int argc, char *argv[])
   GError *error = NULL;
   LogTemplate *template = NULL;
   DiskQueueOptions options = {0};
+  disk_queue_options_set_default_options(&options);
   gint i;
 
   if (template_string)
@@ -160,7 +159,7 @@ dqtool_cat(int argc, char *argv[])
       template = log_template_new(configuration, NULL);
       if (!log_template_compile(template, template_string, &error))
         {
-          fprintf(stderr, "Error compiling template: %s, error: %s\n", template->template, error->message);
+          fprintf(stderr, "Error compiling template: %s, error: %s\n", template->template_str, error->message);
           g_clear_error(&error);
           return 1;
         }
@@ -196,6 +195,8 @@ dqtool_cat(int argc, char *argv[])
           printf("%s", msg->str);
         }
 
+      gboolean persistent;
+      log_queue_disk_stop(lq, &persistent);
       log_queue_unref(lq);
     }
   g_string_free(msg, TRUE);
@@ -211,9 +212,13 @@ dqtool_info(int argc, char *argv[])
     {
       LogQueue *lq;
       DiskQueueOptions options = {0};
+      disk_queue_options_set_default_options(&options);
 
       if (!open_queue(argv[i], &lq, &options))
         continue;
+
+      gboolean persistent;
+      log_queue_disk_stop(lq, &persistent);
       log_queue_unref(lq);
     }
   return 0;
@@ -526,9 +531,9 @@ dqtool_relocate(int argc, char *argv[])
 }
 
 static gboolean
-_assign_validate_options(void)
+_assign_validate_options(const gchar *persist_file, const gchar *diskq_file)
 {
-  return _validate_persist_file_path(persist_file_path) && _file_is_diskq(persist_file_path);
+  return _validate_persist_file_path(persist_file) && _file_is_diskq(diskq_file);
 }
 
 static void
@@ -548,14 +553,18 @@ _assign_print_help(void)
 static gint
 dqtool_assign(int argc, char *argv[])
 {
-  if (assign_help)
+  if (optind >= argc || assign_help)
     {
       _assign_print_help();
       return 0;
     }
 
-  if (!_assign_validate_options())
-    return 1;
+  const gchar *diskq_file = argv[optind];
+
+  gchar *diskq_full_path = g_canonicalize_filename(diskq_file, NULL);
+
+  if (!_assign_validate_options(persist_file_path, diskq_full_path))
+    goto error;
 
   main_thread_handle = get_thread_id();
 
@@ -563,17 +572,14 @@ dqtool_assign(int argc, char *argv[])
   if (!state)
     {
       fprintf(stderr, "Failed to create PersistState from file %s\n", persist_file_path);
-      return 1;
+      goto error;
     }
 
   if (!persist_state_start_edit(state))
     {
       fprintf(stderr, "Failed to load persist file for editing.");
-      return 1;
+      goto error;
     }
-
-  const gchar *diskq_file = argv[optind];
-  gchar *diskq_full_path = g_canonicalize_filename(diskq_file, NULL);
 
   gchar *old_entry = persist_state_lookup_string(state, assign_persist_name, NULL, NULL);
   if (old_entry)
@@ -589,6 +595,10 @@ dqtool_assign(int argc, char *argv[])
   persist_state_free(state);
 
   return 0;
+
+error:
+  g_free(diskq_full_path);
+  return 1;
 }
 
 static GOptionEntry dqtool_options[] =

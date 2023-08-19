@@ -16,22 +16,25 @@ set(SCL_DIRS
     iptables
     junos
     kafka
-    kubernetes
     linux-audit
     loadbalancer
     loggly
     logmatic
+    logscale
     mariadb
     mbox
     netskope
     nodejs
+    opensearch
     osquery
     pacct
     paloalto
+    python
     rewrite
     slack
     snmptrap
     solaris
+    splunk
     sudo
     sumologic
     syslogconf
@@ -42,7 +45,7 @@ set(SCL_DIRS
 )
 
 install(DIRECTORY ${SCL_DIRS} DESTINATION share/syslog-ng/include/scl)
-install(FILES scl.conf DESTINATION etc)
+install(FILES scl.conf DESTINATION share/syslog-ng/include)
 
 if (NOT EXISTS ${CMAKE_INSTALL_PREFIX}/etc/syslog-ng.conf)
     install(FILES syslog-ng.conf DESTINATION etc)

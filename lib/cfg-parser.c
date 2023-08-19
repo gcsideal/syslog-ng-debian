@@ -80,6 +80,9 @@ static CfgLexerKeyword main_keywords[] =
   { "replace",            KW_REPLACE_PREFIX, KWS_OBSOLETE, "replace_prefix" },
   { "replace_prefix",     KW_REPLACE_PREFIX },
   { "cast",               KW_CAST },
+  { "upper",              KW_UPPER },
+  { "lower",              KW_LOWER },
+  { "include_bytes",      KW_INCLUDE_BYTES },
 
   /* option items */
   { "flags",              KW_FLAGS },
@@ -88,11 +91,17 @@ static CfgLexerKeyword main_keywords[] =
   { "mark_freq",          KW_MARK_FREQ },
   { "mark",               KW_MARK_FREQ, KWS_OBSOLETE, "mark_freq" },
   { "mark_mode",          KW_MARK_MODE },
-  { "stats_freq",         KW_STATS_FREQ },
-  { "stats_lifetime",     KW_STATS_LIFETIME },
-  { "stats_level",        KW_STATS_LEVEL },
-  { "stats",              KW_STATS_FREQ, KWS_OBSOLETE, "stats_freq" },
-  { "stats_max_dynamics", KW_STATS_MAX_DYNAMIC },
+  { "stats_freq",         KW_STATS_FREQ, KWS_OBSOLETE, "Use the stats() block. E.g. stats(freq(1));" },
+  { "stats_lifetime",     KW_STATS_LIFETIME, KWS_OBSOLETE, "Use the stats() block. E.g. stats(lifetime(10));" },
+  { "stats_level",        KW_STATS_LEVEL, KWS_OBSOLETE, "Use the stats() block. E.g. stats(level(1));" },
+  { "stats",              KW_STATS },
+  { "stats_max_dynamics", KW_STATS_MAX_DYNAMIC, KWS_OBSOLETE, "Use the stats() block. E.g. stats(max-dynamics(10000));" },
+  { "freq",               KW_FREQ },
+  { "level",              KW_LEVEL },
+  { "lifetime",           KW_LIFETIME },
+  { "max_dynamics",       KW_MAX_DYNAMIC },
+  { "syslog_stats",       KW_SYSLOG_STATS },
+  { "healthcheck_freq",   KW_HEALTHCHECK_FREQ},
   { "min_iw_size_per_reader", KW_MIN_IW_SIZE_PER_READER },
   { "flush_lines",        KW_FLUSH_LINES },
   { "flush_timeout",      KW_FLUSH_TIMEOUT, KWS_OBSOLETE, "Some drivers support batch-timeout() instead that you can specify at the destination level." },
@@ -127,9 +136,11 @@ static CfgLexerKeyword main_keywords[] =
   { "default_priority",   KW_DEFAULT_SEVERITY },
   { "default_severity",   KW_DEFAULT_SEVERITY },
   { "default_facility",   KW_DEFAULT_FACILITY },
+  { "sdata_prefix",       KW_SDATA_PREFIX },
   { "threaded",           KW_THREADED },
   { "use_rcptid",         KW_USE_RCPTID, KWS_OBSOLETE, "This has been deprecated, try use_uniqid() instead" },
   { "use_uniqid",         KW_USE_UNIQID },
+  { "log_level",          KW_LOG_LEVEL },
 
   { "log_fifo_size",      KW_LOG_FIFO_SIZE },
   { "log_fetch_limit",    KW_LOG_FETCH_LIMIT },
@@ -176,6 +187,16 @@ static CfgLexerKeyword main_keywords[] =
   { "read_old_records",   KW_READ_OLD_RECORDS},
   { "use_syslogng_pid",   KW_USE_SYSLOGNG_PID },
   { "fetch_no_data_delay", KW_FETCH_NO_DATA_DELAY},
+
+  /* multi-line */
+  { "multi_line_mode",    KW_MULTI_LINE_MODE  },
+  { "multi_line_prefix",  KW_MULTI_LINE_PREFIX },
+  { "multi_line_garbage", KW_MULTI_LINE_GARBAGE },
+  { "multi_line_suffix",  KW_MULTI_LINE_GARBAGE },
+  { "parallelize",        KW_PARALLELIZE },
+  { "partitions",         KW_PARTITIONS },
+  { "partition_key",      KW_PARTITION_KEY },
+
   /* filter items */
   { "type",               KW_TYPE },
   { "tags",               KW_TAGS },
@@ -185,6 +206,7 @@ static CfgLexerKeyword main_keywords[] =
   { "on",                 KW_YES },
   { "no",                 KW_NO },
   { "off",                KW_NO },
+  { "auto",               KW_AUTO },
   /* rewrite rules */
   { "condition",          KW_CONDITION },
   { "value",              KW_VALUE },
@@ -303,7 +325,8 @@ _report_file_location(const gchar *filename, const CFG_LTYPE *yylloc)
       g_ptr_array_add(context, NULL);
       fclose(f);
     }
-  _print_underlined_source_block(yylloc, (gchar **) context->pdata, error_index);
+  if (context->len > 0)
+    _print_underlined_source_block(yylloc, (gchar **) context->pdata, error_index);
 
 exit:
   g_free(buf);
@@ -337,7 +360,7 @@ void
 report_syntax_error(CfgLexer *lexer, const CFG_LTYPE *yylloc, const char *what, const char *msg,
                     gboolean in_main_grammar)
 {
-  CfgIncludeLevel *level = yylloc->level, *from;
+  CfgIncludeLevel *level = &lexer->include_stack[lexer->include_depth], *from;
 
   for (from = level; from >= lexer->include_stack; from--)
     {
@@ -355,7 +378,7 @@ report_syntax_error(CfgLexer *lexer, const CFG_LTYPE *yylloc, const char *what, 
           fprintf(stderr, "Error parsing %s, %s in %s:%d:%d-%d:%d:\n",
                   what,
                   msg,
-                  from_lloc->level->name,
+                  from_lloc->name,
                   from_lloc->first_line,
                   from_lloc->first_column,
                   from_lloc->last_line,
@@ -364,7 +387,7 @@ report_syntax_error(CfgLexer *lexer, const CFG_LTYPE *yylloc, const char *what, 
       else
         {
           from_lloc = &from->lloc;
-          fprintf(stderr, "Included from %s:%d:%d-%d:%d:\n", from->name,
+          fprintf(stderr, "Included from %s:%d:%d-%d:%d:\n", from_lloc->name,
                   from_lloc->first_line,
                   from_lloc->first_column,
                   from_lloc->last_line,
@@ -372,11 +395,14 @@ report_syntax_error(CfgLexer *lexer, const CFG_LTYPE *yylloc, const char *what, 
         }
       if (from->include_type == CFGI_FILE)
         {
-          _report_file_location(from->name, from_lloc);
+          _report_file_location(from_lloc->name, from_lloc);
         }
       else if (from->include_type == CFGI_BUFFER)
         {
-          _report_buffer_location(from->buffer.original_content, from_lloc);
+          if (from->lloc_changed_by_at_line)
+            _report_file_location(from_lloc->name, from_lloc);
+          else
+            _report_buffer_location(from->buffer.original_content, from_lloc);
         }
       fprintf(stderr, "\n");
     }

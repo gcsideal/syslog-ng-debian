@@ -37,26 +37,40 @@ struct _LogQueueDisk
   QDisk *qdisk;         /* disk based queue */
   /* TODO:
    * LogQueueDisk should have a separate options class, which should only contain compaction, reliable, etc...
-   * Similarly, QDisk should have a separate options class, which should only contain disk_buf_size, mem_buf_size, etc...
+   * Similarly, QDisk should have a separate options class, which should only contain capacity_bytes,
+   * flow_control_window_bytes, etc...
    */
+
+  struct
+  {
+    StatsClusterKey *capacity_sc_key;
+    StatsClusterKey *disk_usage_sc_key;
+    StatsClusterKey *disk_allocated_sc_key;
+
+    StatsCounterItem *capacity;
+    StatsCounterItem *disk_usage;
+    StatsCounterItem *disk_allocated;
+  } metrics;
+
   gboolean compaction;
-  gboolean (*save_queue)(LogQueueDisk *s, gboolean *persistent);
-  gboolean (*load_queue)(LogQueueDisk *s, const gchar *filename);
-  gboolean (*start)(LogQueueDisk *s, const gchar *filename);
-  void (*restart)(LogQueueDisk *self, DiskQueueOptions *options);
+  gboolean (*start)(LogQueueDisk *s);
+  gboolean (*stop)(LogQueueDisk *s, gboolean *persistent);
+  gboolean (*stop_corrupted)(LogQueueDisk *s);
 };
 
 extern QueueType log_queue_disk_type;
 
 const gchar *log_queue_disk_get_filename(LogQueue *self);
-gboolean log_queue_disk_save_queue(LogQueue *self, gboolean *persistent);
-gboolean log_queue_disk_load_queue(LogQueue *self, const gchar *filename);
+gboolean log_queue_disk_stop(LogQueue *self, gboolean *persistent);
+gboolean log_queue_disk_start(LogQueue *self);
 void log_queue_disk_init_instance(LogQueueDisk *self, DiskQueueOptions *options, const gchar *qdisk_file_id,
-                                  const gchar *persist_name);
+                                  const gchar *filename, const gchar *persist_name, gint stats_level,
+                                  const StatsClusterKeyBuilder *driver_sck_builder,
+                                  StatsClusterKeyBuilder *queue_sck_builder);
 void log_queue_disk_restart_corrupted(LogQueueDisk *self);
 void log_queue_disk_free_method(LogQueueDisk *self);
 
-
+void log_queue_disk_update_disk_related_counters(LogQueueDisk *self);
 LogMessage *log_queue_disk_read_message(LogQueueDisk *self, LogPathOptions *path_options);
 void log_queue_disk_drop_message(LogQueueDisk *self, LogMessage *msg, const LogPathOptions *path_options);
 gboolean log_queue_disk_serialize_msg(LogQueueDisk *self, LogMessage *msg, GString *serialized);

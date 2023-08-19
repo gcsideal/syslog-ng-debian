@@ -30,10 +30,17 @@
 
 /* NOTE: consumes template */
 void
-log_parser_set_template(LogParser *self, LogTemplate *template)
+log_parser_set_template(LogParser *self, LogTemplate *template_obj)
 {
-  log_template_unref(self->template);
-  self->template = template;
+  log_template_unref(self->template_obj);
+  self->template_obj = template_obj;
+}
+
+void
+log_parser_clone_settings(LogParser *self, LogParser *cloned)
+{
+  log_pipe_clone_method(&cloned->super, &self->super);
+  log_parser_set_template(cloned, log_template_ref(self->template_obj));
 }
 
 gboolean
@@ -42,7 +49,7 @@ log_parser_process_message(LogParser *self, LogMessage **pmsg, const LogPathOpti
   LogMessage *msg = *pmsg;
   gboolean success;
 
-  if (G_LIKELY(!self->template))
+  if (G_LIKELY(!self->template_obj))
     {
       NVTable *payload = nv_table_ref(msg->payload);
       const gchar *value;
@@ -65,19 +72,21 @@ log_parser_process_message(LogParser *self, LogMessage **pmsg, const LogPathOpti
     {
       GString *input = g_string_sized_new(256);
 
-      log_template_format(self->template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, input);
+      log_template_format(self->template_obj, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, input);
       success = self->process(self, pmsg, path_options, input->str, input->len);
       g_string_free(input, TRUE);
     }
 
   if (!success)
     stats_counter_inc(self->super.discarded_messages);
+  else
+    stats_counter_inc(self->processed_messages);
 
   return success;
 }
 
-static void
-log_parser_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
+void
+log_parser_queue_method(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
 {
   LogParser *self = (LogParser *) s;
   gboolean success;
@@ -109,6 +118,21 @@ log_parser_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options
             evt_tag_msg_reference(msg));
 }
 
+static void
+_register_counters(LogParser *self)
+{
+  gint level = log_pipe_is_internal(&self->super) ? STATS_LEVEL3 : STATS_LEVEL1;
+
+  stats_lock();
+  StatsClusterKey sc_key;
+  StatsClusterLabel labels[] = { stats_cluster_label("id", self->name) };
+  stats_cluster_logpipe_key_set(&sc_key, "parsed_events_total", labels, G_N_ELEMENTS(labels));
+  stats_cluster_logpipe_key_add_legacy_alias(&sc_key, SCS_PARSER, self->name, NULL );
+  stats_register_counter(level, &sc_key, SC_TYPE_DISCARDED, &self->super.discarded_messages);
+  stats_register_counter(level, &sc_key, SC_TYPE_PROCESSED, &self->processed_messages);
+  stats_unlock();
+}
+
 gboolean
 log_parser_init_method(LogPipe *s)
 {
@@ -118,11 +142,30 @@ log_parser_init_method(LogPipe *s)
   if (!self->name && s->expr_node)
     self->name = cfg_tree_get_rule_name(&cfg->tree, ENC_PARSER, s->expr_node);
 
+  _register_counters(self);
+
+  return TRUE;
+}
+
+static void
+_unregister_stats(LogParser *self)
+{
   stats_lock();
   StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_PARSER, self->name, NULL );
-  stats_register_counter(1, &sc_key, SC_TYPE_DISCARDED, &self->super.discarded_messages);
+  StatsClusterLabel labels[] = { stats_cluster_label("id", self->name) };
+  stats_cluster_logpipe_key_set(&sc_key, "parsed_events_total", labels, G_N_ELEMENTS(labels));
+  stats_cluster_logpipe_key_add_legacy_alias(&sc_key, SCS_PARSER, self->name, NULL );
+  stats_unregister_counter(&sc_key, SC_TYPE_DISCARDED, &self->super.discarded_messages);
+  stats_unregister_counter(&sc_key, SC_TYPE_PROCESSED, &self->processed_messages);
   stats_unlock();
+}
+
+gboolean
+log_parser_deinit_method(LogPipe *s)
+{
+  LogParser *self = (LogParser *) s;
+
+  _unregister_stats(self);
 
   return TRUE;
 }
@@ -132,24 +175,18 @@ log_parser_free_method(LogPipe *s)
 {
   LogParser *self = (LogParser *) s;
 
-  stats_lock();
-  StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_PARSER, self->name, NULL );
-  stats_unregister_counter(&sc_key, SC_TYPE_DISCARDED, &self->super.discarded_messages);
-  stats_unlock();
-
   g_free(self->name);
-  log_template_unref(self->template);
+  log_template_unref(self->template_obj);
   log_pipe_free_method(s);
-
 }
 
 void
 log_parser_init_instance(LogParser *self, GlobalConfig *cfg)
 {
   log_pipe_init_instance(&self->super, cfg);
+  self->super.flags |= PIF_CONFIG_RELATED;
   self->super.init = log_parser_init_method;
   self->super.deinit = log_parser_deinit_method;
   self->super.free_fn = log_parser_free_method;
-  self->super.queue = log_parser_queue;
+  self->super.queue = log_parser_queue_method;
 }

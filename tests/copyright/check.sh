@@ -1,5 +1,6 @@
 #!/bin/bash
 #############################################################################
+# Copyright (c) 2022 One Identity LLC.
 # Copyright (c) 2016 Balabit
 #
 # This program is free software; you can redistribute it and/or modify it
@@ -300,7 +301,7 @@ extract_holder_license() {
 
  local EXT="`echo "$FILE" | sed -r "s~^.*\.([^.]+)$~\1~"`"
  case "$EXT" in
-  c|h|ym|java)
+  c|h|cpp|hpp|ym|java)
     extract_holder_license_c
     ;;
   ac|am|cmake|conf|sh|pl|py)
@@ -377,7 +378,7 @@ is_balabit_copyright() {
  grep --quiet --extended-regexp "\
 ^\
 (Copyright \(c\) ([0-9, -]+) [^ <][^<]*<br>)*\
-Copyright \(c\) ([0-9, -]+) (Bala[bB]it)|(One Identity)<br>\
+Copyright \(c\) ([0-9, -]+) (Bala[bB]it)|((One Identity)( LLC\.)?)<br>\
 (Copyright \(c\) ([0-9, -]+) [^ <][^<]*<br>)*\
 $"
  return $?

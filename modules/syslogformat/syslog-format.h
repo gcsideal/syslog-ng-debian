@@ -33,4 +33,7 @@ gboolean syslog_format_handler(const MsgFormatOptions *parse_options,
 
 void syslog_format_init(void);
 
+gboolean _syslog_format_parse_sd(LogMessage *self, const guchar **data, gint *length, const MsgFormatOptions *options);
+
+
 #endif

@@ -77,7 +77,7 @@ _convert_severity(GString *severity_text)
 static void
 _set_msg_severity(LogMessage *msg, const guint16 severity)
 {
-  msg->pri = (msg->pri & ~LOG_PRIMASK) | severity;
+  msg->pri = (msg->pri & ~SYSLOG_PRIMASK) | severity;
 }
 
 static void
@@ -101,7 +101,7 @@ log_rewrite_set_severity_process(LogRewrite *s, LogMessage **pmsg, const LogPath
     }
 
   msg_trace("Setting syslog severity",
-            evt_tag_int("old_severity", LOG_PRI((*pmsg)->pri)),
+            evt_tag_int("old_severity", SYSLOG_PRI((*pmsg)->pri)),
             evt_tag_int("new_severity", severity),
             evt_tag_msg_reference(*pmsg));
   _set_msg_severity(*pmsg, severity);
@@ -116,8 +116,7 @@ log_rewrite_set_severity_clone(LogPipe *s)
   LogRewriteSetSeverity *self = (LogRewriteSetSeverity *) s;
   LogRewriteSetSeverity *cloned = (LogRewriteSetSeverity *)log_rewrite_set_severity_new(log_template_ref(self->severity),
                                   s->cfg);
-
-  cloned->super.condition = filter_expr_clone(self->super.condition);
+  log_rewrite_clone_method(&cloned->super, &self->super);
 
   return &cloned->super.super;
 }

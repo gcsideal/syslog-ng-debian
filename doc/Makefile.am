@@ -3,7 +3,9 @@ xsd_DATA	= \
 		doc/xsd/patterndb-2.xsd \
 		doc/xsd/patterndb-3.xsd \
 		doc/xsd/patterndb-4.xsd \
-		doc/xsd/patterndb-5.xsd
+		doc/xsd/patterndb-5.xsd \
+		doc/xsd/patterndb-6.xsd
+
 
 EXTRA_DIST	+=  \
 		doc/man/dqtool.1.xml \
@@ -61,7 +63,7 @@ prefix_e = $(shell echo "${prefix}" | sed -e "s,-,\\\\\\\\-,g")
 doc/man/%: doc/man/%.xml
 	$(AM_V_at) $(NOOP) # Removing all XML whitespaces, workaround for the bug in
 	$(AM_V_at) $(NOOP) # docbook-xsl v1.79.1. See https://sourceforge.net/p/docbook/bugs/1381/
-	$(AM_V_GEN)sed -e '1h;2,$$H;$$!d;g' -e "s/>\s\+</></g" <$< | xsltproc --xinclude --output $@ ${XSL_STYLESHEET} -
+	$(AM_V_GEN)sed -e '1h;2,$$H;$$!d;g' -e 's/>[[:space:]][[:space:]]*</></g' <$< | xsltproc --xinclude --output $@ ${XSL_STYLESHEET} -
 	$(AM_V_at)sed -e 's,/opt/syslog\\*-ng/etc,$(sysconfdir_e),g' -e 's,/opt/syslog\\*-ng/,$(prefix_e)/,g' <$@ >$@.tmp && mv $@.tmp $@
 else
 

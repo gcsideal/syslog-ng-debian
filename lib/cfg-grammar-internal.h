@@ -38,6 +38,7 @@
 #include "logproto/logproto.h"
 #include "afinter.h"
 #include "str-utils.h"
+#include "logscheduler-pipe.h"
 
 #include "filter/filter-expr-parser.h"
 #include "filter/filter-pipe.h"
@@ -47,9 +48,13 @@
 #include "template/user-function.h"
 #include "cfg-block.h"
 #include "cfg-path.h"
+#include "multi-line/multi-line-factory.h"
 
 #include "logthrsource/logthrfetcherdrv.h"
 #include "logthrdest/logthrdestdrv.h"
+
+#include "stats/stats.h"
+#include "healthcheck/healthcheck-stats.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -68,6 +73,7 @@ extern LogWriterOptions *last_writer_options;
 extern FilePermOptions *last_file_perm_options;
 extern MsgFormatOptions *last_msg_format_options;
 extern LogDriver *last_driver;
+extern LogSchedulerOptions *last_scheduler_options;
 extern LogParser *last_parser;
 extern FilterExprNode *last_filter_expr;
 extern LogTemplateOptions *last_template_options;
@@ -77,9 +83,11 @@ extern ValuePairsTransformSet *last_vp_transset;
 extern LogMatcherOptions *last_matcher_options;
 extern HostResolveOptions *last_host_resolve_options;
 extern StatsOptions *last_stats_options;
+extern HealthCheckStatsOptions *last_healthcheck_options;
 extern LogRewrite *last_rewrite;
 extern CfgArgs *last_block_args;
 extern DNSCacheOptions *last_dns_cache_options;
+extern MultiLineOptions *last_multi_line_options;
 
 
 #endif

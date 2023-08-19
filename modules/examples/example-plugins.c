@@ -31,9 +31,15 @@ extern CfgParser msg_generator_parser;
 extern CfgParser threaded_random_generator_parser;
 #endif
 
+#ifdef SYSLOG_NG_ENABLE_CPP
+extern CfgParser random_choice_generator_parser;
+#endif
+
 extern CfgParser threaded_diskq_source_parser;
 
 extern CfgParser http_test_slots_parser;
+
+extern CfgParser tls_test_validation_parser;
 
 extern CfgParser example_destination_parser;
 
@@ -51,6 +57,13 @@ static Plugin example_plugins[] =
     .parser = &threaded_random_generator_parser,
   },
 #endif
+#ifdef SYSLOG_NG_ENABLE_CPP
+  {
+    .type = LL_CONTEXT_SOURCE,
+    .name = "random_choice_generator",
+    .parser = &random_choice_generator_parser,
+  },
+#endif
   {
     .type = LL_CONTEXT_SOURCE,
     .name = "example_diskq_source",
@@ -60,6 +73,11 @@ static Plugin example_plugins[] =
     .type = LL_CONTEXT_INNER_DEST,
     .name = "http_test_slots",
     .parser = &http_test_slots_parser
+  },
+  {
+    .type = LL_CONTEXT_INNER_DEST,
+    .name = "tls_test_validation",
+    .parser = &tls_test_validation_parser
   },
   {
     .type = LL_CONTEXT_DESTINATION,

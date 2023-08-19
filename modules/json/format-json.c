@@ -32,6 +32,7 @@
 #include "utf8utils.h"
 #include "scanner/list-scanner/list-scanner.h"
 #include "scratch-buffers.h"
+#include "str-format.h"
 
 typedef struct _TFJsonState
 {
@@ -79,7 +80,9 @@ tf_json_prepare(LogTemplateFunction *self, gpointer s, LogTemplate *parent,
   GOptionGroup *og = g_option_group_new("format-json", "", "", state, NULL);
   g_option_group_add_entries(og, format_json_options);
 
-  state->vp = value_pairs_new_from_cmdline(parent->cfg, &argc, &argv, og, error);
+  ValuePairsOptionalOptions optional_options = { .enable_include_bytes = TRUE };
+
+  state->vp = value_pairs_new_from_cmdline(parent->cfg, &argc, &argv, &optional_options, og, error);
   if (!state->vp)
     return FALSE;
 
@@ -104,7 +107,7 @@ tf_json_prepare(LogTemplateFunction *self, gpointer s, LogTemplate *parent,
                       "document to change types if no explicit type hint is "
                       "specified. This change will cause the type in the output "
                       "document match the original type that was parsed "
-                      "using json-parser(), add --no-cast argument "
+                      "using json-parser(), add --cast argument "
                       "to $(format-json) to keep the old behavior");
         }
       value_pairs_set_cast_to_strings(state->vp, TRUE);
@@ -123,7 +126,8 @@ typedef struct
 static inline void
 tf_json_append_escaped(GString *dest, const gchar *str, gssize str_len)
 {
-  append_unsafe_utf8_as_escaped_text(dest, str, str_len, "\"");
+  /* RFC8259 specifies only \uXXXX escaping */
+  append_unsafe_utf8_as_escaped(dest, str, str_len, "\"", "\\u%04x", "\\\\x%02x");
 }
 
 static gboolean
@@ -195,6 +199,40 @@ tf_json_append_value(const gchar *name, const gchar *value, gsize value_len,
     g_string_append_c(state->buffer, '"');
 }
 
+static inline gsize
+_get_base64_encoded_size(gsize len)
+{
+  return (len / 3 + 1) * 4 + 4;
+}
+
+static void
+tf_json_append_value_base64_encode(const gchar *name, const gchar *value, gsize value_len, json_state_t *state)
+{
+  tf_json_append_key(name, state);
+  g_string_append(state->buffer, ":\"");
+
+  gint encode_state = 0;
+  gint encode_save = 0;
+  gsize init_len = state->buffer->len;
+
+  /* expand the buffer and add space for the base64 encoded string */
+  g_string_set_size(state->buffer, init_len + _get_base64_encoded_size(value_len));
+  gsize out_len = g_base64_encode_step((const guchar *) value, value_len, FALSE, state->buffer->str + init_len,
+                                       &encode_state, &encode_save);
+  g_string_set_size(state->buffer, init_len + out_len + _get_base64_encoded_size(0));
+
+#if !GLIB_CHECK_VERSION(2, 54, 0)
+  /* See modules/basicfuncs/str-funcs.c: tf_base64encode() */
+  if (((unsigned char *) &encode_save)[0] == 1)
+    ((unsigned char *) &encode_save)[2] = 0;
+#endif
+
+  out_len += g_base64_encode_close(FALSE, state->buffer->str + init_len + out_len, &encode_state, &encode_save);
+  g_string_set_size(state->buffer, init_len + out_len);
+
+  g_string_append_c(state->buffer, '"');
+}
+
 static void
 tf_json_append_literal(const gchar *name, const gchar *value, gsize value_len,
                        json_state_t *state)
@@ -234,43 +272,44 @@ tf_json_append_list(const gchar *name, const gchar *value, gsize value_len,
   g_string_append_c(state->buffer, ']');
 }
 
+/* RFC8259 numbers: '+' sign, leading zeros are not allowed. */
+static inline void
+tf_json_append_double(const gchar *name, gdouble d, json_state_t *state)
+{
+  gchar double_buf[G_ASCII_DTOSTR_BUF_SIZE];
+  g_ascii_dtostr(double_buf, G_N_ELEMENTS(double_buf), d);
+  tf_json_append_value(name, double_buf, -1, state, FALSE);
+}
+
+static inline void
+tf_json_append_int(const gchar *name, gint64 i, json_state_t *state)
+{
+  GString *int_buf = scratch_buffers_alloc();
+  format_int64_padded(int_buf, 0, 0, 10, i);
+  tf_json_append_value(name, int_buf->str, int_buf->len, state, FALSE);
+}
+
+
 static gboolean
 tf_json_append_with_type_hint(const gchar *name, LogMessageValueType type, json_state_t *state, const gchar *value,
-                              const gssize value_len, const gboolean on_error)
+                              const gssize value_len, const gboolean on_error, gboolean *drop)
 {
+  *drop = FALSE;
+
   switch (type)
     {
     case LM_VT_STRING:
     case LM_VT_DATETIME:
     default:
       tf_json_append_value(name, value, value_len, state, TRUE);
-      break;
+      return TRUE;
     case LM_VT_JSON:
       tf_json_append_literal(name, value, value_len, state);
-      break;
+      return TRUE;
     case LM_VT_LIST:
       tf_json_append_list(name, value, value_len, state);
-      break;
-    case LM_VT_INT32:
-    {
-      gint32 i32;
-      const gchar *v = value;
-      gsize v_len = value_len;
-
-      if (!type_cast_to_int32(value, &i32, NULL))
-        {
-          if ((on_error & ON_ERROR_FALLBACK_TO_STRING))
-            tf_json_append_value(name, v, v_len, state, TRUE);
-          else
-            return type_cast_drop_helper(on_error, value, "int32");
-        }
-      else
-        {
-          tf_json_append_value(name, v, v_len, state, FALSE);
-        }
-      break;
-    }
-    case LM_VT_INT64:
+      return TRUE;
+    case LM_VT_INTEGER:
     {
       gint64 i64;
       const gchar *v = value;
@@ -279,15 +318,17 @@ tf_json_append_with_type_hint(const gchar *name, LogMessageValueType type, json_
       if (!type_cast_to_int64(value, &i64, NULL))
         {
           if ((on_error & ON_ERROR_FALLBACK_TO_STRING))
-            tf_json_append_value(name, v, v_len, state, TRUE);
-          else
-            return type_cast_drop_helper(on_error, value, "int64");
+            {
+              tf_json_append_value(name, v, v_len, state, TRUE);
+              return TRUE;
+            }
+
+          *drop = type_cast_drop_helper(on_error, value, "integer");
+          return FALSE;
         }
-      else
-        {
-          tf_json_append_value(name, v, v_len, state, FALSE);
-        }
-      break;
+
+      tf_json_append_int(name, i64, state);
+      return TRUE;
     }
     case LM_VT_DOUBLE:
     {
@@ -298,15 +339,17 @@ tf_json_append_with_type_hint(const gchar *name, LogMessageValueType type, json_
       if (!type_cast_to_double(value, &d, NULL))
         {
           if ((on_error & ON_ERROR_FALLBACK_TO_STRING))
-            tf_json_append_value(name, v, v_len, state, TRUE);
-          else
-            return type_cast_drop_helper(on_error, value, "double");
+            {
+              tf_json_append_value(name, v, v_len, state, TRUE);
+              return TRUE;
+            }
+
+          *drop = type_cast_drop_helper(on_error, value, "double");
+          return FALSE;
         }
-      else
-        {
-          tf_json_append_value(name, v, v_len, state, FALSE);
-        }
-      break;
+
+      tf_json_append_double(name, d, state);
+      return TRUE;
     }
     case LM_VT_BOOLEAN:
     {
@@ -316,25 +359,32 @@ tf_json_append_with_type_hint(const gchar *name, LogMessageValueType type, json_
 
       if (!type_cast_to_boolean(value, &b, NULL))
         {
-          if (!(on_error & ON_ERROR_FALLBACK_TO_STRING))
-            return type_cast_drop_helper(on_error, value, "boolean");
-          tf_json_append_value(name, v, v_len, state, TRUE);
+          if ((on_error & ON_ERROR_FALLBACK_TO_STRING))
+            {
+              tf_json_append_value(name, v, v_len, state, TRUE);
+              return TRUE;
+            }
+
+          *drop = type_cast_drop_helper(on_error, value, "boolean");
+          return FALSE;
         }
-      else
-        {
-          v = b ? "true" : "false";
-          v_len = -1;
-          tf_json_append_value(name, v, v_len, state, FALSE);
-        }
-      break;
+
+      v = b ? "true" : "false";
+      v_len = -1;
+      tf_json_append_value(name, v, v_len, state, FALSE);
+      return TRUE;
     }
+    case LM_VT_BYTES:
+    case LM_VT_PROTOBUF:
+      tf_json_append_value_base64_encode(name, value, value_len, state);
+      return TRUE;
     case LM_VT_NULL:
     {
       tf_json_append_value(name, "null", -1, state, FALSE);
-      break;
+      return TRUE;
     }
     }
-  return FALSE;
+  g_assert_not_reached();
 }
 
 static gboolean
@@ -343,12 +393,12 @@ tf_json_value(const gchar *name, const gchar *prefix,
               gpointer *prefix_data, gpointer user_data)
 {
   json_state_t *state = (json_state_t *)user_data;
+  gboolean drop;
 
-  gboolean result = tf_json_append_with_type_hint(name, type, state, value, value_len, state->template_options->on_error);
+  if (tf_json_append_with_type_hint(name, type, state, value, value_len, state->template_options->on_error, &drop))
+    state->need_comma = TRUE;
 
-  state->need_comma = TRUE;
-
-  return result;
+  return drop;
 }
 
 static gboolean
@@ -372,6 +422,9 @@ tf_json_call(LogTemplateFunction *self, gpointer s,
   TFJsonState *state = (TFJsonState *)s;
   gsize orig_size = result->len;
 
+  ScratchBuffersMarker m;
+  scratch_buffers_mark(&m);
+
   *type = LM_VT_JSON;
   for (gint i = 0; i < args->num_messages; i++)
     {
@@ -379,10 +432,12 @@ tf_json_call(LogTemplateFunction *self, gpointer s,
       if (!r && (args->options->opts->on_error & ON_ERROR_DROP_MESSAGE))
         {
           g_string_set_size(result, orig_size);
-          return;
+          goto exit;
         }
     }
 
+exit:
+  scratch_buffers_reclaim_marked(m);
 }
 
 static gboolean
@@ -392,11 +447,12 @@ tf_flat_json_value(const gchar *name,
                    gpointer user_data)
 {
   json_state_t *state = (json_state_t *) user_data;
+  gboolean drop;
 
-  gboolean result = tf_json_append_with_type_hint(name, type, state, value, value_len,
-                                                  state->template_options->on_error);
-  state->need_comma = TRUE;
-  return result;
+  if (tf_json_append_with_type_hint(name, type, state, value, value_len, state->template_options->on_error, &drop))
+    state->need_comma = TRUE;
+
+  return drop;
 }
 
 static gint
@@ -433,6 +489,9 @@ tf_flat_json_call(LogTemplateFunction *self, gpointer s,
   TFJsonState *state = (TFJsonState *)s;
   gsize orig_size = result->len;
 
+  ScratchBuffersMarker m;
+  scratch_buffers_mark(&m);
+
   *type = LM_VT_JSON;
   for (gint i = 0; i < args->num_messages; i++)
     {
@@ -440,10 +499,12 @@ tf_flat_json_call(LogTemplateFunction *self, gpointer s,
       if (!r && (args->options->opts->on_error & ON_ERROR_DROP_MESSAGE))
         {
           g_string_set_size(result, orig_size);
-          return;
+          goto exit;
         }
     }
 
+exit:
+  scratch_buffers_reclaim_marked(m);
 }
 
 static void

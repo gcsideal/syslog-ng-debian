@@ -12,6 +12,7 @@ include lib/template/Makefile.am
 include lib/value-pairs/Makefile.am
 include lib/stats/Makefile.am
 include lib/control/Makefile.am
+include lib/healthcheck/Makefile.am
 include lib/debugger/Makefile.am
 include lib/compat/Makefile.am
 include lib/logmsg/Makefile.am
@@ -25,6 +26,7 @@ include lib/secret-storage/Makefile.am
 include lib/logthrsource/Makefile.am
 include lib/logthrdest/Makefile.am
 include lib/signal-slot-connector/Makefile.am
+include lib/multi-line/Makefile.am
 
 LSNG_RELEASE		= $(shell echo @PACKAGE_VERSION@ | cut -d. -f1,2)
 
@@ -105,6 +107,8 @@ pkginclude_HEADERS			+= \
 	lib/cfg-path.h			\
 	lib/cfg-tree.h			\
 	lib/cfg-walker.h		\
+	lib/cfg-persist.h		\
+	lib/cfg-monitor.h		\
 	lib/children.h			\
 	lib/crypto.h			\
 	lib/dnscache.h			\
@@ -123,6 +127,8 @@ pkginclude_HEADERS			+= \
 	lib/list-adt.h \
 	lib/logmatcher.h		\
 	lib/logmpx.h			\
+	lib/logscheduler.h		\
+	lib/logscheduler-pipe.h		\
 	lib/logpipe.h			\
 	lib/logqueue-fifo.h		\
 	lib/logqueue.h			\
@@ -138,6 +144,7 @@ pkginclude_HEADERS			+= \
 	lib/module-config.h		\
 	lib/memtrace.h			\
 	lib/messages.h			\
+	lib/metrics-pipe.h			\
 	lib/ml-batched-timer.h		\
 	lib/msg-format.h		\
 	lib/msg-stats.h			\
@@ -168,7 +175,6 @@ pkginclude_HEADERS			+= \
 	lib/string-list.h		\
 	lib/tls-support.h		\
 	lib/thread-utils.h		\
-	lib/tlscontext.h  		\
 	lib/uuid.h			\
 	lib/userdb.h			\
 	lib/utf8utils.h			\
@@ -196,6 +202,8 @@ lib_libsyslog_ng_la_SOURCES		= \
 	lib/cfg-path.c			\
 	lib/cfg-tree.c			\
 	lib/cfg-walker.c		\
+	lib/cfg-persist.c		\
+	lib/cfg-monitor.c		\
 	lib/children.c			\
 	lib/dnscache.c			\
 	lib/driver.c			\
@@ -213,6 +221,8 @@ lib_libsyslog_ng_la_SOURCES		= \
 	lib/host-resolve.c		\
 	lib/logmatcher.c		\
 	lib/logmpx.c			\
+	lib/logscheduler.c		\
+	lib/logscheduler-pipe.c		\
 	lib/logpipe.c			\
 	lib/logqueue.c			\
 	lib/logqueue-fifo.c		\
@@ -229,6 +239,7 @@ lib_libsyslog_ng_la_SOURCES		= \
 	lib/module-config.c		\
 	lib/memtrace.c			\
 	lib/messages.c			\
+	lib/metrics-pipe.c			\
 	lib/ml-batched-timer.c		\
 	lib/msg-format.c		\
 	lib/msg-stats.c			\
@@ -252,7 +263,6 @@ lib_libsyslog_ng_la_SOURCES		= \
 	lib/string-list.c		\
 	lib/ringbuffer.c		\
 	lib/crypto.c			\
-	lib/tlscontext.c		\
 	lib/uuid.c			\
 	lib/userdb.c			\
 	lib/utf8utils.c			\
@@ -279,11 +289,13 @@ lib_libsyslog_ng_la_SOURCES		= \
 	$(value_pairs_sources)		\
 	$(stats_sources)		\
 	$(control_sources)		\
+	$(healthcheck_sources) \
 	$(debugger_sources)		\
 	$(compat_sources)     		\
 	$(logmsg_sources)		\
 	$(str_repr_sources)		\
 	$(timeutils_sources)		\
+	$(multiline_sources)		\
 	$(logthrsource_sources)		\
 	$(logthrdest_sources) \
 	$(signal_slot_connector_sources)

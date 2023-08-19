@@ -65,12 +65,16 @@ ParameterizedTestParameters(type_hints, test_type_hint_parse)
     {"literal",   LM_VT_JSON},
     {"json",      LM_VT_JSON},
     {"boolean",   LM_VT_BOOLEAN},
-    {"int",       LM_VT_INT32},
-    {"int32",     LM_VT_INT32},
-    {"int64",     LM_VT_INT64},
+    {"int",       LM_VT_INTEGER},
+    {"int32",     LM_VT_INTEGER},
+    {"int64",     LM_VT_INTEGER},
     {"float",     LM_VT_DOUBLE},
     {"double",    LM_VT_DOUBLE},
     {"datetime",  LM_VT_DATETIME},
+    {"list",      LM_VT_LIST},
+    {"null",      LM_VT_NULL},
+    {"bytes",     LM_VT_BYTES},
+    {"protobuf",  LM_VT_PROTOBUF},
   };
 
   return cr_make_param_array(StringHintPair, string_value_pairs,
@@ -154,6 +158,14 @@ Test(type_hints, test_int32_cast)
   cr_assert_eq(value, 12345);
   cr_assert_null(error);
 
+  cr_assert(type_cast_to_int32("0x1000", &value, &error), "Type cast of \"0x1000\" to gint32 failed");
+  cr_assert_eq(value, 0x1000);
+  cr_assert_null(error);
+
+  cr_assert(type_cast_to_int32("0111", &value, &error), "Type cast of \"0111\" to gint32 failed");
+  cr_assert_eq(value, 111);
+  cr_assert_null(error);
+
   /* test for invalid string */
   cr_assert_not(type_cast_to_int32("12345a", &value, &error),
                 "Type cast of invalid string to gint32 should be failed");
@@ -180,6 +192,15 @@ Test(type_hints, test_int64_cast)
   cr_assert(type_cast_to_int64("12345", &value, &error), "Type cast of \"12345\" to gint64 failed");
   cr_assert_eq(value, 12345);
   cr_assert_null(error);
+
+  cr_assert(type_cast_to_int64("0x1000", &value, &error), "Type cast of \"0x1000\" to gint64 failed");
+  cr_assert_eq(value, 0x1000);
+  cr_assert_null(error);
+
+  cr_assert(type_cast_to_int64("0111", &value, &error), "Type cast of \"0111\" to gint64 failed");
+  cr_assert_eq(value, 111);
+  cr_assert_null(error);
+
 
   /* test for invalid string */
   cr_assert_not(type_cast_to_int64("12345a", &value, &error),
@@ -276,7 +297,11 @@ ParameterizedTestParameters(type_hints, test_datetime_cast)
     {"12345.5", 12345500},
     {"12345.54", 12345540},
     {"12345.543", 12345543},
-    {"12345.54321", 12345543}
+    {"12345.54321", 12345543},
+    {"12345.987654", 12345987},
+    {"12345.987654321", 12345987},
+    {"12345+05:00", 12345000},
+    {"12345-05:00", 12345000},
   };
 
   return cr_make_param_array(StringUInt64Pair, string_value_pairs,
@@ -290,20 +315,40 @@ ParameterizedTest(StringUInt64Pair *string_value_pair, type_hints, test_datetime
 
   cr_assert_eq(type_cast_to_datetime_msec(string_value_pair->string, &value, &error), TRUE,
                "Type cast of \"%s\" to msecs failed", string_value_pair->string);
-  cr_assert_eq(value, string_value_pair->value);
+  cr_assert_eq(value, string_value_pair->value,
+               "datetime cast failed %" G_GINT64_FORMAT " != %" G_GINT64_FORMAT,
+               value, string_value_pair->value);
   cr_assert_null(error);
 }
 
-Test(type_hints, test_invalid_datetime_cast)
+ParameterizedTestParameters(type_hints, test_invalid_datetime_cast)
+{
+  static StringUInt64Pair string_value_pairs[] =
+  {
+    {"invalid", },
+    {"12345T", },
+    {"12345.", },
+    {"12345.1234567890", },
+    {"12345+XX:YY", 12345000},
+    {"12345-05", 12345000},
+    {"12345-XX:YY", 12345000}
+
+  };
+
+  return cr_make_param_array(StringUInt64Pair, string_value_pairs,
+                             sizeof(string_value_pairs) / sizeof(string_value_pairs[0]));
+}
+
+
+ParameterizedTest(StringUInt64Pair *string_value_pair, type_hints, test_invalid_datetime_cast)
 {
   GError *error = NULL;
   gint64 value;
 
-  cr_assert_eq(type_cast_to_datetime_msec("invalid", &value, &error), FALSE,
-               "Type cast of invalid string to gint64 should be failed");
+  cr_assert_eq(type_cast_to_datetime_msec(string_value_pair->string, &value, &error), FALSE,
+               "Type cast of invalid string to gint64 should have failed %s", string_value_pair->string);
   cr_assert_not_null(error);
   cr_assert_eq(error->domain, TYPE_HINTING_ERROR);
   cr_assert_eq(error->code, TYPE_HINTING_INVALID_CAST);
-
   g_clear_error(&error);
 }

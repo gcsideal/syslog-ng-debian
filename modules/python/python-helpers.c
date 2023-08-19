@@ -22,18 +22,25 @@
  *
  */
 #include "python-helpers.h"
+#include "python-types.h"
 #include "scratch-buffers.h"
 #include "str-utils.h"
 #include "messages.h"
+#include "reloc.h"
 
-void
+const gchar *
 _py_get_callable_name(PyObject *callable, gchar *buf, gsize buf_len)
 {
+  PyObject *exc, *value, *tb;
+
+  PyErr_Fetch(&exc, &value, &tb);
+
   PyObject *name = PyObject_GetAttrString(callable, "__name__");
 
-  if (name && _py_is_string(name))
+  const gchar *str;
+  if (name && py_bytes_or_string_to_string(name, &str))
     {
-      g_strlcpy(buf, _py_get_string_as_string(name), buf_len);
+      g_strlcpy(buf, str, buf_len);
     }
   else
     {
@@ -41,7 +48,9 @@ _py_get_callable_name(PyObject *callable, gchar *buf, gsize buf_len)
       g_strlcpy(buf, "<unknown>", buf_len);
     }
   Py_XDECREF(name);
-  return;
+
+  PyErr_Restore(exc, value, tb);
+  return buf;
 }
 
 void
@@ -81,7 +90,7 @@ exit:
   PyErr_Restore(exc, value, tb);
 }
 
-void
+const gchar *
 _py_format_exception_text(gchar *buf, gsize buf_len)
 {
   PyObject *exc, *value, *tb, *str;
@@ -90,7 +99,7 @@ _py_format_exception_text(gchar *buf, gsize buf_len)
   if (!exc)
     {
       g_strlcpy(buf, "None", buf_len);
-      return;
+      return buf;
     }
   PyErr_NormalizeException(&exc, &value, &tb);
 
@@ -98,9 +107,10 @@ _py_format_exception_text(gchar *buf, gsize buf_len)
   if (!str)
     PyErr_Clear();
 
-  if (str && _py_is_string(str))
+  const gchar *str_as_c_str;
+  if (str && py_bytes_or_string_to_string(str, &str_as_c_str))
     {
-      g_snprintf(buf, buf_len, "%s: %s", ((PyTypeObject *) exc)->tp_name, _py_get_string_as_string(str));
+      g_snprintf(buf, buf_len, "%s: %s", ((PyTypeObject *) exc)->tp_name, str_as_c_str);
     }
   else
     {
@@ -108,12 +118,37 @@ _py_format_exception_text(gchar *buf, gsize buf_len)
     }
   Py_XDECREF(str);
   PyErr_Restore(exc, value, tb);
-  return;
+  return buf;
 }
 
 void
 _py_finish_exception_handling(void)
 {
+  if (PyErr_ExceptionMatches(PyExc_ImportError))
+    {
+      PyObject *exc, *value, *tb;
+
+      PyErr_Fetch(&exc, &value, &tb);
+      PyImportErrorObject *import_error = (PyImportErrorObject *) value;
+      const gchar *module_cstr;
+
+      py_bytes_or_string_to_string(import_error->name, &module_cstr);
+      msg_error("Seems you are missing a module that may be referenced by a "
+                "syslog-ng plugin implemented in Python. These modules "
+                "need to be installed either using your platform's package management "
+                "tools (e.g. apt/dnf/yum) or Python's own package management "
+                "tool (e.g. pip). syslog-ng authors recommend using pip and "
+                "a dedicated Python virtualenv. You can initialize such a "
+                "virtualenv using the `syslog-ng-update-virtualenv` command. "
+                "This command will initialize the virtualenv and install all "
+                "packages needed by plugins shipped with syslog-ng itself "
+                "from the Python Package Index (PyPI). If you need any additional "
+                "Python libraries for your local scripts, you can "
+                "install those using the `pip` command located in the virtualenv's bin directory",
+                evt_tag_str("module", module_cstr));
+      PyErr_Restore(exc, value, tb);
+    }
+
   _py_log_python_traceback_to_stderr();
   PyErr_Clear();
 }
@@ -150,14 +185,29 @@ _py_do_import(const gchar *modname)
 
   modobj = PyImport_Import(module);
   Py_DECREF(module);
-  if (!modobj)
+  if (modobj)
+    {
+      PyObject  *mod_filename = PyModule_GetFilenameObject(modobj);
+
+      if (!mod_filename)
+        {
+          /* this exception only means that this module does not have a
+           * __name__ attribute */
+          PyErr_Clear();
+        }
+
+      msg_debug("python: importing Python module",
+                evt_tag_str("module", modname),
+                evt_tag_str("filename", mod_filename ? PyUnicode_AsUTF8(mod_filename) : "unknown"));
+      Py_XDECREF(mod_filename);
+    }
+  else
     {
       gchar buf[256];
-      _py_format_exception_text(buf, sizeof(buf));
 
       msg_error("Error loading Python module",
                 evt_tag_str("module", modname),
-                evt_tag_str("exception", buf));
+                evt_tag_str("exception", _py_format_exception_text(buf, sizeof(buf))));
       _py_finish_exception_handling();
       return NULL;
     }
@@ -209,18 +259,18 @@ exit:
 static void
 _insert_to_dict(gpointer key, gpointer value, gpointer dict)
 {
-  PyObject *key_pyobj = _py_string_from_string((gchar *) key, -1);
-  PyObject *value_pyobj = _py_string_from_string((gchar *) value, -1);
+  PyObject *key_pyobj = py_string_from_string((gchar *) key, -1);
+  PyObject *value_pyobj = py_string_from_string((gchar *) value, -1);
   PyDict_SetItem( (PyObject *) dict, key_pyobj, value_pyobj);
   Py_XDECREF(key_pyobj);
   Py_XDECREF(value_pyobj);
 }
 
 PyObject *
-_py_create_arg_dict(GHashTable *args)
+_py_construct_cfg_args(CfgArgs *args)
 {
   PyObject *arg_dict = PyDict_New();
-  g_hash_table_foreach(args, _insert_to_dict, arg_dict);
+  cfg_args_foreach(args, _insert_to_dict, arg_dict);
   return arg_dict;
 }
 
@@ -233,14 +283,12 @@ _py_invoke_function(PyObject *func, PyObject *arg, const gchar *class, const gch
   if (!ret)
     {
       gchar buf1[256], buf2[256];
-      _py_format_exception_text(buf2, sizeof(buf2));
-      _py_get_callable_name(func, buf1, sizeof(buf1));
 
       msg_error("Exception while calling a Python function",
                 evt_tag_str("caller", caller_context),
-                evt_tag_str("class", class),
-                evt_tag_str("function", buf1),
-                evt_tag_str("exception", buf2));
+                evt_tag_str("class", class ? : "unknown"),
+                evt_tag_str("function", _py_get_callable_name(func, buf1, sizeof(buf1))),
+                evt_tag_str("exception", _py_format_exception_text(buf2, sizeof(buf2))));
       _py_finish_exception_handling();
       return NULL;
     }
@@ -256,14 +304,12 @@ _py_invoke_function_with_args(PyObject *func, PyObject *args, const gchar *class
   if (!ret)
     {
       gchar buf1[256], buf2[256];
-      _py_format_exception_text(buf2, sizeof(buf2));
-      _py_get_callable_name(func, buf1, sizeof(buf1));
 
       msg_error("Exception while calling a Python function",
                 evt_tag_str("caller", caller_context),
                 evt_tag_str("class", class),
-                evt_tag_str("function", buf1),
-                evt_tag_str("exception", buf2));
+                evt_tag_str("function", _py_get_callable_name(func, buf1, sizeof(buf1))),
+                evt_tag_str("exception", _py_format_exception_text(buf2, sizeof(buf2))));
       _py_finish_exception_handling();
       return NULL;
     }
@@ -332,18 +378,18 @@ _py_invoke_void_method_by_name(PyObject *instance, const gchar *method_name, con
 }
 
 gboolean
-_py_invoke_bool_method_by_name_with_args(PyObject *instance, const gchar *method_name,
-                                         GHashTable *args, const gchar *class, const gchar *module)
+_py_invoke_bool_method_by_name_with_options(PyObject *instance, const gchar *method_name,
+                                            const PythonOptions *options, const gchar *class, const gchar *module)
 {
   gboolean result = FALSE;
   PyObject *method = _py_get_optional_method(instance, class, method_name, module);
 
   if (method)
     {
-      PyObject *args_obj = args ? _py_create_arg_dict(args) : NULL;
-      result = _py_invoke_bool_function(method, args_obj, class, module);
+      PyObject *py_options_dict = options ? python_options_create_py_dict(options) : NULL;
+      result = _py_invoke_bool_function(method, py_options_dict, class, module);
 
-      Py_XDECREF(args_obj);
+      Py_XDECREF(py_options_dict);
       Py_DECREF(method);
     }
   return result;
@@ -352,7 +398,7 @@ _py_invoke_bool_method_by_name_with_args(PyObject *instance, const gchar *method
 gboolean
 _py_invoke_bool_method_by_name(PyObject *instance, const gchar *method_name, const gchar *class, const gchar *module)
 {
-  return _py_invoke_bool_method_by_name_with_args(instance, method_name, NULL, class, module);
+  return _py_invoke_bool_method_by_name_with_options(instance, method_name, NULL, class, module);
 }
 
 static void
@@ -371,91 +417,44 @@ _py_perform_imports(GList *imports)
   g_list_foreach(imports, _foreach_import, NULL);
 }
 
-gboolean
-_py_is_string(PyObject *object)
-{
-  return PyBytes_Check(object) || PyUnicode_Check(object);
-}
-
-
-/* NOTE: this function returns a managed memory area pointing to an utf8
- * representation of the string, with the following constraints:
- *
- *   1) we basically assume that non-unicode strings (both in Python2 and
- *   Python3) are in utf8 or at least utf8 compatible (e.g.  ascii).  It
- *   doesn't really make sense otherwise.  If we don't the resulting string
- *   is not going to be utf8, rather it would be the system codepage.
- *
- *   2) in the case of Python3 we are using the utf8 cache in the unicode
- *   instance.  In the case of Python2 we are allocating a scratch buffer to
- *   hold the data for us.
- **/
-
 const gchar *
-_py_get_string_as_string(PyObject *object)
+_py_object_repr(PyObject *s, gchar *buf, gsize buflen)
 {
-  if (PyBytes_Check(object))
-    return PyBytes_AsString(object);
-#if PY_MAJOR_VERSION >= 3
-  else if (PyUnicode_Check(object))
-    return PyUnicode_AsUTF8(object);
-#elif PY_MAJOR_VERSION < 3
-  else if (PyUnicode_Check(object))
+  const gchar *res;
+
+  PyObject *r = PyObject_Repr(s);
+  if (!r)
     {
-      PyObject *utf8_bytes = PyUnicode_AsUTF8String(object);
-      GString *buffer = scratch_buffers_alloc();
-      g_string_assign_len(buffer, PyBytes_AsString(utf8_bytes), PyBytes_Size(utf8_bytes));
-      Py_XDECREF(utf8_bytes);
-      return buffer->str;
+      _py_finish_exception_handling();
+      g_strlcpy(buf, "<unknown object>", buflen);
+      return buf;
     }
-#endif
-  g_assert_not_reached();
+  if (py_bytes_or_string_to_string(r, &res))
+    g_strlcpy(buf, res, buflen);
+  Py_XDECREF(r);
+  return buf;
 }
 
 PyObject *
-_py_string_from_string(const gchar *str, gssize len)
+_py_construct_enum(const gchar *name, PyObject *sequence)
 {
-#if PY_MAJOR_VERSION >= 3
-  const gchar *charset;
+  PyObject *enum_module = PyImport_ImportModule("enum");
 
-  /* NOTE: g_get_charset() returns if the current character set is utf8 */
-  if (g_get_charset(&charset))
-    {
-      if (len < 0)
-        return PyUnicode_FromString(str);
-      else
-        return PyUnicode_FromStringAndSize(str, len);
-    }
-  else
-    {
-      GError *error = NULL;
-      gsize bytes_read, bytes_written;
-      gchar *utf8_string;
-      PyObject *res;
+  if (!enum_module)
+    return NULL;
 
-      utf8_string = g_locale_to_utf8(str, len, &bytes_read, &bytes_written, &error);
-      if (utf8_string)
-        {
-          res = PyUnicode_FromStringAndSize(utf8_string, bytes_written);
-          g_free(utf8_string);
-          return res;
-        }
-      else
-        {
-          g_error_free(error);
-          if (len >= 0)
-            return PyBytes_FromStringAndSize(str, len);
-          else
-            return PyBytes_FromString(str);
-        }
-    }
-#elif PY_MAJOR_VERSION < 3
-  if (len >= 0)
-    return PyBytes_FromStringAndSize(str, len);
-  else
-    return PyBytes_FromString(str);
-#endif
+  PyObject *enum_dict = PyModule_GetDict(enum_module);
+  PyObject *enum_new = PyDict_GetItemString(enum_dict, "IntEnum");
+
+  if (!enum_new)
+    return NULL;
+
+  PyObject *result = PyObject_CallFunction(enum_new, "sO", name, sequence);
+  Py_XDECREF(enum_module);
+
+  return result;
 }
+
 
 void
 py_slng_generic_dealloc(PyObject *self)

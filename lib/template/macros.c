@@ -207,6 +207,7 @@ LogMacroDef macros[] =
   { "DESTIP", M_DEST_IP },
   { "DESTPORT", M_DEST_PORT },
   { "PROTO", M_PROTOCOL },
+  { "RAWMSG_SIZE", M_RAWMSG_SIZE },
   { "SEQNUM", M_SEQNUM },
   { "CONTEXT_ID", M_CONTEXT_ID },
   { "_", M_CONTEXT_ID },
@@ -434,21 +435,21 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
       /* facility */
       const char *n;
 
-      n = syslog_name_lookup_facility_by_value(msg->pri & LOG_FACMASK);
+      n = syslog_name_lookup_facility_by_value(msg->pri & SYSLOG_FACMASK);
       if (n)
         {
           g_string_append(result, n);
         }
       else
         {
-          format_uint32_padded(result, 0, 0, 16, (msg->pri & LOG_FACMASK) >> 3);
+          format_uint32_padded(result, 0, 0, 16, (msg->pri & SYSLOG_FACMASK) >> 3);
         }
       break;
     }
     case M_FACILITY_NUM:
     {
-      t = LM_VT_INT32;
-      format_uint32_padded(result, 0, 0, 10, (msg->pri & LOG_FACMASK) >> 3);
+      t = LM_VT_INTEGER;
+      format_uint32_padded(result, 0, 0, 10, (msg->pri & SYSLOG_FACMASK) >> 3);
       break;
     }
     case M_SEVERITY:
@@ -456,22 +457,22 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
       /* level */
       const char *n;
 
-      n = syslog_name_lookup_severity_by_value(msg->pri & LOG_PRIMASK);
+      n = syslog_name_lookup_severity_by_value(msg->pri & SYSLOG_PRIMASK);
       if (n)
         {
           g_string_append(result, n);
         }
       else
         {
-          format_uint32_padded(result, 0, 0, 10, msg->pri & LOG_PRIMASK);
+          format_uint32_padded(result, 0, 0, 10, msg->pri & SYSLOG_PRIMASK);
         }
 
       break;
     }
     case M_SEVERITY_NUM:
     {
-      t = LM_VT_INT32;
-      format_uint32_padded(result, 0, 0, 10, msg->pri & LOG_PRIMASK);
+      t = LM_VT_INTEGER;
+      format_uint32_padded(result, 0, 0, 10, msg->pri & SYSLOG_PRIMASK);
       break;
     }
     case M_TAG:
@@ -493,8 +494,8 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
     }
     case M_BSDTAG:
     {
-      format_uint32_padded(result, 0, 0, 10, (msg->pri & LOG_PRIMASK));
-      g_string_append_c(result, (((msg->pri & LOG_FACMASK) >> 3) + 'A'));
+      format_uint32_padded(result, 0, 0, 10, (msg->pri & SYSLOG_PRIMASK));
+      g_string_append_c(result, (((msg->pri & SYSLOG_FACMASK) >> 3) + 'A'));
       break;
     }
     case M_PRI:
@@ -625,14 +626,20 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
         {
           port = 0;
         }
-      t = LM_VT_INT32;
+      t = LM_VT_INTEGER;
       format_uint32_padded(result, 0, 0, 10, port);
       break;
     }
     case M_PROTOCOL:
     {
-      t = LM_VT_INT32;
+      t = LM_VT_INTEGER;
       format_uint32_padded(result, 0, 0, 10, msg->proto);
+      break;
+    }
+    case M_RAWMSG_SIZE:
+    {
+      t = LM_VT_INTEGER;
+      format_uint32_padded(result, 0, 0, 10, msg->recvd_rawmsg_size);
       break;
     }
     case M_SEQNUM:
@@ -742,7 +749,7 @@ log_macros_global_init(void)
 
   /* init the uptime (SYSUPTIME macro) */
   g_get_current_time(&app_uptime);
-  log_template_options_defaults(&template_options_for_macro_expand);
+  log_template_options_global_defaults(&template_options_for_macro_expand);
 
   macro_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
   for (i = 0; macros[i].name; i++)

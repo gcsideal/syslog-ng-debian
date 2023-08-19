@@ -132,8 +132,10 @@ create_sample_message(void)
   log_msg_set_value_by_name(msg, "comma_value", "value,with,a,comma", -1);
   log_msg_set_value_by_name(msg, "empty_value", "", -1);
   log_msg_set_value_by_name(msg, "template_name", "dummy", -1);
-  log_msg_set_value_by_name_with_type(msg, "number1", "123", -1, LM_VT_INT64);
-  log_msg_set_value_by_name_with_type(msg, "number2", "456", -1, LM_VT_INT64);
+  log_msg_set_value_by_name_with_type(msg, "number1", "123", -1, LM_VT_INTEGER);
+  log_msg_set_value_by_name_with_type(msg, "number2", "456", -1, LM_VT_INTEGER);
+  log_msg_set_value_by_name_with_type(msg, "bytes", "\0\1\2\3", 4, LM_VT_BYTES);
+  log_msg_set_value_by_name_with_type(msg, "protobuf", "\4\5\6\7", 4, LM_VT_PROTOBUF);
 
   return msg;
 }
@@ -199,8 +201,8 @@ assert_template_format_with_escaping_and_context_msgs(const gchar *template, gbo
                    template, (gint) res->len - prefix_len, res->str + prefix_len, (gint) expected_len, expected);
   if (expected_type != LM_VT_NONE)
     cr_assert_eq(type, expected_type,
-                 "expected type does not match template=%s, type=%d, expected_type=%d",
-                 template, type, expected_type);
+                 "expected type does not match template=%s, type=%d, expected_type=%d (value was %.*s)",
+                 template, type, expected_type, (gint) expected_len, expected);
   log_template_unref(templ);
   g_string_free(res, TRUE);
 }
@@ -249,6 +251,13 @@ assert_template_format_value_and_type(const gchar *template, const gchar *expect
 
   assert_template_format_with_escaping_and_context_msgs(template, FALSE, expected, -1, expected_type, &msg, 1);
   log_msg_unref(msg);
+}
+
+void
+assert_template_format_value_and_type_msg(const gchar *template, const gchar *expected,
+                                          LogMessageValueType expected_type, LogMessage *msg)
+{
+  assert_template_format_with_escaping_and_context_msgs(template, FALSE, expected, -1, expected_type, &msg, 1);
 }
 
 void

@@ -20,11 +20,9 @@
 # COPYING for details.
 #
 #############################################################################
-import atexit
 import logging
 import shutil
-
-from pathlib2 import Path
+from pathlib import Path
 
 from src.common.blocking import DEFAULT_TIMEOUT
 from src.common.blocking import wait_until_true
@@ -34,13 +32,11 @@ logger = logging.getLogger(__name__)
 
 
 def open_file(file_path, mode):
-    # Python 2 compatibility note: open() can work only with string representation of path
-    return open(str(file_path), mode)
+    return open(file_path, mode)
 
 
 def copy_file(src_file_path, dst_dir):
-    # Python 2 compatibility note: shutil.copy() can work only with string representation of path
-    shutil.copy(str(src_file_path), str(dst_dir))
+    shutil.copy(src_file_path, dst_dir)
 
 
 def copy_shared_file(testcase_parameters, shared_file_name):
@@ -59,12 +55,6 @@ class File(object):
         self.path = Path(file_path)
         self.__opened_file = None
 
-        atexit.register(self.deinit)
-
-    def deinit(self):
-        if self.is_opened():
-            self.close()
-
     def wait_for_creation(self):
         file_created = wait_until_true(self.path.exists)
         if file_created:
@@ -78,8 +68,9 @@ class File(object):
         return self.__opened_file
 
     def close(self):
-        self.__opened_file.close()
-        self.__opened_file = None
+        if self.is_opened():
+            self.__opened_file.close()
+            self.__opened_file = None
 
     def is_opened(self):
         return self.__opened_file is not None
@@ -101,6 +92,12 @@ class File(object):
     def write(self, content):
         self.__opened_file.write(content)
         self.__opened_file.flush()
+
+    def write_content_and_close(self, content):
+        if not self.is_opened():
+            self.open(mode="w+")
+        self.write(content)
+        self.close()
 
     def wait_for_lines(self, lines, timeout=DEFAULT_TIMEOUT):
         def find_lines_in_file(lines_to_find, lines_found, f):

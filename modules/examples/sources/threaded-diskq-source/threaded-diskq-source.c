@@ -42,6 +42,7 @@ struct ThreadedDiskqSourceDriver
   struct stat diskq_file_stat;
   gboolean waiting_for_file_change;
 
+  StatsClusterKeyBuilder *queue_sck_builder;
   gchar *filename;
 };
 
@@ -74,19 +75,19 @@ _load_queue(ThreadedDiskqSourceDriver *self)
 
   if (self->diskq_options.reliable)
     {
-      self->diskq_options.disk_buf_size = 128;
-      self->diskq_options.mem_buf_size = 1024 * 1024;
-      self->queue = log_queue_disk_reliable_new(&self->diskq_options, NULL);
+      self->diskq_options.flow_control_window_bytes = 1024 * 1024;
+      self->queue = log_queue_disk_reliable_new(&self->diskq_options, self->filename, NULL, STATS_LEVEL0, NULL,
+                                                self->queue_sck_builder);
     }
   else
     {
-      self->diskq_options.disk_buf_size = 1;
-      self->diskq_options.mem_buf_size = 128;
-      self->diskq_options.qout_size = 1000;
-      self->queue = log_queue_disk_non_reliable_new(&self->diskq_options, NULL);
+      self->diskq_options.flow_control_window_bytes = 128;
+      self->diskq_options.front_cache_size = 1000;
+      self->queue = log_queue_disk_non_reliable_new(&self->diskq_options, self->filename, NULL, STATS_LEVEL0, NULL,
+                                                    self->queue_sck_builder);
     }
 
-  if (!log_queue_disk_load_queue(self->queue, self->filename))
+  if (!log_queue_disk_start(self->queue))
     {
       msg_error("Error loading diskq", evt_tag_str("file", self->filename));
       return FALSE;
@@ -170,6 +171,15 @@ _fetch(LogThreadedFetcherDriver *s)
   return result;
 }
 
+static void
+_format_stats_key(LogThreadedSourceDriver *s, StatsClusterKeyBuilder *kb)
+{
+  ThreadedDiskqSourceDriver *self = (ThreadedDiskqSourceDriver *) s;
+
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("driver", "diskq-source"));
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("filename", self->filename));
+}
+
 static gboolean
 _init(LogPipe *s)
 {
@@ -181,6 +191,11 @@ _init(LogPipe *s)
       return FALSE;
     }
 
+  stats_cluster_key_builder_reset(self->queue_sck_builder);
+  stats_cluster_key_builder_add_label(self->queue_sck_builder,
+                                      stats_cluster_label("id", self->super.super.super.super.id ? : ""));
+  _format_stats_key(&self->super.super, self->queue_sck_builder);
+
   return log_threaded_fetcher_driver_init_method(s);
 }
 
@@ -189,23 +204,10 @@ _free(LogPipe *s)
 {
   ThreadedDiskqSourceDriver *self = (ThreadedDiskqSourceDriver *) s;
 
+  stats_cluster_key_builder_free(self->queue_sck_builder);
   g_free(self->filename);
 
   log_threaded_fetcher_driver_free_method(s);
-}
-
-static const gchar *
-_format_stats_instance(LogThreadedSourceDriver *s)
-{
-  ThreadedDiskqSourceDriver *self = (ThreadedDiskqSourceDriver *) s;
-  static gchar persist_name[1024];
-
-  if (s->super.super.super.persist_name)
-    g_snprintf(persist_name, sizeof(persist_name), "diskq-source,%s", s->super.super.super.persist_name);
-  else
-    g_snprintf(persist_name, sizeof(persist_name), "diskq-source,%s", self->filename);
-
-  return persist_name;
 }
 
 void
@@ -223,13 +225,17 @@ threaded_diskq_sd_new(GlobalConfig *cfg)
   ThreadedDiskqSourceDriver *self = g_new0(ThreadedDiskqSourceDriver, 1);
   log_threaded_fetcher_driver_init_instance(&self->super, cfg);
 
+  disk_queue_options_set_default_options(&self->diskq_options);
+
+  self->queue_sck_builder = stats_cluster_key_builder_new();
+
   self->super.connect = _open_diskq;
   self->super.disconnect = _close_diskq;
   self->super.fetch = _fetch;
 
   self->super.super.super.super.super.init = _init;
   self->super.super.super.super.super.free_fn = _free;
-  self->super.super.format_stats_instance = _format_stats_instance;
+  self->super.super.format_stats_key = _format_stats_key;
 
   return &self->super.super.super.super;
 }

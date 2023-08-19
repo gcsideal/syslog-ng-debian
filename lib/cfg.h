@@ -29,12 +29,14 @@
 #include "cfg-tree.h"
 #include "cfg-lexer.h"
 #include "cfg-parser.h"
+#include "cfg-persist.h"
 #include "plugin.h"
 #include "persist-state.h"
 #include "template/templates.h"
 #include "host-resolve.h"
 #include "logmsg/type-hinting.h"
 #include "stats/stats.h"
+#include "healthcheck/healthcheck-stats.h"
 #include "dnscache.h"
 #include "file-perms.h"
 
@@ -52,15 +54,17 @@ enum
   MM_GLOBAL,
 };
 
-/* configuration data kept between configuration reloads */
-typedef struct _PersistConfig PersistConfig;
-
 /* configuration data as loaded from the config file */
 struct _GlobalConfig
 {
   /* version number specified by the user, set _after_ parsing is complete */
   /* hex-encoded syslog-ng major/minor, e.g. 0x0201 is syslog-ng 2.1 format */
   gint user_version;
+
+  /* config identifier specified by the user */
+  gchar *user_config_id;
+
+  guint8 *config_hash;
 
   const gchar *filename;
   PluginContext plugin_context;
@@ -70,6 +74,7 @@ struct _GlobalConfig
   CfgArgs *globals;
 
   StatsOptions stats_options;
+  HealthCheckStatsOptions healthcheck_options;
   gint mark_freq;
   gint flush_lines;
   gint mark_mode;
@@ -91,6 +96,7 @@ struct _GlobalConfig
   gint log_fifo_size;
   gint log_msg_size;
   gboolean trim_large_messages;
+  gint log_level;
 
   gboolean create_dirs;
   FilePermOptions file_perm_options;
@@ -136,6 +142,7 @@ gboolean cfg_allow_config_dups(GlobalConfig *self);
 void cfg_bad_hostname_set(GlobalConfig *self, gchar *bad_hostname_re);
 gint cfg_lookup_mark_mode(const gchar *mark_mode);
 void cfg_set_mark_mode(GlobalConfig *self, const gchar *mark_mode);
+gboolean cfg_set_log_level(GlobalConfig *self, const gchar *log_level);
 
 gint cfg_tz_convert_value(gchar *convert);
 gint cfg_ts_format_value(gchar *format);
@@ -143,6 +150,9 @@ gint cfg_ts_format_value(gchar *format);
 void cfg_set_version_without_validation(GlobalConfig *self, gint version);
 gboolean cfg_set_version(GlobalConfig *self, gint version);
 gboolean cfg_set_current_version(GlobalConfig *self);
+void cfg_set_user_config_id(GlobalConfig *self, const gchar *id);
+
+void cfg_format_id(GlobalConfig *self, GString *id);
 
 void cfg_set_global_paths(GlobalConfig *self);
 
@@ -163,8 +173,7 @@ gboolean cfg_deinit(GlobalConfig *cfg);
 PersistConfig *persist_config_new(void);
 void persist_config_free(PersistConfig *self);
 void cfg_persist_config_move(GlobalConfig *src, GlobalConfig *dest);
-void cfg_persist_config_add(GlobalConfig *cfg, const gchar *name, gpointer value, GDestroyNotify destroy,
-                            gboolean force);
+void cfg_persist_config_add(GlobalConfig *cfg, const gchar *name, gpointer value, GDestroyNotify destroy);
 gpointer cfg_persist_config_fetch(GlobalConfig *cfg, const gchar *name);
 
 typedef gboolean(* mangle_callback)(GlobalConfig *cfg, LogMessage *msg, gpointer user_data);
@@ -214,14 +223,14 @@ __cfg_is_config_version_older(GlobalConfig *cfg, gint req)
  */
 #define __cfg_is_feature_enabled(cfg, min_version) \
   ({ \
-    /* the flip-over for min_version reached, set min_version to 0 */ G_STATIC_ASSERT(VERSION_VALUE_CURRENT < ((min_version) - 1));       \
+    /* the flip-over for min_version reached, set min_version to 0 */ G_STATIC_ASSERT(min_version == 0 || VERSION_VALUE_CURRENT < ((min_version) - 1));       \
     version_convert_from_user(cfg->user_version) >= (min_version) - 1;  \
   })
 
 #define cfg_is_feature_enabled(cfg, topic)        __cfg_is_feature_enabled(cfg, FEATURE_ ## topic ## _MIN_VERSION)
 #define cfg_is_typing_feature_enabled(cfg)        cfg_is_feature_enabled(cfg, TYPING)
 
-#define cfg_is_experimental_feature_enabled(cfg)  (cfg_is_typing_feature_enabled(cfg))
+#define cfg_is_experimental_feature_enabled(cfg)  0
 
 static inline void
 cfg_set_use_uniqid(gboolean flag)

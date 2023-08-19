@@ -27,14 +27,35 @@
 
 #include "logmsg/logmsg.h"
 #include "stats/stats-registry.h"
-
-extern gint log_queue_max_threads;
+#include "stats/stats-cluster-key-builder.h"
 
 typedef void (*LogQueuePushNotifyFunc)(gpointer user_data);
 
 typedef struct _LogQueue LogQueue;
 
 typedef const char *QueueType;
+
+typedef struct _LogQueueMetrics
+{
+  struct
+  {
+    StatsClusterKey *output_events_sc_key;
+    StatsClusterKey *memory_usage_sc_key;
+
+    StatsCounterItem *queued_messages;
+    StatsCounterItem *dropped_messages;
+    StatsCounterItem *memory_usage;
+  } shared;
+
+  struct
+  {
+    StatsClusterKey *events_sc_key;
+    StatsClusterKey *memory_usage_sc_key;
+
+    StatsCounterItem *memory_usage;
+    StatsCounterItem *queued_messages;
+  } owned;
+} LogQueueMetrics;
 
 struct _LogQueue
 {
@@ -47,15 +68,8 @@ struct _LogQueue
   GTimeVal last_throttle_check;
 
   gchar *persist_name;
-  StatsCounterItem *queued_messages;
-  StatsCounterItem *dropped_messages;
-  StatsCounterItem *memory_usage;
 
-  struct
-  {
-    atomic_gssize memory_usage;
-    atomic_gssize queued_messages;
-  } stats_cache;
+  LogQueueMetrics metrics;
 
   GMutex lock;
   LogQueuePushNotifyFunc parallel_push_notify;
@@ -72,8 +86,6 @@ struct _LogQueue
   void (*ack_backlog)(LogQueue *self, gint n);
   void (*rewind_backlog)(LogQueue *self, guint rewind_count);
   void (*rewind_backlog_all)(LogQueue *self);
-  void (*register_stats_counters)(LogQueue *self, gint stats_level, const StatsClusterKey *sc_key);
-  void (*unregister_stats_counters)(LogQueue *self, const StatsClusterKey *sc_key);
 
   void (*free_fn)(LogQueue *self);
 };
@@ -215,18 +227,18 @@ void log_queue_queued_messages_inc(LogQueue *self);
 void log_queue_queued_messages_dec(LogQueue *self);
 void log_queue_queued_messages_reset(LogQueue *self);
 
+void log_queue_dropped_messages_inc(LogQueue *self);
+
 void log_queue_push_notify(LogQueue *self);
 void log_queue_reset_parallel_push(LogQueue *self);
 void log_queue_set_parallel_push(LogQueue *self, LogQueuePushNotifyFunc parallel_push_notify, gpointer user_data,
                                  GDestroyNotify user_data_destroy);
 gboolean log_queue_check_items(LogQueue *self, gint *timeout, LogQueuePushNotifyFunc parallel_push_notify,
                                gpointer user_data, GDestroyNotify user_data_destroy);
-void log_queue_init_instance(LogQueue *self, const gchar *persist_name);
-void log_queue_register_stats_counters(LogQueue *self, gint stats_level, const StatsClusterKey *sc_key);
-void log_queue_unregister_stats_counters(LogQueue *self, const StatsClusterKey *sc_key);
+void log_queue_init_instance(LogQueue *self, const gchar *persist_name, gint stats_level,
+                             const StatsClusterKeyBuilder *driver_sck_builder,
+                             StatsClusterKeyBuilder *queue_sck_builder);
 
 void log_queue_free_method(LogQueue *self);
-
-void log_queue_set_max_threads(gint max_threads);
 
 #endif

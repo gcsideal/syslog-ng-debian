@@ -26,6 +26,7 @@
 #include "cfg-grammar-internal.h"
 
 LogDriver *last_driver;
+LogSchedulerOptions *last_scheduler_options;
 LogParser *last_parser;
 FilterExprNode *last_filter_expr;
 LogSourceOptions *last_source_options;
@@ -43,7 +44,9 @@ ValuePairsTransformSet *last_vp_transset;
 LogMatcherOptions *last_matcher_options;
 HostResolveOptions *last_host_resolve_options;
 StatsOptions *last_stats_options;
+HealthCheckStatsOptions *last_healthcheck_options;
 DNSCacheOptions *last_dns_cache_options;
 LogRewrite *last_rewrite;
 CfgArgs *last_block_args;
 DNSCacheOptions *last_dns_cache_options;
+MultiLineOptions *last_multi_line_options;

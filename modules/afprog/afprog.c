@@ -28,6 +28,7 @@
 #include "children.h"
 #include "fdhelpers.h"
 #include "stats/stats-registry.h"
+#include "stats/stats-cluster-key-builder.h"
 #include "transport/transport-pipe.h"
 #include "logproto/logproto-text-server.h"
 #include "logproto/logproto-text-client.h"
@@ -95,21 +96,28 @@ _exec_program(const gchar *cmdline)
 static void
 _close_all_fd(void)
 {
+  const rlim_t min_range = 10000;
   struct rlimit rlp;
   if (getrlimit(RLIMIT_NOFILE, &rlp) < 0)
     {
       /*
        * Failing to query max *fd*, still closing an arbitrary range might make sense,
-       * tring with some arbitrary big number. The only issue could be that it cannot
+       * trying with some arbitrary big number. The only issue could be that it cannot
        * close all of the needed *fd* and fail to bind to a socket (original issue).
        */
-      rlp.rlim_max = 10000;
+      rlp.rlim_max = min_range;
+    }
+  else if (rlp.rlim_max == RLIM_INFINITY)
+    {
+      /*
+       * Also could happen that the limits are RLIM_INFINITY.
+       * Use the same logic as above, try to close as much as possible.
+       */
+      rlp.rlim_max = (rlp.rlim_cur != RLIM_INFINITY ? rlp.rlim_cur : min_range);
     }
 
-  for (int i = rlp.rlim_max; i > 2; --i)
-    {
-      close(i);
-    }
+  for (rlim_t i = rlp.rlim_max; i > 2; --i)
+    close(i);
 }
 
 static void
@@ -283,12 +291,17 @@ afprogram_sd_init(LogPipe *s)
       proto = log_proto_text_server_new(transport, &self->reader_options.proto_options.super);
 
       self->reader = log_reader_new(s->cfg);
+      log_pipe_set_options(&self->reader->super.super, &self->super.super.super.options);
       log_reader_open(self->reader, proto, poll_fd_events_new(fd));
+
+      StatsClusterKeyBuilder *kb = stats_cluster_key_builder_new();
+      stats_cluster_key_builder_add_label(kb, stats_cluster_label("driver", "program"));
+      stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("command", self->process_info.cmdline->str));
       log_reader_set_options(self->reader,
                              s,
                              &self->reader_options,
                              self->super.super.id,
-                             self->process_info.cmdline->str);
+                             kb);
     }
   log_pipe_append((LogPipe *) self->reader, &self->super.super.super);
   if (!log_pipe_init((LogPipe *) self->reader))
@@ -513,6 +526,25 @@ afprogram_dd_restore_reload_store_item(AFProgramDestDriver *self, GlobalConfig *
   return !!(self->writer);
 }
 
+static void
+_init_stats_key_builders(AFProgramDestDriver *self, StatsClusterKeyBuilder **writer_sck_builder,
+                         StatsClusterKeyBuilder **driver_sck_builder, StatsClusterKeyBuilder **queue_sck_builder)
+{
+  *writer_sck_builder = stats_cluster_key_builder_new();
+  stats_cluster_key_builder_add_label(*writer_sck_builder, stats_cluster_label("driver", "program"));
+  stats_cluster_key_builder_add_legacy_label(*writer_sck_builder, stats_cluster_label("command",
+                                             self->process_info.cmdline->str));
+
+  *driver_sck_builder = stats_cluster_key_builder_clone(*writer_sck_builder);
+  stats_cluster_key_builder_add_label(*driver_sck_builder, stats_cluster_label("id", self->super.super.id));
+  stats_cluster_key_builder_set_legacy_alias(*driver_sck_builder,
+                                             self->writer_options.stats_source | SCS_DESTINATION,
+                                             self->super.super.id, self->process_info.cmdline->str);
+
+  *queue_sck_builder = stats_cluster_key_builder_clone(*writer_sck_builder);
+  stats_cluster_key_builder_add_label(*queue_sck_builder, stats_cluster_label("id", self->super.super.id));
+}
+
 static gboolean
 afprogram_dd_init(LogPipe *s)
 {
@@ -529,13 +561,26 @@ afprogram_dd_init(LogPipe *s)
   if (!self->writer)
     self->writer = log_writer_new(LW_FORMAT_FILE, s->cfg);
 
+  StatsClusterKeyBuilder *writer_sck_builder;
+  StatsClusterKeyBuilder *driver_sck_builder;
+  StatsClusterKeyBuilder *queue_sck_builder;
+  _init_stats_key_builders(self, &writer_sck_builder, &driver_sck_builder, &queue_sck_builder);
+
+  log_pipe_set_options((LogPipe *) self->writer, &self->super.super.super.options);
   log_writer_set_options(self->writer,
                          s,
                          &self->writer_options,
                          self->super.super.id,
-                         self->process_info.cmdline->str);
-  log_writer_set_queue(self->writer, log_dest_driver_acquire_queue(&self->super,
-                       afprogram_dd_format_queue_persist_name(self)));
+                         writer_sck_builder);
+
+
+  gint stats_level = log_pipe_is_internal(&self->super.super.super) ? STATS_LEVEL3 : self->writer_options.stats_level;
+  LogQueue *queue = log_dest_driver_acquire_queue(&self->super, afprogram_dd_format_queue_persist_name(self),
+                                                  stats_level, driver_sck_builder, queue_sck_builder);
+  log_writer_set_queue(self->writer, queue);
+
+  stats_cluster_key_builder_free(queue_sck_builder);
+  stats_cluster_key_builder_free(driver_sck_builder);
 
   if (!log_pipe_init((LogPipe *) self->writer))
     {
@@ -544,7 +589,14 @@ afprogram_dd_init(LogPipe *s)
     }
   log_pipe_append(&self->super.super.super, (LogPipe *) self->writer);
 
-  return restore_successful ? TRUE : afprogram_dd_reopen(self);
+  if (restore_successful)
+    {
+      LogProtoClient *proto = log_writer_steal_proto(self->writer);
+      log_writer_reopen(self->writer, proto);
+      return TRUE;
+    }
+
+  return afprogram_dd_reopen(self);
 }
 
 static inline void
@@ -556,7 +608,7 @@ afprogram_dd_store_reload_store_item(AFProgramDestDriver *self, GlobalConfig *cf
   reload_info->writer = self->writer;
 
   cfg_persist_config_add(cfg, afprogram_dd_format_persist_name((const LogPipe *)self), reload_info,
-                         afprogram_reload_store_item_destroy_notify, FALSE);
+                         afprogram_reload_store_item_destroy_notify);
 }
 
 static gboolean

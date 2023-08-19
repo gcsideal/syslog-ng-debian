@@ -51,7 +51,7 @@ TestSuite(format_json, .init = setup, .fini = teardown);
 
 Test(format_json, test_format_json)
 {
-  /* version 3.x behavior, should be changed once VERSION_VALUE becomes 4.0 */
+  cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
   assert_template_format("$(format-json MSG=$MSG)", "{\"MSG\":\"árvíztűrőtükörfúrógép\"}");
   assert_template_format("$(format-json MSG=$escaping)",
                          "{\"MSG\":\"binary stuff follows \\\"\\\\xad árvíztűrőtükörfúrógép\"}");
@@ -73,8 +73,10 @@ Test(format_json, test_format_json)
   assert_template_format("$(format-json sdata.win@18372.4.fruit=\"pear\" sdata.win@18372.4.taste=\"good\")",
                          "{\"sdata\":{\"win@18372.4\":{\"taste\":\"good\",\"fruit\":\"pear\"}}}");
 
+
   assert_template_format("$(format-json --scope selected_macros)",
-                         "{\"TAGS\":\"alma,korte,citrom,\\\"tag,containing,comma\\\"\",\"SOURCEIP\":\"10.11.12.13\",\"SEQNUM\":\"999\",\"PROGRAM\":\"syslog-ng\",\"PRIORITY\":\"err\",\"PID\":\"23323\",\"MESSAGE\":\"árvíztűrőtükörfúrógép\",\"HOST\":\"bzorp\",\"FACILITY\":\"local3\",\"DATE\":\"Feb 11 10:34:56\"}");
+                         "{\"TAGS\":[\"alma\",\"korte\",\"citrom\",\"tag,containing,comma\"],\"SOURCEIP\":\"10.11.12.13\",\"SEQNUM\":\"999\",\"PROGRAM\":\"syslog-ng\",\"PRIORITY\":\"err\",\"PID\":\"23323\",\"MESSAGE\":\"árvíztűrőtükörfúrógép\",\"HOST\":\"bzorp\",\"FACILITY\":\"local3\",\"DATE\":\"Feb 11 10:34:56\"}");
+
   assert_template_format("$(format-json --scope rfc3164 --key *.*)",
                          "{\"_unix\":{\"uid\":\"1000\",\"gid\":\"1000\",\"cmd\":\"command\"},\"_json\":{\"sub\":{\"value2\":\"subvalue2\",\"value1\":\"subvalue1\"},\"foo\":\"bar\"},\"PROGRAM\":\"syslog-ng\",\"PRIORITY\":\"err\",\"PID\":\"23323\",\"MESSAGE\":\"árvíztűrőtükörfúrógép\",\"HOST\":\"bzorp\",\"FACILITY\":\"local3\",\"DATE\":\"Feb 11 10:34:56\",\"APP\":{\"VALUE7\":\"value\",\"VALUE6\":\"value\",\"VALUE5\":\"value\",\"VALUE4\":\"value\",\"VALUE3\":\"value\",\"VALUE2\":\"value\",\"VALUE\":\"value\",\"STRIP5\":\"\",\"STRIP4\":\"value\",\"STRIP3\":\"     value     \",\"STRIP2\":\"value     \",\"STRIP1\":\"     value\",\"QVALUE\":\"\\\"value\\\"\"}}");
 
@@ -94,10 +96,10 @@ Test(format_json, test_format_json)
   assert_template_format("$(format-json .program.@name=${PROGRAM} .program.foo .program.bar --key .program.* --shift-levels 2 --add-prefix _)",
                          "{\"_@name\":\"syslog-ng\"}");
 
-  cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
-
+  cfg_set_version_without_validation(configuration, VERSION_VALUE_3_38);
   assert_template_format("$(format-json --scope selected_macros)",
-                         "{\"TAGS\":[\"alma\",\"korte\",\"citrom\",\"tag,containing,comma\"],\"SOURCEIP\":\"10.11.12.13\",\"SEQNUM\":\"999\",\"PROGRAM\":\"syslog-ng\",\"PRIORITY\":\"err\",\"PID\":\"23323\",\"MESSAGE\":\"árvíztűrőtükörfúrógép\",\"HOST\":\"bzorp\",\"FACILITY\":\"local3\",\"DATE\":\"Feb 11 10:34:56\"}");
+                         "{\"TAGS\":\"alma,korte,citrom,\\\"tag,containing,comma\\\"\",\"SOURCEIP\":\"10.11.12.13\",\"SEQNUM\":\"999\",\"PROGRAM\":\"syslog-ng\",\"PRIORITY\":\"err\",\"PID\":\"23323\",\"MESSAGE\":\"árvíztűrőtükörfúrógép\",\"HOST\":\"bzorp\",\"FACILITY\":\"local3\",\"DATE\":\"Feb 11 10:34:56\"}");
+
 }
 
 Test(format_json, test_format_json_key)
@@ -158,6 +160,7 @@ Test(format_json, test_format_json_with_type_hints)
 
 Test(format_json, test_v3x_value_pairs_yields_string_values)
 {
+  cfg_set_version_without_validation(configuration, VERSION_VALUE_3_38);
   /* in 3.x mode, numbers remain strings */
 
   /* template */
@@ -219,6 +222,19 @@ Test(format_json, test_v40_value_pairs_yields_typed_values)
   /* macro */
   assert_template_format("$(format-json --auto-cast FACILITY_NUM)",
                          "{\"FACILITY_NUM\":19}");
+
+  /* RFC8259 number sanitization */
+  assert_template_format("$(format-json num=int(+00014))", "{\"num\":14}");
+  assert_template_format("$(format-json num=int(014))", "{\"num\":14}");
+  assert_template_format("$(format-json num=int(000014))", "{\"num\":14}");
+  assert_template_format("$(format-json num=int(+0x0014))", "{\"num\":20}");
+  assert_template_format("$(format-json num=int(0x14))", "{\"num\":20}");
+  assert_template_format("$(format-json num=int(-0x14))", "{\"num\":-20}");
+  assert_template_format("$(format-json num=int(0x00014))", "{\"num\":20}");
+  assert_template_format("$(format-json num=int(+14))", "{\"num\":14}");
+  assert_template_format("$(format-json num=int(-14))", "{\"num\":-14}");
+  assert_template_format("$(format-json num=int(-021))", "{\"num\":-21}");
+  assert_template_format("$(format-json num=int(+9223372036854775804))", "{\"num\":9223372036854775804}");
 }
 
 Test(format_json, test_cast_option_always_yields_strings_regardless_of_versions)
@@ -312,6 +328,8 @@ Test(format_json, test_format_json_on_error)
                          "{\"x\":\"y\"}");
   assert_template_format("$(format-json x=y bad=int64(blah))",
                          "{\"x\":\"y\"}");
+  assert_template_format("$(format-json x=y z=boolean(blah))",
+                         "{\"x\":\"y\"}");
 
   configuration->template_options.on_error = ON_ERROR_FALLBACK_TO_STRING | ON_ERROR_SILENT;
   assert_template_format("$(format-json x=y bad=boolean(blah) foo=bar)",
@@ -332,10 +350,40 @@ Test(format_json, test_format_json_with_utf8)
   LogMessage *msg = create_empty_message();
   log_msg_set_value_by_name(msg, "UTF8-C2", "\xc2\xbf \xc2\xb6 \xc2\xa9 \xc2\xb1", -1); // ¿ ¶ © ±
   log_msg_set_value_by_name(msg, "UTF8-C3", "\xc3\x88 \xc3\x90", -1); // È Ð
+  log_msg_set_value_by_name(msg, "UTF8-CTRL", "\x07\x09", -1);
 
   assert_template_format_msg("$(format-json MSG=\"${UTF8-C2}\")", "{\"MSG\":\"\xc2\xbf \xc2\xb6 \xc2\xa9 \xc2\xb1\"}",
                              msg);
   assert_template_format_msg("$(format-json MSG=\"${UTF8-C3}\")", "{\"MSG\":\"\xc3\x88 \xc3\x90\"}", msg);
+
+  assert_template_format_msg("$(format-json MSG=\"${UTF8-CTRL}\")", "{\"MSG\":\"\\u0007\\t\"}", msg);
+
+  log_msg_unref(msg);
+}
+
+Test(format_json, test_format_json_with_bytes)
+{
+  LogMessage *msg = log_msg_new_empty();
+  log_msg_set_value_by_name_with_type(msg, "bytes", "\0\1\2\3", 4, LM_VT_BYTES);
+  log_msg_set_value_by_name_with_type(msg, "protobuf", "\4\5\6\7", 4, LM_VT_PROTOBUF);
+
+  cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
+
+  assert_template_format_msg("$(format-json --scope nv-pairs)", "{}", msg);
+  assert_template_format_msg("$(format-json --include-bytes --scope nv-pairs)",
+                             "{\"protobuf\":\"BAUGBw==\",\"bytes\":\"AAECAw==\"}", msg);
+
+  cfg_set_version_without_validation(configuration, VERSION_VALUE_3_38);
+
+  /*
+   * format-json() receives the bytes value with string type, so it does not know, that it has to
+   * base64 encode it.  This scenario is extremely rare and illogical, as the bytes type was introduced
+   * in v4.3 and no one should try to use it with v3 config.
+   */
+  assert_template_format_msg("$(format-json --scope nv-pairs)", "{}", msg);
+  assert_template_format_msg("$(format-json --include-bytes --scope nv-pairs)",
+                             "{\"protobuf\":\"\\u0004\\u0005\\u0006\\u0007\","
+                             "\"bytes\":\"\\\\x00\\u0001\\u0002\\u0003\"}", msg);
 
   log_msg_unref(msg);
 }
@@ -406,4 +454,7 @@ Test(format_json, test_format_json_with_key_delimiter)
                          "{\"_foo\":{\"bar\":\"baz\"}}");
   assert_template_format("$(format-json \".foo.bar\"=\"baz\")",
                          "{\"_foo\":{\"bar\":\"baz\"}}");
+
+  assert_template_format("$(format-json --key-delimiter ~ top~foo=1 top~bar=2 top~baz=3 top~sub~key1=val1 top~sub~key2=val2)",
+                         "{\"top\":{\"sub\":{\"key2\":\"val2\",\"key1\":\"val1\"},\"foo\":\"1\",\"baz\":\"3\",\"bar\":\"2\"}}");
 }

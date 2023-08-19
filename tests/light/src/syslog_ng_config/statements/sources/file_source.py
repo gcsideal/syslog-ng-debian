@@ -21,8 +21,7 @@
 #
 #############################################################################
 import logging
-
-from pathlib2 import Path
+from pathlib import Path
 
 from src.driver_io.file.file_io import FileIO
 from src.syslog_ng_config.statements.sources.source_driver import SourceDriver
@@ -51,3 +50,6 @@ class FileSource(SourceDriver):
             "number of times: {}\n"
             "content: {}\n".format(self.get_path(), counter, formatted_log),
         )
+
+    def close_file(self):
+        self.io.close_writeable_file()

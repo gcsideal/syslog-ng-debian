@@ -24,7 +24,9 @@
 #define SNG_PYTHON_PERSIST_H_INCLUDED
 
 #include "python-module.h"
+#include "python-options.h"
 #include "logpipe.h"
+#include "stats/stats-cluster-key-builder.h"
 
 typedef struct
 {
@@ -38,13 +40,15 @@ extern PyTypeObject py_persist_type;
 typedef struct
 {
   PyObject *generate_persist_name_method;
-  GHashTable *options;
+  PythonOptions *options;
   const gchar *class;
   const gchar *id;
 } PythonPersistMembers;
 
-void py_persist_init(void);
-const gchar *python_format_stats_instance(LogPipe *p, const gchar *module, PythonPersistMembers *options);
+const gchar *python_format_stats_key(LogPipe *p, StatsClusterKeyBuilder *kb, const gchar *module,
+                                     PythonPersistMembers *options);
 const gchar *python_format_persist_name(const LogPipe *p, const gchar *module, PythonPersistMembers *options);
+
+void py_persist_global_init(void);
 
 #endif

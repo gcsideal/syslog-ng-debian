@@ -1,4 +1,6 @@
-find_package(Curl)
+if (NOT DEFINED ENABLE_CURL OR ENABLE_CURL)
+  find_package(Curl)
+endif()
 
 module_switch(ENABLE_CURL "Enable http destination" Curl_FOUND)
 if (NOT ENABLE_CURL)
@@ -58,6 +60,8 @@ curl_detect_compile_option(CURL_SSLVERSION_TLSv1_1)
 curl_detect_compile_option(CURL_SSLVERSION_TLSv1_2)
 curl_detect_compile_option(CURL_SSLVERSION_TLSv1_3)
 curl_detect_compile_option(CURLOPT_TLS13_CIPHERS)
+curl_detect_compile_option(CURLOPT_SSL_VERIFYSTATUS)
+curl_detect_compile_option(CURLOPT_REDIR_PROTOCOLS_STR)
 
 install(FILES ${HTTP_MODULE_DEV_HEADERS} DESTINATION include/syslog-ng/modules/http/)
 

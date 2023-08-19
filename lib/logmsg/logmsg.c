@@ -240,12 +240,14 @@ log_msg_value_type_to_str(LogMessageValueType self)
     [LM_VT_STRING] = "string",
     [LM_VT_JSON] = "json",
     [LM_VT_BOOLEAN] = "boolean",
-    [LM_VT_INT32] = "int32",
-    [LM_VT_INT64] = "int64",
+    [__COMPAT_LM_VT_INT32] = "compat-int32",
+    [LM_VT_INTEGER] = "int",
     [LM_VT_DOUBLE] = "double",
     [LM_VT_DATETIME] = "datetime",
     [LM_VT_LIST] = "list",
     [LM_VT_NULL] = "null",
+    [LM_VT_BYTES] = "bytes",
+    [LM_VT_PROTOBUF] = "protobuf",
     [LM_VT_NONE] = "none",
   };
 
@@ -261,10 +263,9 @@ log_msg_value_type_from_str(const gchar *in_str, LogMessageValueType *out_type)
     *out_type = LM_VT_JSON;
   else if (strcmp(in_str, "boolean") == 0)
     *out_type = LM_VT_BOOLEAN;
-  else if (strcmp(in_str, "int32") == 0 || strcmp(in_str, "int") == 0)
-    *out_type = LM_VT_INT32;
-  else if (strcmp(in_str, "int64") == 0)
-    *out_type = LM_VT_INT64;
+  else if (strcmp(in_str, "int32") == 0 || strcmp(in_str, "int") == 0 || strcmp(in_str, "int64") == 0
+           || strcmp(in_str, "integer") == 0)
+    *out_type = LM_VT_INTEGER;
   else if (strcmp(in_str, "double") == 0 || strcmp(in_str, "float") == 0)
     *out_type = LM_VT_DOUBLE;
   else if (strcmp(in_str, "datetime") == 0)
@@ -273,6 +274,10 @@ log_msg_value_type_from_str(const gchar *in_str, LogMessageValueType *out_type)
     *out_type = LM_VT_LIST;
   else if (strcmp(in_str, "null") == 0)
     *out_type = LM_VT_NULL;
+  else if (strcmp(in_str, "bytes") == 0)
+    *out_type = LM_VT_BYTES;
+  else if (strcmp(in_str, "protobuf") == 0)
+    *out_type = LM_VT_PROTOBUF;
   else if (strcmp(in_str, "none") == 0)
     *out_type = LM_VT_NONE;
   else
@@ -302,7 +307,7 @@ static GPrivate priv_macro_value = G_PRIVATE_INIT(__free_macro_value);
 void
 log_msg_write_protect(LogMessage *self)
 {
-  self->protected = TRUE;
+  self->write_protected = TRUE;
 }
 
 LogMessage *
@@ -498,7 +503,6 @@ log_msg_init_queue_node(LogMessage *msg, LogMessageQueueNode *node, const LogPat
   node->ack_needed = path_options->ack_needed;
   node->flow_control_requested = path_options->flow_control_requested;
   node->msg = log_msg_ref(msg);
-  log_msg_write_protect(msg);
 }
 
 /*
@@ -1487,7 +1491,7 @@ log_msg_clone_cow(LogMessage *msg, const LogPathOptions *path_options)
   self->ack_and_ref_and_abort_and_suspended = LOGMSG_REFCACHE_REF_TO_VALUE(1) + LOGMSG_REFCACHE_ACK_TO_VALUE(
                                                 0) + LOGMSG_REFCACHE_ABORT_TO_VALUE(0);
   self->cur_node = 0;
-  self->protected = FALSE;
+  self->write_protected = FALSE;
 
   log_msg_add_ack(self, path_options);
   if (!path_options->ack_needed)
@@ -1499,7 +1503,7 @@ log_msg_clone_cow(LogMessage *msg, const LogPathOptions *path_options)
       self->ack_func = log_msg_clone_ack;
     }
 
-  self->flags &= ~LF_STATE_MASK;
+  self->flags &= ~(LF_STATE_MASK - LF_STATE_CLONED_MASK);
 
   if (self->num_tags == 0)
     self->flags |= LF_STATE_OWN_TAGS;
@@ -2036,16 +2040,17 @@ log_msg_register_stats(void)
 {
   stats_lock();
   StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_GLOBAL, "msg_clones", NULL );
+  stats_cluster_logpipe_key_legacy_set(&sc_key, SCS_GLOBAL, "msg_clones", NULL );
   stats_register_counter(0, &sc_key, SC_TYPE_PROCESSED, &count_msg_clones);
 
-  stats_cluster_logpipe_key_set(&sc_key, SCS_GLOBAL, "payload_reallocs", NULL );
+  stats_cluster_logpipe_key_legacy_set(&sc_key, SCS_GLOBAL, "payload_reallocs", NULL );
   stats_register_counter(0, &sc_key, SC_TYPE_PROCESSED, &count_payload_reallocs);
 
-  stats_cluster_logpipe_key_set(&sc_key, SCS_GLOBAL, "sdata_updates", NULL );
+  stats_cluster_logpipe_key_legacy_set(&sc_key, SCS_GLOBAL, "sdata_updates", NULL );
   stats_register_counter(0, &sc_key, SC_TYPE_PROCESSED, &count_sdata_updates);
 
-  stats_cluster_single_key_set(&sc_key, SCS_GLOBAL, "msg_allocated_bytes", NULL);
+  stats_cluster_single_key_set(&sc_key, "events_allocated_bytes", NULL, 0);
+  stats_cluster_single_key_add_legacy_alias(&sc_key, SCS_GLOBAL, "msg_allocated_bytes", NULL);
   stats_register_counter(1, &sc_key, SC_TYPE_SINGLE_VALUE, &count_allocated_bytes);
   stats_unlock();
 }

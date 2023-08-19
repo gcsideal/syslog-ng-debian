@@ -22,96 +22,77 @@
  */
 
 #include "journald-subsystem.h"
+#include "messages.h"
+
 #include <glib.h>
 #include <gmodule.h>
 
 #if SYSLOG_NG_SYSTEMD_JOURNAL_MODE == SYSLOG_NG_JOURNALD_SYSTEM
 
-struct _Journald
-{
-  sd_journal *journal;
-};
 
-gboolean
-load_journald_subsystem(void)
-{
-  return TRUE;
-}
 
 #else
 
+int (*sd_journal_open)(sd_journal **ret, int flags);
+#if SYSLOG_NG_HAVE_JOURNAL_NAMESPACES
+int (*sd_journal_open_namespace)(sd_journal **ret, const char *namespace, int flags);
+#endif
+void (*sd_journal_close)(sd_journal *j);
+int (*sd_journal_seek_head)(sd_journal *j);
+int (*sd_journal_seek_tail)(sd_journal *j);
+int (*sd_journal_get_cursor)(sd_journal *j, char **cursor);
+int (*sd_journal_next)(sd_journal *j);
+void (*sd_journal_restart_data)(sd_journal *j);
+int (*sd_journal_enumerate_data)(sd_journal *j, const void **data, size_t *length);
+int (*sd_journal_seek_cursor)(sd_journal *j, const char *cursor);
+int (*sd_journal_test_cursor)(sd_journal *j, const char *cursor);
+int (*sd_journal_get_fd)(sd_journal *j);
+int (*sd_journal_process)(sd_journal *j);
+int (*sd_journal_get_realtime_usec)(sd_journal *j, uint64_t *usec);
+int (*sd_journal_get_realtime_usec)(sd_journal *j, uint64_t *usec);
+int (*sd_journal_add_match)(sd_journal *j, const void *data, size_t size);
+char *(*sd_id128_to_string)(sd_id128_t id, char s[SD_ID128_STRING_MAX]);
+int (*sd_id128_get_boot)(sd_id128_t *ret);
 
-#define LOAD_SYMBOL(library, symbol) g_module_symbol(library, #symbol, (gpointer*)&symbol)
+
+#define LOAD_SYMBOL(library, symbol) _load_module_symbols(library, #symbol, (gpointer *)&symbol)
 
 #define JOURNAL_LIBRARY_NAME "libsystemd-journal.so.0"
 #define SYSTEMD_LIBRARY_NAME "libsystemd.so.0"
+#define ID128_LIBRARY_NAME "libsystemd-id128.so.0"
 
 const char *journald_libraries[] = {JOURNAL_LIBRARY_NAME, SYSTEMD_LIBRARY_NAME, NULL};
+const char *journald_ext_libraries[] = {ID128_LIBRARY_NAME, JOURNAL_LIBRARY_NAME, SYSTEMD_LIBRARY_NAME, NULL};
 
 static GModule *journald_module;
+static GModule *journald_ext_module;
 
 typedef struct sd_journal sd_journal;
 
-struct _Journald
-{
-  sd_journal *journal;
-};
-
-typedef int
-(*SD_JOURNAL_OPEN)(sd_journal **ret, int flags);
-#if SYSLOG_NG_HAVE_JOURNAL_NAMESPACES
-typedef int
-(*SD_JOURNAL_OPEN_NAMESPACE)(sd_journal **ret, const char *namespace, int flags);
-#endif
-typedef void
-(*SD_JOURNAL_CLOSE)(sd_journal *j);
-typedef int
-(*SD_JOURNAL_SEEK_HEAD)(sd_journal *j);
-typedef int
-(*SD_JOURNAL_SEEK_TAIL)(sd_journal *j);
-typedef int
-(*SD_JOURNAL_GET_CURSOR)(sd_journal *j, char **cursor);
-typedef int
-(*SD_JOURNAL_NEXT)(sd_journal *j);
-typedef void
-(*SD_JOURNAL_RESTART_DATA)(sd_journal *j);
-typedef int
-(*SD_JOURNAL_ENUMERATE_DATA)(sd_journal *j, const void **data, size_t *length);
-typedef int
-(*SD_JOURNAL_SEEK_CURSOR)(sd_journal *j, const char *cursor);
-typedef int
-(*SD_JOURNAL_TEST_CURSOR)(sd_journal *j, const char *cursor);
-typedef int
-(*SD_JOURNAL_GET_FD)(sd_journal *j);
-typedef int
-(*SD_JOURNAL_PROCESS)(sd_journal *j);
-typedef int
-(*SD_JOURNAL_GET_REALTIME_USEC)(sd_journal *j, guint64 *usec);
-
-static SD_JOURNAL_OPEN sd_journal_open;
-#if SYSLOG_NG_HAVE_JOURNAL_NAMESPACES
-static SD_JOURNAL_OPEN_NAMESPACE sd_journal_open_namespace;
-#endif
-static SD_JOURNAL_CLOSE sd_journal_close;
-static SD_JOURNAL_SEEK_HEAD sd_journal_seek_head;
-static SD_JOURNAL_SEEK_TAIL sd_journal_seek_tail;
-static SD_JOURNAL_GET_CURSOR sd_journal_get_cursor;
-static SD_JOURNAL_NEXT sd_journal_next;
-static SD_JOURNAL_RESTART_DATA sd_journal_restart_data;
-static SD_JOURNAL_ENUMERATE_DATA sd_journal_enumerate_data;
-static SD_JOURNAL_SEEK_CURSOR sd_journal_seek_cursor;
-static SD_JOURNAL_TEST_CURSOR sd_journal_test_cursor;
-static SD_JOURNAL_GET_FD sd_journal_get_fd;
-static SD_JOURNAL_PROCESS sd_journal_process;
-static SD_JOURNAL_GET_REALTIME_USEC sd_journal_get_realtime_usec;
-
 static GModule *
-_journald_module_open(void)
+_journald_module_open(char **libraries)
 {
-  for (gint i = 0; (journald_libraries[i] != NULL) && !journald_module; i++)
-    journald_module = g_module_open(journald_libraries[i], 0);
+  GModule *module = NULL;
 
-  return journald_module;
+  for (gint i = 0; (libraries[i] != NULL) && !module; i++)
+    {
+      module = g_module_open(libraries[i], 0);
+      if (!module)
+        msg_debug("No module by name", evt_tag_str("module", libraries[i]));
+    }
+
+  return module;
+}
+
+static gboolean
+_load_module_symbols(GModule *library, gchar *symbol_name, gpointer *symbol)
+{
+  if (!g_module_symbol(library, symbol_name, symbol))
+    {
+      msg_error("Could not find symbol", evt_tag_str("symbol", symbol_name));
+      return FALSE;
+    }
+  return TRUE;
 }
 
 static gboolean
@@ -161,23 +142,56 @@ _load_journald_symbols(void)
   if (!LOAD_SYMBOL(journald_module, sd_journal_test_cursor))
     return FALSE;
 
+  if (!LOAD_SYMBOL(journald_module, sd_journal_add_match))
+    return FALSE;
+
+  if (!LOAD_SYMBOL(journald_ext_module, sd_id128_to_string))
+    return FALSE;
+
+  if (!LOAD_SYMBOL(journald_ext_module, sd_id128_get_boot))
+    return FALSE;
+
   return TRUE;
 }
 
-gboolean
+void
+unload_journald_subsystem(void)
+{
+  if (journald_module)
+    {
+      g_module_close(journald_module);
+      journald_module = NULL;
+    }
+
+  if (journald_ext_module)
+    {
+      g_module_close(journald_ext_module);
+      journald_module = NULL;
+    }
+}
+
+int
 load_journald_subsystem(void)
 {
-  if (!journald_module)
+  if (!journald_module && !journald_ext_module)
     {
-      journald_module = _journald_module_open();
+      journald_module = _journald_module_open(journald_libraries);
       if (!journald_module)
         {
+          msg_error("Could not find journald_module");
           return FALSE;
         }
+
+      journald_ext_module = _journald_module_open(journald_ext_libraries);
+      if (!journald_ext_module)
+        {
+          msg_error("Could not find journald_ext_module");
+          return FALSE;
+        }
+
       if (!_load_journald_symbols())
         {
-          g_module_close(journald_module);
-          journald_module = NULL;
+          unload_journald_subsystem();
           return FALSE;
         }
     }
@@ -185,105 +199,3 @@ load_journald_subsystem(void)
 }
 
 #endif
-
-
-int
-journald_open(Journald *self, int flags)
-{
-  return sd_journal_open(&self->journal, flags);
-}
-
-#if SYSLOG_NG_HAVE_JOURNAL_NAMESPACES
-int
-journald_open_namespace(Journald *self, const gchar *namespace, int flags)
-{
-  return sd_journal_open_namespace(&self->journal, namespace, flags);
-}
-#endif
-
-void
-journald_close(Journald *self)
-{
-  sd_journal_close(self->journal);
-  self->journal = NULL;
-}
-
-int
-journald_seek_head(Journald *self)
-{
-  return sd_journal_seek_head(self->journal);
-}
-
-int
-journald_seek_tail(Journald *self)
-{
-  return sd_journal_seek_tail(self->journal);
-}
-
-int
-journald_get_cursor(Journald *self, gchar **cursor)
-{
-  return sd_journal_get_cursor(self->journal, cursor);
-}
-
-int
-journald_next(Journald *self)
-{
-  return sd_journal_next(self->journal);
-}
-
-void
-journald_restart_data(Journald *self)
-{
-  sd_journal_restart_data(self->journal);
-}
-
-int
-journald_enumerate_data(Journald *self, const void **data, gsize *length)
-{
-  return sd_journal_enumerate_data(self->journal, data, length);
-}
-
-int
-journald_seek_cursor(Journald *self, const gchar *cursor)
-{
-  return sd_journal_seek_cursor(self->journal, cursor);
-}
-
-int
-journald_test_cursor(Journald *self, const gchar *cursor)
-{
-  return sd_journal_test_cursor(self->journal, cursor);
-}
-
-int
-journald_get_fd(Journald *self)
-{
-  return sd_journal_get_fd(self->journal);
-}
-
-int
-journald_process(Journald *self)
-{
-  return sd_journal_process(self->journal);
-}
-
-int
-journald_get_realtime_usec(Journald *self, guint64 *usec)
-{
-  return sd_journal_get_realtime_usec(self->journal, usec);
-}
-
-Journald *
-journald_new(void)
-{
-  Journald *self = g_new0(Journald, 1);
-  return self;
-}
-
-void
-journald_free(Journald *self)
-{
-  g_free(self);
-  return;
-}

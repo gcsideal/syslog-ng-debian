@@ -25,9 +25,11 @@
 #include <criterion/criterion.h>
 
 #include "python-helpers.h"
+#include "python-types.h"
 #include "python-logmsg.h"
 #include "python-logtemplate.h"
 #include "python-logtemplate-options.h"
+#include "python-main.h"
 #include "apphook.h"
 #include "logmsg/logmsg.h"
 #include "syslog-format.h"
@@ -47,37 +49,21 @@ LogTemplateOptions log_template_options;
 PyObject *py_template_options;
 
 static void
-_py_init_interpreter(void)
-{
-  py_setup_python_home();
-  Py_Initialize();
-  py_init_argv();
-
-  PyGILState_STATE gstate = PyGILState_Ensure();
-  {
-    py_template_options = py_log_template_options_new(&log_template_options);
-  }
-  PyGILState_Release(gstate);
-
-  py_init_threads();
-  py_log_message_init();
-  py_log_template_init();
-  py_integer_pointer_init();
-  PyEval_SaveThread();
-}
-
-static void
 _init_python_main(void)
 {
   PyGILState_STATE gstate = PyGILState_Ensure();
   {
-    _python_main = PyImport_AddModule("__main__");
+    PythonConfig *pc = python_config_get(configuration);
+    _python_main = _py_get_main_module(pc);
     _python_main_dict = PyModule_GetDict(_python_main);
+
+    py_template_options = py_log_template_options_new(&log_template_options, configuration);
   }
   PyGILState_Release(gstate);
 }
 
-void setup(void)
+void
+setup(void)
 {
   app_startup();
   configuration = cfg_new_snippet();
@@ -89,11 +75,12 @@ void setup(void)
 
   msg_format_options_defaults(&parse_options);
   msg_format_options_init(&parse_options, configuration);
-  _py_init_interpreter();
+  _py_init_interpreter(FALSE);
   _init_python_main();
 }
 
-void teardown(void)
+void
+teardown(void)
 {
   PyGILState_STATE gstate = PyGILState_Ensure();
   {
@@ -115,7 +102,7 @@ create_parsed_message(const gchar *raw_msg)
 {
   LogMessage *msg = msg_format_parse(&parse_options, (const guchar *) raw_msg, strlen(raw_msg));
 
-  PyLogMessage *py_log_msg = (PyLogMessage *)py_log_message_new(msg);
+  PyLogMessage *py_log_msg = (PyLogMessage *)py_log_message_new(msg, configuration);
   log_msg_unref(msg);
 
   return py_log_msg;
@@ -124,9 +111,9 @@ create_parsed_message(const gchar *raw_msg)
 static PyLogTemplate *
 create_py_log_template(const gchar *template)
 {
-  PyObject *template_str = _py_string_from_string(template, -1);
+  PyObject *template_str = py_string_from_string(template, -1);
   PyObject *args = PyTuple_Pack(1, template_str);
-  PyLogTemplate *py_template = (PyLogTemplate *)py_log_template_new(&py_log_template_type, args, NULL);
+  PyLogTemplate *py_template = (PyLogTemplate *) PyObject_Call((PyObject *) &py_log_template_type, args, NULL);
   Py_DECREF(template_str);
   Py_DECREF(args);
 
@@ -142,7 +129,9 @@ assert_format(gchar *expected, PyLogTemplate *template, PyLogMessage *msg)
   Py_DECREF(args);
 
   cr_assert(result);
-  cr_assert_str_eq(_py_get_string_as_string(result), expected);
+  const gchar *result_as_str;
+  py_bytes_or_string_to_string(result, &result_as_str);
+  cr_assert_str_eq(result_as_str, expected);
   Py_DECREF(result);
 }
 
@@ -161,6 +150,30 @@ Test(python_log_logtemplate, test_python_template)
   PyGILState_Release(gstate);
 }
 
+Test(python_log_logtemplate, test_no_template_options_via_either_constructor_or_format_causes_an_exception)
+{
+  PyGILState_STATE gstate;
+  gstate = PyGILState_Ensure();
+
+  PyLogMessage *py_log_msg = create_parsed_message("<38>2018-07-20T00:00:00+00:00 localhost prg00000[1234]: test\n");
+  PyLogTemplate *py_template = create_py_log_template("${S_STAMP} | ${SEQNUM}");
+  cr_assert(py_template);
+  PyObject *args = PyTuple_Pack(1, py_log_msg);
+  PyObject *result = py_log_template_format((PyObject *)py_template, args, NULL);
+  Py_DECREF(args);
+
+  cr_assert(result == NULL);
+
+  gchar buf[256];
+  _py_format_exception_text(buf, sizeof(buf));
+
+  cr_assert(g_strstr_len(buf, sizeof(buf), "RuntimeError"), "Wrong exception type: %s", buf);
+
+  Py_DECREF(py_log_msg);
+  Py_DECREF(py_template);
+  PyGILState_Release(gstate);
+}
+
 Test(python_log_logtemplate, format_all_parameters)
 {
   PyGILState_STATE gstate;
@@ -169,12 +182,14 @@ Test(python_log_logtemplate, format_all_parameters)
   PyLogMessage *py_log_msg = create_parsed_message("<38>2018-07-20T00:00:00+00:00 localhost prg00000[1234]: test\n");
   PyLogTemplate *py_template = create_py_log_template("${S_STAMP} | ${SEQNUM}");
   cr_assert(py_template);
-  PyObject *args = PyTuple_Pack(4, py_log_msg, py_template_options, int_as_pyobject(1), int_as_pyobject(10));
+  PyObject *args = PyTuple_Pack(4, py_log_msg, py_template_options, py_long_from_long(1), py_long_from_long(10));
   PyObject *result = py_log_template_format((PyObject *)py_template, args, NULL);
   Py_DECREF(args);
 
   cr_assert(result);
-  cr_assert_str_eq(_py_get_string_as_string(result), "Jul 20 05:00:00 | 10");
+  const gchar *result_as_str;
+  py_bytes_or_string_to_string(result, &result_as_str);
+  cr_assert_str_eq(result_as_str, "Jul 20 05:00:00 | 10");
   Py_DECREF(result);
 
 
@@ -208,11 +223,11 @@ Test(python_log_logtemplate, test_py_is_log_template_options)
 
   cr_assert(py_is_log_template_options((PyObject *)py_template_options));
 
-  PyObject *template_str = _py_string_from_string("${PROGRAM}", -1);
+  PyObject *template_str = py_string_from_string("${PROGRAM}", -1);
   cr_assert_not(py_is_log_template_options((PyObject *)template_str));
 
   PyObject *args = PyTuple_Pack(2, template_str, Py_None); /* Second argument must be PyLogTemplateOptions */
-  PyLogTemplate *py_template = (PyLogTemplate *)py_log_template_new(&py_log_template_type, args, NULL);
+  PyLogTemplate *py_template = (PyLogTemplate *)PyObject_Call((PyObject *) &py_log_template_type, args, NULL);
   Py_DECREF(template_str);
   Py_DECREF(args);
   cr_assert_null(py_template);

@@ -25,6 +25,7 @@
 #include "messages.h"
 #include "type-hinting.h"
 #include "template/templates.h"
+#include "timeutils/scan-timestamp.h"
 
 #include <errno.h>
 #include <math.h>
@@ -81,12 +82,23 @@ type_cast_to_boolean(const gchar *value, gboolean *out, GError **error)
   return TRUE;
 }
 
+static gboolean
+_is_value_hex(const gchar *value)
+{
+  if (value[0] == '+' || value[0] == '-')
+    value++;
+  return (value[0] == '0' && (value[1] == 'x' || value[1] == 'X'));
+}
+
 gboolean
 type_cast_to_int32(const gchar *value, gint32 *out, GError **error)
 {
   gchar *endptr;
 
-  *out = (gint32)strtol(value, &endptr, 10);
+  if (_is_value_hex(value))
+    *out = (gint32)strtol(value, &endptr, 16);
+  else
+    *out = (gint32)strtol(value, &endptr, 10);
 
   if (value[0] == 0 || endptr[0] != '\0')
     {
@@ -103,7 +115,10 @@ type_cast_to_int64(const gchar *value, gint64 *out, GError **error)
 {
   gchar *endptr;
 
-  *out = (gint64)strtoll(value, &endptr, 10);
+  if (_is_value_hex(value))
+    *out = (gint64)strtoll(value, &endptr, 16);
+  else
+    *out = (gint64)strtoll(value, &endptr, 10);
 
   if (value[0] == 0 || endptr[0] != '\0')
     {
@@ -139,56 +154,70 @@ type_cast_to_double(const gchar *value, gdouble *out, GError **error)
   return success;
 }
 
-gboolean
-type_cast_to_datetime_msec(const gchar *value, gint64 *out, GError **error)
+static gboolean
+_parse_fixed_point_timestamp_in_nsec(const gchar *value, gchar **endptr, gint64 *sec, gint64 *nsec)
 {
-  gchar *endptr;
+  *nsec = 0;
 
-  *out = (gint64)strtoll(value, &endptr, 10) * 1000;
-
-  if (endptr[0] == '.')
+  *sec = (gint64) strtoll(value, endptr, 10);
+  if (**endptr == '.')
     {
-      gsize len = strlen(endptr) - 1, p;
-      gchar *e, tmp[4];
-      glong i;
+      const gchar *nsec_start = (*endptr) + 1;
 
-      if (len > 3)
-        len = 3;
+      *nsec = (gint64) strtoll(nsec_start, endptr, 10);
+      gint nsec_length = (*endptr) - nsec_start;
+      if (nsec_length == 0)
+        return FALSE;
 
-      memcpy(tmp, endptr + 1, len);
-      tmp[len] = '\0';
+      if (nsec_length > 9)
+        return FALSE;
 
-      i = strtoll(tmp, &e, 10);
-
-      if (e[0] != '\0')
-        {
-          if (error)
-            g_set_error(error, TYPE_HINTING_ERROR, TYPE_HINTING_INVALID_CAST,
-                        "datetime(%s)", value);
-          return FALSE;
-        }
-
-      for (p = 3 - len; p > 0; p--)
-        i *= 10;
-
-      *out += i;
-    }
-  else if (endptr[0] != '\0')
-    {
-      if (error)
-        g_set_error(error, TYPE_HINTING_ERROR, TYPE_HINTING_INVALID_CAST,
-                    "datetime(%s)", value);
-      return FALSE;
+      for (gint i = 0; i < 9 - nsec_length; i++)
+        *nsec *= 10;
+      return TRUE;
     }
   return TRUE;
 }
 
 gboolean
-type_cast_to_datetime_str(const gchar *value, const char *format,
-                          gchar **out, GError **error)
+type_cast_to_datetime_unixtime(const gchar *value, UnixTime *ut, GError **error)
 {
+  gchar *endptr;
+  gint64 sec, nsec;
+  gint tzofs = -1;
+
+  if (!_parse_fixed_point_timestamp_in_nsec(value, &endptr, &sec, &nsec))
+    goto error;
+
+  const guchar *tz_start = (guchar *) endptr;
+  if (*tz_start != 0)
+    {
+      gint tz_length = strlen(endptr);
+      if (!scan_iso_timezone(&tz_start, &tz_length, &tzofs))
+        goto error;
+    }
+
+  ut->ut_sec = sec;
+  ut->ut_usec = nsec / 1000;
+  ut->ut_gmtoff = tzofs;
+  return TRUE;
+error:
+
   if (error)
     g_set_error(error, TYPE_HINTING_ERROR, TYPE_HINTING_INVALID_CAST,
-                "datetime_str is not supported yet");
+                "datetime(%s)", value);
   return FALSE;
+
+}
+
+gboolean
+type_cast_to_datetime_msec(const gchar *value, gint64 *out, GError **error)
+{
+  UnixTime ut;
+
+  if (!type_cast_to_datetime_unixtime(value, &ut, error))
+    return FALSE;
+
+  *out = ut.ut_sec * 1000 + ut.ut_usec / 1000;
+  return TRUE;
 }

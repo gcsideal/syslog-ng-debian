@@ -22,7 +22,7 @@
 #############################################################################
 from enum import Enum  # noreorder
 
-from pathlib2 import Path
+from pathlib import Path
 
 from src.executors.command_executor import CommandExecutor
 
@@ -64,6 +64,10 @@ class SyslogNgCtlExecutor(object):
         if reset:
             stats_command.append("--reset")
         return stats_command
+
+    @staticmethod
+    def construct_ctl_stats_prometheus_command():
+        return ["stats", "prometheus"]
 
     @staticmethod
     def construct_ctl_credentials_command(credential, secret):

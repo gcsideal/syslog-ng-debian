@@ -28,6 +28,7 @@
 #include "dnscache.h"
 #include "alarms.h"
 #include "stats/stats-registry.h"
+#include "healthcheck/healthcheck-stats.h"
 #include "logmsg/logmsg.h"
 #include "logsource.h"
 #include "logwriter.h"
@@ -45,6 +46,8 @@
 #include "transport/transport-factory-id.h"
 #include "timeutils/timeutils.h"
 #include "msg-stats.h"
+#include "timeutils/cache.h"
+#include "multi-line/multi-line-factory.h"
 
 #include <iv.h>
 #include <iv_work.h>
@@ -57,7 +60,15 @@ typedef struct _ApplicationHookEntry
   gpointer user_data;
 } ApplicationHookEntry;
 
+typedef struct _ApplicationThreadHookEntry
+{
+  ApplicationThreadHookFunc func;
+  gpointer user_data;
+} ApplicationThreadHookEntry;
+
 static GList *application_hooks = NULL;
+static GList *application_thread_init_hooks = NULL;
+static GList *application_thread_deinit_hooks = NULL;
 static gint current_state = AH_STARTUP;
 
 gboolean
@@ -93,6 +104,48 @@ register_application_hook(gint type, ApplicationHookFunc func, gpointer user_dat
                 evt_tag_int("current", current_state),
                 evt_tag_int("hook", type));
       func(type, user_data);
+    }
+}
+
+void
+register_application_thread_init_hook(ApplicationThreadHookFunc func, gpointer user_data)
+{
+  ApplicationThreadHookEntry *entry = g_new0(ApplicationThreadHookEntry, 1);
+
+  entry->func = func;
+  entry->user_data = user_data;
+
+  application_thread_init_hooks = g_list_prepend(application_thread_init_hooks, entry);
+}
+
+void
+register_application_thread_deinit_hook(ApplicationThreadHookFunc func, gpointer user_data)
+{
+  ApplicationThreadHookEntry *entry = g_new0(ApplicationThreadHookEntry, 1);
+
+  entry->func = func;
+  entry->user_data = user_data;
+
+  application_thread_deinit_hooks = g_list_prepend(application_thread_deinit_hooks, entry);
+}
+
+static void
+run_application_thread_init_hooks(void)
+{
+  for (GList *elem = application_thread_init_hooks; elem; elem = elem->next)
+    {
+      ApplicationThreadHookEntry *hook = (ApplicationThreadHookEntry *) elem->data;
+      hook->func(hook->user_data);
+    }
+}
+
+static void
+run_application_thread_deinit_hooks(void)
+{
+  for (GList *elem = application_thread_deinit_hooks; elem; elem = elem->next)
+    {
+      ApplicationThreadHookEntry *hook = (ApplicationThreadHookEntry *) elem->data;
+      hook->func(hook->user_data);
     }
 }
 
@@ -173,6 +226,7 @@ app_startup(void)
   alarm_init();
   main_loop_thread_resource_init();
   stats_init();
+  healthcheck_stats_global_init();
   tzset();
   log_msg_global_init();
   log_tags_global_init();
@@ -187,6 +241,7 @@ app_startup(void)
   scratch_buffers_global_init();
   msg_stats_init();
   timeutils_global_init();
+  multi_line_global_init();
 }
 
 void
@@ -213,6 +268,8 @@ app_shutdown(void)
 {
   msg_stats_deinit();
   run_application_hook(AH_SHUTDOWN);
+
+  multi_line_global_deinit();
   main_loop_thread_resource_deinit();
   secret_storage_deinit();
   scratch_buffers_allocator_deinit();
@@ -227,6 +284,8 @@ app_shutdown(void)
   child_manager_deinit();
   g_list_foreach(application_hooks, (GFunc) g_free, NULL);
   g_list_free(application_hooks);
+  g_list_free_full(application_thread_init_hooks, g_free);
+  g_list_free_full(application_thread_deinit_hooks, g_free);
   dns_caching_thread_deinit();
   dns_caching_global_deinit();
   hostname_global_deinit();
@@ -246,6 +305,18 @@ app_shutdown(void)
     iv_deinit();
 
    */
+}
+
+void
+app_config_pre_pre_init(void)
+{
+  run_application_hook(AH_CONFIG_PRE_PRE_INIT);
+}
+
+void
+app_config_pre_init(void)
+{
+  run_application_hook(AH_CONFIG_PRE_INIT);
 }
 
 void
@@ -272,12 +343,15 @@ app_thread_start(void)
   scratch_buffers_allocator_init();
   dns_caching_thread_init();
   main_loop_call_thread_init();
+  run_application_thread_init_hooks();
 }
 
 void
 app_thread_stop(void)
 {
+  run_application_thread_deinit_hooks();
   main_loop_call_thread_deinit();
   dns_caching_thread_deinit();
   scratch_buffers_allocator_deinit();
+  timeutils_cache_deinit();
 }

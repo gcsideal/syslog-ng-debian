@@ -2,6 +2,7 @@ include modules/examples/sources/msg-generator/Makefile.am
 include modules/examples/sources/threaded-diskq-source/Makefile.am
 include modules/examples/sources/threaded-random-generator/Makefile.am
 include modules/examples/inner-destinations/http-test-slots/Makefile.am
+include modules/examples/inner-destinations/tls-test-validation/Makefile.am
 include modules/examples/destinations/example_destination/Makefile.am
 
 
@@ -9,12 +10,17 @@ EXAMPLE_PLUGINS = \
   $(top_builddir)/modules/examples/sources/libmsg-generator.la \
   $(top_builddir)/modules/examples/sources/libthreaded-diskq-source.la \
   $(top_builddir)/modules/examples/inner-destinations/http-test-slots/libhttp-test-slots.la \
+  $(top_builddir)/modules/examples/inner-destinations/tls-test-validation/libtls-test-validation.la \
   $(top_builddir)/modules/examples/destinations/example_destination/libexample_destination.la
 
 if HAVE_GETRANDOM
 EXAMPLE_PLUGINS += $(top_builddir)/modules/examples/sources/libthreaded-random-generator.la
 endif
 
+if ENABLE_CPP
+include modules/examples/sources/random-choice-generator/Makefile.am
+EXAMPLE_PLUGINS += $(top_builddir)/modules/examples/sources/librandom_choice_generator.la
+endif
 
 module_LTLIBRARIES += modules/examples/libexamples.la
 
@@ -24,6 +30,10 @@ modules_examples_libexamples_la_SOURCES = \
 modules_examples_libexamples_la_LIBADD = $(MODULE_DEPS_LIBS) $(EXAMPLE_PLUGINS)
 modules_examples_libexamples_la_DEPENDENCIES = $(MODULE_DEPS_LIBS) $(EXAMPLE_PLUGINS)
 modules_examples_libexamples_la_LDFLAGS = $(MODULE_LDFLAGS)
+
+if ENABLE_CPP
+modules_examples_libexamples_la_LIBADD += -lstdc++
+endif
 
 EXTRA_DIST += modules/examples/CMakeLists.txt
 

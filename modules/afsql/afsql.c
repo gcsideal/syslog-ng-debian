@@ -64,6 +64,24 @@ afsql_dd_add_dbd_option_numeric(LogDriver *s, const gchar *name, gint value)
 }
 
 void
+afsql_dd_set_dbi_driver_dir(LogDriver *s, const gchar *dbi_driver_dir)
+{
+  AFSqlDestDriver *self = (AFSqlDestDriver *) s;
+
+  g_free(self->dbi_driver_dir);
+  self->dbi_driver_dir = g_strdup(dbi_driver_dir);
+}
+
+void
+afsql_dd_set_quote_char(LogDriver *s, const gchar *quote_str)
+{
+  AFSqlDestDriver *self = (AFSqlDestDriver *) s;
+
+  g_free(self->quote_as_string);
+  self->quote_as_string = g_strdup(quote_str);
+}
+
+void
 afsql_dd_set_type(LogDriver *s, const gchar *type)
 {
   AFSqlDestDriver *self = (AFSqlDestDriver *) s;
@@ -406,16 +424,18 @@ afsql_dd_create_index(AFSqlDestDriver *self, const gchar *table, const gchar *co
 
           format_hex_string(hash, md_len, hash_str, sizeof(hash_str));
           hash_str[0] = 'i';
-          g_string_printf(query_string, "CREATE INDEX %s ON %s (%s)",
-                          hash_str, table, column);
+          g_string_printf(query_string, "CREATE INDEX %s ON %s%s%s (%s)",
+                          hash_str, self->quote_as_string, table, self->quote_as_string, column);
         }
       else
-        g_string_printf(query_string, "CREATE INDEX %s_%s_idx ON %s (%s)",
-                        table, column, table, column);
+        g_string_printf(query_string, "CREATE INDEX %s%s_%s_idx%s ON %s%s%s (%s)",
+                        self->quote_as_string, table, column, self->quote_as_string, self->quote_as_string, table, self->quote_as_string,
+                        column);
     }
   else
-    g_string_printf(query_string, "CREATE INDEX %s_%s_idx ON %s (%s)",
-                    table, column, table, column);
+    g_string_printf(query_string, "CREATE INDEX %s%s_%s_idx%s ON %s%s%s (%s)",
+                    self->quote_as_string, table, column, self->quote_as_string, self->quote_as_string, table, self->quote_as_string,
+                    column);
   if (!afsql_dd_run_query(self, query_string->str, FALSE, NULL))
     {
       msg_error("Error adding missing index",
@@ -453,7 +473,7 @@ _is_table_present(AFSqlDestDriver *self, const gchar *table, dbi_result *metadat
     }
 
   query_string = g_string_sized_new(32);
-  g_string_printf(query_string, "SELECT * FROM %s WHERE 0=1", table);
+  g_string_printf(query_string, "SELECT * FROM %s%s%s WHERE 0=1", self->quote_as_string, table, self->quote_as_string);
   res = afsql_dd_run_query(self, query_string->str, TRUE, metadata);
   g_string_free(query_string, TRUE);
 
@@ -487,7 +507,9 @@ _ensure_table_is_syslogng_conform(AFSqlDestDriver *self, dbi_result db_res, cons
               new_transaction_started = TRUE;
             }
           /* field does not exist, add this column */
-          g_string_printf(query_string, "ALTER TABLE %s ADD %s %s", table, self->fields[i].name, self->fields[i].type);
+          g_string_printf(query_string, "ALTER TABLE %s%s%s ADD %s %s", self->quote_as_string, table, self->quote_as_string,
+                          self->fields[i].name,
+                          self->fields[i].type);
           if (!afsql_dd_run_query(self, query_string->str, FALSE, NULL))
             {
               msg_error("Error adding missing column, giving up",
@@ -557,7 +579,7 @@ _table_create(AFSqlDestDriver *self, const gchar *table)
       return FALSE;
     }
 
-  g_string_printf(query_string, "CREATE TABLE %s (", table);
+  g_string_printf(query_string, "CREATE TABLE %s%s%s (", self->quote_as_string, table, self->quote_as_string);
   for (i = 0; i < self->fields_len; i++)
     {
       g_string_append_printf(query_string, "%s %s", self->fields[i].name, self->fields[i].type);
@@ -787,6 +809,18 @@ afsql_dd_append_quoted_value(AFSqlDestDriver *self, GString *value, GString *ins
   free(quoted);
 }
 
+static void
+afsql_dd_append_quoted_binary_value(AFSqlDestDriver *self, GString *value, GString *insert_command)
+{
+  guchar *quoted = NULL;
+  dbi_conn_quote_binary_copy(self->dbi_ctx, (guchar *) value->str, value->len, &quoted);
+  if (quoted)
+    g_string_append(insert_command, (gchar *) quoted);
+  else
+    g_string_append(insert_command, "''");
+  free(quoted);
+}
+
 static gboolean
 afsql_dd_append_value_to_be_inserted(AFSqlDestDriver *self,
                                      AFSqlField *field, GString *value, LogMessageValueType type,
@@ -803,8 +837,7 @@ afsql_dd_append_value_to_be_inserted(AFSqlDestDriver *self,
 
   switch(type)
     {
-    case LM_VT_INT32:
-    case LM_VT_INT64:
+    case LM_VT_INTEGER:
     {
       gint64 k;
       if (type_cast_to_int64(value->str, &k, NULL))
@@ -857,6 +890,10 @@ afsql_dd_append_value_to_be_inserted(AFSqlDestDriver *self,
     case LM_VT_NULL:
       g_string_append(insert_command, "NULL");
       break;
+    case LM_VT_BYTES:
+    case LM_VT_PROTOBUF:
+      afsql_dd_append_quoted_binary_value(self, value, insert_command);
+      break;
     default:
       afsql_dd_append_quoted_value(self, value, insert_command);
     }
@@ -873,7 +910,7 @@ afsql_dd_build_insert_command(AFSqlDestDriver *self, LogMessage *msg, GString *t
   GString *value = g_string_sized_new(512);
   gint i, j;
 
-  g_string_printf(insert_command, "INSERT INTO %s (", table->str);
+  g_string_printf(insert_command, "INSERT INTO %s%s%s (", self->quote_as_string, table->str, self->quote_as_string);
 
   for (i = 0; i < self->fields_len; i++)
     {
@@ -1061,15 +1098,17 @@ error:
 }
 
 static const gchar *
-afsql_dd_format_stats_instance(LogThreadedDestDriver *s)
+afsql_dd_format_stats_key(LogThreadedDestDriver *s, StatsClusterKeyBuilder *kb)
 {
   AFSqlDestDriver *self = (AFSqlDestDriver *) s;
-  static gchar persist_name[64];
 
-  g_snprintf(persist_name, sizeof(persist_name),
-             "%s,%s,%s,%s,%s",
-             self->type, self->host, self->port, self->database, self->table->template);
-  return persist_name;
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("driver", self->type));
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("host", self->host));
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("port", self->port));
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("database", self->database));
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("table", self->table->template_str));
+
+  return NULL;
 }
 
 static const gchar *
@@ -1082,7 +1121,7 @@ afsql_dd_format_persist_name(const LogPipe *s)
     g_snprintf(persist_name, sizeof(persist_name), "afsql_dd.%s", s->persist_name);
   else
     g_snprintf(persist_name, sizeof(persist_name), "afsql_dd(%s,%s,%s,%s,%s)", self->type,
-               self->host, self->port, self->database, self->table->template);
+               self->host, self->port, self->database, self->table->template_str);
 
   return persist_name;
 }
@@ -1094,7 +1133,7 @@ _afsql_dd_format_legacy_persist_name(const AFSqlDestDriver *self)
 
   g_snprintf(legacy_persist_name, sizeof(legacy_persist_name),
              "afsql_dd_qfile(%s,%s,%s,%s,%s)",
-             self->type, self->host, self->port, self->database, self->table->template);
+             self->type, self->host, self->port, self->database, self->table->template_str);
 
   return legacy_persist_name;
 }
@@ -1177,12 +1216,12 @@ _init_fields_from_columns_and_values(AFSqlDestDriver *self)
 }
 
 static gboolean
-_initialize_dbi(void)
+_initialize_dbi(AFSqlDestDriver *self)
 {
   if (!dbi_initialized)
     {
       errno = 0;
-      gint rc = dbi_initialize_r(NULL, &dbi_instance);
+      gint rc = dbi_initialize_r(self->dbi_driver_dir, &dbi_instance);
 
       if (rc < 0)
         {
@@ -1194,7 +1233,8 @@ _initialize_dbi(void)
         }
       else if (rc == 0)
         {
-          msg_error("The database access library (DBI) reports no usable SQL drivers, perhaps DBI drivers are not installed properly");
+          msg_error("The database access library (DBI) reports no usable SQL drivers, perhaps DBI drivers are not installed properly",
+                    evt_tag_str("dbi_driver_dir", self->dbi_driver_dir ? self->dbi_driver_dir : ""));
           return FALSE;
         }
       else
@@ -1213,7 +1253,7 @@ afsql_dd_init(LogPipe *s)
 
   if (!_update_legacy_persist_name_if_exists(self))
     return FALSE;
-  if (!_initialize_dbi())
+  if (!_initialize_dbi(self))
     return FALSE;
 
   if (!self->columns || !self->values)
@@ -1275,6 +1315,7 @@ afsql_dd_free(LogPipe *s)
   g_hash_table_destroy(self->syslogng_conform_tables);
   g_hash_table_destroy(self->dbd_options);
   g_hash_table_destroy(self->dbd_options_numeric);
+  g_free(self->dbi_driver_dir);
   if (self->session_statements)
     string_list_free(self->session_statements);
   log_threaded_dest_driver_free(s);
@@ -1290,7 +1331,7 @@ afsql_dd_new(GlobalConfig *cfg)
   self->super.super.super.super.init = afsql_dd_init;
   self->super.super.super.super.free_fn = afsql_dd_free;
   self->super.super.super.super.generate_persist_name = afsql_dd_format_persist_name;
-  self->super.format_stats_instance = afsql_dd_format_stats_instance;
+  self->super.format_stats_key = afsql_dd_format_stats_key;
   self->super.worker.connect = afsql_dd_connect;
   self->super.worker.disconnect = afsql_dd_disconnect;
   self->super.worker.insert = afsql_dd_insert;
@@ -1309,12 +1350,14 @@ afsql_dd_new(GlobalConfig *cfg)
   self->table = log_template_new(configuration, NULL);
   log_template_compile_literal_string(self->table, "messages");
   self->failed_message_counter = 0;
+  self->quote_as_string = g_strdup("");;
 
   self->session_statements = NULL;
 
   self->syslogng_conform_tables = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
   self->dbd_options = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
   self->dbd_options_numeric = g_hash_table_new_full(g_str_hash, g_int_equal, g_free, NULL);
+  self->dbi_driver_dir = NULL;
 
   log_template_options_defaults(&self->template_options);
   self->super.stats_source = stats_register_type("sql");

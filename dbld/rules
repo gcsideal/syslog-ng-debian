@@ -2,16 +2,17 @@
 
 BUILDER_IMAGES=		\
 	centos-7 	\
-	fedora-35	\
+	fedora-37	\
 	debian-stretch	\
 	debian-buster	\
 	debian-bullseye	\
+	debian-bookworm	\
 	debian-testing	\
 	debian-sid	\
-	ubuntu-xenial	\
 	ubuntu-bionic	\
 	ubuntu-focal	\
 	ubuntu-jammy \
+	ubuntu-lunar	\
 	kira		\
 	tarball
 
@@ -49,7 +50,7 @@ TARBALL_BASENAME=syslog-ng-$(VERSION).tar.gz
 TARBALL=$(BUILD_DIR)/$(TARBALL_BASENAME)
 GIT=$(shell which git || echo false)
 GIT_RELEASE_TAG=syslog-ng-$(VERSION)
-CONFIGURE_OPTS=--enable-debug --enable-manpages --with-python=2 --prefix=/install $(CONFIGURE_ADD)
+CONFIGURE_OPTS=--enable-debug --enable-manpages --with-python=3 --prefix=/install $(CONFIGURE_ADD)
 DBLD_RULES=$(MAKE) --no-print-directory -f $(DBLD_DIR)/rules
 
 DOCKER_SHELL=$(DOCKER) run $(DOCKER_RUN_ARGS) --rm -ti ${CONTAINER_REGISTRY}/dbld-$* /dbld/shell
@@ -229,14 +230,14 @@ pull-image-%:
 
 cache-image-%:
 	@IMAGE=${CONTAINER_REGISTRY}/dbld-$*:latest;										\
-	IMAGE_ID=$$(docker images -q $$IMAGE | head -1);								\
+	IMAGE_ID=$$($(DOCKER) images -q $$IMAGE | head -1);								\
 	WATCHED_FILES="dbld packaging/rhel/syslog-ng.spec packaging/debian/control";					\
 	if [ "$$IMAGE_ID" = "" ]; then 											\
 		$(DBLD_RULES) pull-image-$*;										\
 	fi;														\
-	IMAGE_ID=$$(docker images -q $$IMAGE | head -1);								\
+	IMAGE_ID=$$($(DOCKER) images -q $$IMAGE | head -1);								\
 	if [ "$$IMAGE_ID" != "" ]; then 										\
-		image_commit=$$(docker inspect  --format '{{ index .Config.Labels "COMMIT"}}' $$IMAGE_ID);		\
+		image_commit=$$($(DOCKER) inspect  --format '{{ index .Config.Labels "COMMIT"}}' $$IMAGE_ID);		\
 		dbld_changes=$$( 											\
 			($(GIT) cat-file -e $${image_commit:-NO_COMMIT_LABEL_IN_DBLD_IMAGE}^{commit} 			\
 				&& $(GIT) diff $${image_commit} -- $${WATCHED_FILES} | wc -l				\

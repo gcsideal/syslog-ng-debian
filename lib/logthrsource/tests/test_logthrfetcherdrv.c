@@ -56,17 +56,17 @@ _generate_persist_name(const LogPipe *s)
   return "test_threaded_fetcher_driver";
 }
 
-static const gchar *
-_format_stats_instance(LogThreadedSourceDriver *s)
+static void
+_format_stats_key(LogThreadedSourceDriver *s, StatsClusterKeyBuilder *kb)
 {
-  return "test_threaded_fetcher_driver_stats";
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("driver", "test_threaded_fetcher_driver_stats"));
 }
 
 static void _source_queue_mock(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
 {
   LogSource *self = (LogSource *) s;
 
-  stats_counter_inc(self->recvd_messages);
+  stats_counter_inc(self->metrics.recvd_messages);
   log_pipe_forward_msg(s, msg, path_options);
 }
 
@@ -113,7 +113,7 @@ test_threaded_fetcher_new(GlobalConfig *cfg)
 
   self->super.super.super.super.super.init = test_threaded_fetcher_driver_init_method;
 
-  self->super.super.format_stats_instance = _format_stats_instance;
+  self->super.super.format_stats_key = _format_stats_key;
   self->super.super.super.super.super.generate_persist_name = _generate_persist_name;
   self->super.super.super.super.super.free_fn = test_threaded_fetcher_free;
 
@@ -130,7 +130,7 @@ static void
 start_test_threaded_fetcher(TestThreadedFetcherDriver *s)
 {
   cr_assert(log_pipe_init(&s->super.super.super.super.super));
-  cr_assert(log_pipe_on_config_inited(&s->super.super.super.super.super));
+  cr_assert(log_pipe_post_config_init(&s->super.super.super.super.super));
 }
 
 static void
@@ -232,7 +232,7 @@ Test(logthrfetcherdrv, test_simple_fetch)
   wait_for_messages(s);
   stop_test_threaded_fetcher(s);
 
-  StatsCounterItem *recvd_messages = _get_source(s)->recvd_messages;
+  StatsCounterItem *recvd_messages = _get_source(s)->metrics.recvd_messages;
   cr_assert(stats_counter_get(recvd_messages) == 10);
 
   destroy_test_threaded_fetcher(s);
@@ -252,7 +252,7 @@ Test(logthrfetcherdrv, test_reconnect)
   wait_for_messages(s);
   stop_test_threaded_fetcher(s);
 
-  StatsCounterItem *recvd_messages = _get_source(s)->recvd_messages;
+  StatsCounterItem *recvd_messages = _get_source(s)->metrics.recvd_messages;
   cr_assert(stats_counter_get(recvd_messages) == 10);
   cr_assert_geq(s->connect_counter, 6);
 

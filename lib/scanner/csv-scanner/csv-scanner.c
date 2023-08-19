@@ -176,21 +176,88 @@ _parse_left_whitespace(CSVScanner *self)
   _skip_whitespace(&self->src);
 }
 
+static gint
+_decode_xdigit(gchar xdigit)
+{
+  if (xdigit >= '0' && xdigit <= '9')
+    return xdigit - '0';
+  if (xdigit >= 'a' && xdigit <= 'f')
+    return xdigit - 'a' + 10;
+  if (xdigit >= 'A' && xdigit <= 'F')
+    return xdigit - 'A' + 10;
+  return -1;
+}
+
+static gint
+_decode_xbyte(gchar xdigit1, gchar xdigit2)
+{
+  gint nibble_hi, nibble_lo;
+
+  nibble_hi = _decode_xdigit(xdigit1);
+  nibble_lo = _decode_xdigit(xdigit2);
+  if (nibble_hi < 0 || nibble_lo < 0)
+    return -1;
+  return (nibble_hi << 4) + nibble_lo;
+}
+
 static void
 _parse_character_with_quotation(CSVScanner *self)
 {
+  gchar ch;
   /* quoted character */
   if (self->options->dialect == CSV_SCANNER_ESCAPE_BACKSLASH &&
       *self->src == '\\' &&
       *(self->src + 1))
     {
       self->src++;
+      ch = *self->src;
+    }
+  else if (self->options->dialect == CSV_SCANNER_ESCAPE_BACKSLASH_WITH_SEQUENCES &&
+           *self->src == '\\' &&
+           *(self->src + 1))
+    {
+      self->src++;
+      ch = *self->src;
+      if (ch != self->current_quote)
+        {
+          switch (ch)
+            {
+            case 'a':
+              ch = '\a';
+              break;
+            case 'n':
+              ch = '\n';
+              break;
+            case 'r':
+              ch = '\r';
+              break;
+            case 't':
+              ch = '\t';
+              break;
+            case 'v':
+              ch = '\v';
+              break;
+            case 'x':
+              if (*(self->src+1) && *(self->src+2))
+                {
+                  ch = _decode_xbyte(*(self->src+1), *(self->src+2));
+                  if (ch >= 0)
+                    self->src += 2;
+                  else
+                    ch = 'x';
+                }
+              break;
+            default:
+              break;
+            }
+        }
     }
   else if (self->options->dialect == CSV_SCANNER_ESCAPE_DOUBLE_CHAR &&
            *self->src == self->current_quote &&
            *(self->src+1) == self->current_quote)
     {
       self->src++;
+      ch = *self->src;
     }
   else if (*self->src == self->current_quote)
     {
@@ -198,7 +265,11 @@ _parse_character_with_quotation(CSVScanner *self)
       self->src++;
       return;
     }
-  g_string_append_c(self->current_value, *self->src);
+  else
+    {
+      ch = *self->src;
+    }
+  g_string_append_c(self->current_value, ch);
   self->src++;
 }
 

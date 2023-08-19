@@ -25,13 +25,14 @@
 #define SNG_PYTHON_FETCHER_H
 
 #include "python-module.h"
+#include "python-options.h"
 #include "driver.h"
 
 LogDriver *python_fetcher_new(GlobalConfig *cfg);
 void python_fetcher_set_loaders(LogDriver *d, GList *loaders);
 void python_fetcher_set_class(LogDriver *d, gchar *class_name);
-void python_fetcher_set_option(LogDriver *d, gchar *key, gchar *value);
+PythonOptions *python_fetcher_get_options(LogDriver *d);
 
-void py_log_fetcher_init(void);
+void py_log_fetcher_global_init(void);
 
 #endif
