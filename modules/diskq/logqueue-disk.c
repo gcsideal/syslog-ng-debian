@@ -27,6 +27,7 @@
 #include "serialize.h"
 #include "logmsg/logmsg-serialize.h"
 #include "stats/stats-registry.h"
+#include "stats/stats-cluster-single.h"
 #include "reloc.h"
 #include "qdisk.h"
 #include "scratch-buffers.h"
@@ -41,12 +42,15 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define B_TO_KiB(x) ((x) / 1024)
+
 QueueType log_queue_disk_type = "DISK";
 
 gboolean
-log_queue_disk_save_queue(LogQueue *s, gboolean *persistent)
+log_queue_disk_stop(LogQueue *s, gboolean *persistent)
 {
   LogQueueDisk *self = (LogQueueDisk *) s;
+  g_assert(self->stop);
 
   if (!qdisk_started(self->qdisk))
     {
@@ -54,21 +58,27 @@ log_queue_disk_save_queue(LogQueue *s, gboolean *persistent)
       return TRUE;
     }
 
-  if (self->save_queue)
-    return self->save_queue(self, persistent);
-  return FALSE;
+  log_queue_queued_messages_sub(s, log_queue_get_length(s));
+  return self->stop(self, persistent);
 }
 
 gboolean
-log_queue_disk_load_queue(LogQueue *s, const gchar *filename)
+log_queue_disk_start(LogQueue *s)
 {
   LogQueueDisk *self = (LogQueueDisk *) s;
 
   /* qdisk portion is not yet started when this happens */
   g_assert(!qdisk_started(self->qdisk));
+  g_assert(self->start);
 
-  if (self->load_queue)
-    return self->load_queue(self, filename);
+  if (self->start(self))
+    {
+      log_queue_queued_messages_add(s, log_queue_get_length(s));
+      log_queue_disk_update_disk_related_counters(self);
+      stats_counter_set(self->metrics.capacity, B_TO_KiB(qdisk_get_max_useful_space(self->qdisk)));
+      return TRUE;
+    }
+
   return FALSE;
 }
 
@@ -79,13 +89,54 @@ log_queue_disk_get_filename(LogQueue *s)
   return qdisk_get_filename(self->qdisk);
 }
 
+static void
+_unregister_counters(LogQueueDisk *self)
+{
+  stats_lock();
+  {
+    if (self->metrics.capacity_sc_key)
+      {
+        stats_unregister_counter(self->metrics.capacity_sc_key, SC_TYPE_SINGLE_VALUE,
+                                 &self->metrics.capacity);
+
+        stats_cluster_key_free(self->metrics.capacity_sc_key);
+      }
+
+    if (self->metrics.disk_usage_sc_key)
+      {
+        stats_unregister_counter(self->metrics.disk_usage_sc_key, SC_TYPE_SINGLE_VALUE,
+                                 &self->metrics.disk_usage);
+
+        stats_cluster_key_free(self->metrics.disk_usage_sc_key);
+      }
+
+    if (self->metrics.disk_allocated_sc_key)
+      {
+        stats_unregister_counter(self->metrics.disk_allocated_sc_key, SC_TYPE_SINGLE_VALUE,
+                                 &self->metrics.disk_allocated);
+
+        stats_cluster_key_free(self->metrics.disk_allocated_sc_key);
+      }
+  }
+  stats_unlock();
+}
+
 void
 log_queue_disk_free_method(LogQueueDisk *self)
 {
-  qdisk_stop(self->qdisk);
+  g_assert(!qdisk_started(self->qdisk));
   qdisk_free(self->qdisk);
 
+  _unregister_counters(self);
+
   log_queue_free_method(&self->super);
+}
+
+void
+log_queue_disk_update_disk_related_counters(LogQueueDisk *self)
+{
+  stats_counter_set(self->metrics.disk_usage, B_TO_KiB(qdisk_get_used_useful_space(self->qdisk)));
+  stats_counter_set(self->metrics.disk_allocated, B_TO_KiB(qdisk_get_file_size(self->qdisk)));
 }
 
 static gboolean
@@ -135,10 +186,14 @@ log_queue_disk_read_message(LogQueueDisk *self, LogPathOptions *path_options)
         {
           msg_error("Error reading from disk-queue file, dropping disk queue",
                     evt_tag_str("filename", qdisk_get_filename(self->qdisk)));
-          log_queue_disk_restart_corrupted(self);
+
+          if (!qdisk_is_read_only(self->qdisk))
+            log_queue_disk_restart_corrupted(self);
+
           if (msg)
             log_msg_unref(msg);
           msg = NULL;
+
           return NULL;
         }
     }
@@ -153,7 +208,7 @@ log_queue_disk_read_message(LogQueueDisk *self, LogPathOptions *path_options)
 void
 log_queue_disk_drop_message(LogQueueDisk *self, LogMessage *msg, const LogPathOptions *path_options)
 {
-  stats_counter_inc(self->super.dropped_messages);
+  log_queue_dropped_messages_inc(&self->super);
 
   if (path_options->flow_control_requested)
     log_msg_drop(msg, path_options, AT_SUSPENDED);
@@ -161,16 +216,57 @@ log_queue_disk_drop_message(LogQueueDisk *self, LogMessage *msg, const LogPathOp
     log_msg_drop(msg, path_options, AT_PROCESSED);
 }
 
+static gchar *
+_get_next_corrupted_filename(const gchar *filename)
+{
+  GString *corrupted_filename = g_string_new(NULL);
+
+  for (gint i = 1; i < 10000; i++)
+    {
+      if (i == 1)
+        g_string_printf(corrupted_filename, "%s.corrupted", filename);
+      else
+        g_string_printf(corrupted_filename, "%s.corrupted-%d", filename, i);
+
+      struct stat st;
+      if (stat(corrupted_filename->str, &st) < 0)
+        return g_string_free(corrupted_filename, FALSE);
+    }
+
+  msg_error("Failed to calculate filename for corrupted disk-queue",
+            evt_tag_str(EVT_TAG_FILENAME, filename));
+
+  return NULL;
+}
+
 static void
 _restart_diskq(LogQueueDisk *self)
 {
-  gchar *filename = g_strdup(qdisk_get_filename(self->qdisk));
-  DiskQueueOptions *options = qdisk_get_options(self->qdisk);
+  g_assert(self->start);
+  g_assert(self->stop);
 
-  qdisk_stop(self->qdisk);
+  const gchar *filename = qdisk_get_filename(self->qdisk);
 
-  gchar *new_file = g_strdup_printf("%s.corrupted", filename);
-  if (rename(filename, new_file) < 0)
+  if (self->stop_corrupted)
+    {
+      if (!self->stop_corrupted(self))
+        {
+          msg_error("Failed to stop corrupted disk-queue-file",
+                    evt_tag_str(EVT_TAG_FILENAME, filename));
+        }
+    }
+  else
+    {
+      gboolean persistent;
+      if (!self->stop(self, &persistent))
+        {
+          msg_error("Failed to stop corrupted disk-queue-file",
+                    evt_tag_str(EVT_TAG_FILENAME, filename));
+        }
+    }
+
+  gchar *new_file = _get_next_corrupted_filename(filename);
+  if (!new_file || rename(filename, new_file) < 0)
     {
       msg_error("Moving corrupt disk-queue failed",
                 evt_tag_str(EVT_TAG_FILENAME, filename),
@@ -178,14 +274,10 @@ _restart_diskq(LogQueueDisk *self)
     }
   g_free(new_file);
 
-  if (self->restart)
-    self->restart(self, options);
-
-  if (self->start)
+  if (!self->start(self))
     {
-      self->start(self, filename);
+      g_assert(FALSE && "Failed to restart a corrupted disk-queue file, baling out.");
     }
-  g_free(filename);
 }
 
 void
@@ -193,19 +285,65 @@ log_queue_disk_restart_corrupted(LogQueueDisk *self)
 {
   _restart_diskq(self);
   log_queue_queued_messages_reset(&self->super);
+  log_queue_disk_update_disk_related_counters(self);
+  stats_counter_set(self->metrics.capacity, B_TO_KiB(qdisk_get_max_useful_space(self->qdisk)));
 }
 
+static void
+_register_counters(LogQueueDisk *self, gint stats_level, StatsClusterKeyBuilder *builder)
+{
+  if (!builder)
+    return;
+
+  StatsClusterKeyBuilder *local_builder = stats_cluster_key_builder_clone(builder);
+
+  /* Up to 4 TiB with 32 bit atomic counters. */
+  stats_cluster_key_builder_set_unit(local_builder, SCU_KIB);
+
+  stats_cluster_key_builder_set_name(local_builder, "capacity_bytes");
+  self->metrics.capacity_sc_key = stats_cluster_key_builder_build_single(local_builder);
+
+  stats_cluster_key_builder_set_name(local_builder, "disk_usage_bytes");
+  self->metrics.disk_usage_sc_key = stats_cluster_key_builder_build_single(local_builder);
+
+  stats_cluster_key_builder_set_name(local_builder, "disk_allocated_bytes");
+  self->metrics.disk_allocated_sc_key = stats_cluster_key_builder_build_single(local_builder);
+
+  stats_lock();
+  {
+    stats_register_counter(stats_level, self->metrics.capacity_sc_key, SC_TYPE_SINGLE_VALUE,
+                           &self->metrics.capacity);
+    stats_register_counter(stats_level, self->metrics.disk_usage_sc_key, SC_TYPE_SINGLE_VALUE,
+                           &self->metrics.disk_usage);
+    stats_register_counter(stats_level, self->metrics.disk_allocated_sc_key, SC_TYPE_SINGLE_VALUE,
+                           &self->metrics.disk_allocated);
+  }
+  stats_unlock();
+
+  stats_cluster_key_builder_free(local_builder);
+}
 
 void
 log_queue_disk_init_instance(LogQueueDisk *self, DiskQueueOptions *options, const gchar *qdisk_file_id,
-                             const gchar *persist_name)
+                             const gchar *filename, const gchar *persist_name, gint stats_level,
+                             const StatsClusterKeyBuilder *driver_sck_builder,
+                             StatsClusterKeyBuilder *queue_sck_builder)
 {
-  log_queue_init_instance(&self->super, persist_name);
+  if (queue_sck_builder)
+    {
+      stats_cluster_key_builder_set_name_prefix(queue_sck_builder, "disk_queue_");
+      stats_cluster_key_builder_add_label(queue_sck_builder, stats_cluster_label("path", filename));
+      stats_cluster_key_builder_add_label(queue_sck_builder,
+                                          stats_cluster_label("reliable", options->reliable ? "true" : "false"));
+    }
+
+  log_queue_init_instance(&self->super, persist_name, stats_level, driver_sck_builder, queue_sck_builder);
   self->super.type = log_queue_disk_type;
 
   self->compaction = options->compaction;
 
-  self->qdisk = qdisk_new(options, qdisk_file_id);
+  self->qdisk = qdisk_new(options, qdisk_file_id, filename);
+  _register_counters(self, stats_level, queue_sck_builder);
 }
 
 static gboolean

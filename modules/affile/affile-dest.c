@@ -124,7 +124,7 @@ affile_dw_reap(AFFileDestWriter *self)
   if (!log_writer_has_pending_writes((LogWriter *) self->writer) && !self->queue_pending)
     {
       msg_verbose("Destination timed out, reaping",
-                  evt_tag_str("template", self->owner->filename_template->template),
+                  evt_tag_str("template", self->owner->filename_template->template_str),
                   evt_tag_str("filename", self->filename));
       affile_dd_reap_writer(self->owner, self);
     }
@@ -139,7 +139,7 @@ affile_dw_reopen(AFFileDestWriter *self)
   LogProtoClient *proto = NULL;
 
   msg_verbose("Initializing destination file writer",
-              evt_tag_str("template", self->owner->filename_template->template),
+              evt_tag_str("template", self->owner->filename_template->template_str),
               evt_tag_str("filename", self->filename),
               evt_tag_str("symlink_as", self->owner->symlink_as));
 
@@ -181,6 +181,24 @@ affile_dw_reopen(AFFileDestWriter *self)
   return TRUE;
 }
 
+static void
+_init_stats_key_builders(AFFileDestWriter *self, StatsClusterKeyBuilder **writer_sck_builder,
+                         StatsClusterKeyBuilder **driver_sck_builder, StatsClusterKeyBuilder **queue_sck_builder)
+{
+  *writer_sck_builder = stats_cluster_key_builder_new();
+  stats_cluster_key_builder_add_label(*writer_sck_builder, stats_cluster_label("driver", "file"));
+  stats_cluster_key_builder_add_legacy_label(*writer_sck_builder, stats_cluster_label("filename", self->filename));
+
+  *driver_sck_builder = stats_cluster_key_builder_clone(*writer_sck_builder);
+  stats_cluster_key_builder_add_label(*driver_sck_builder, stats_cluster_label("id", self->owner->super.super.id));
+  stats_cluster_key_builder_set_legacy_alias(*driver_sck_builder,
+                                             self->owner->writer_options.stats_source | SCS_DESTINATION,
+                                             self->owner->super.super.id, self->filename);
+
+  *queue_sck_builder = stats_cluster_key_builder_clone(*writer_sck_builder);
+  stats_cluster_key_builder_add_label(*queue_sck_builder, stats_cluster_label("id", self->owner->super.super.id));
+}
+
 static gboolean
 affile_dw_init(LogPipe *s)
 {
@@ -192,13 +210,26 @@ affile_dw_init(LogPipe *s)
       self->writer = log_writer_new(self->owner->writer_flags, cfg);
     }
 
+  StatsClusterKeyBuilder *writer_sck_builder;
+  StatsClusterKeyBuilder *driver_sck_builder;
+  StatsClusterKeyBuilder *queue_sck_builder;
+  _init_stats_key_builders(self, &writer_sck_builder, &driver_sck_builder, &queue_sck_builder);
+
+  log_pipe_set_options((LogPipe *) self->writer, &s->options);
   log_writer_set_options(self->writer,
                          s,
                          &self->owner->writer_options,
                          self->owner->super.super.id,
-                         self->filename);
-  log_writer_set_queue(self->writer, log_dest_driver_acquire_queue(&self->owner->super,
-                       affile_dw_format_persist_name(self)));
+                         writer_sck_builder);
+
+
+  gint stats_level = log_pipe_is_internal(&self->super) ? STATS_LEVEL3 : self->owner->writer_options.stats_level;
+  LogQueue *queue = log_dest_driver_acquire_queue(&self->owner->super, affile_dw_format_persist_name(self),
+                                                  stats_level, driver_sck_builder, queue_sck_builder);
+  log_writer_set_queue(self->writer, queue);
+
+  stats_cluster_key_builder_free(driver_sck_builder);
+  stats_cluster_key_builder_free(queue_sck_builder);
 
   if (!log_pipe_init((LogPipe *) self->writer))
     {
@@ -287,15 +318,20 @@ affile_dw_set_owner(AFFileDestWriter *self, AFFileDestDriver *owner)
   self->owner = owner;
   self->super.expr_node = owner->super.super.super.expr_node;
 
+  log_pipe_set_options(&self->super, &owner->super.super.super.options);
   log_pipe_set_config(&self->super, cfg);
   if (self->writer)
     {
+      StatsClusterKeyBuilder *writer_sck_builder = stats_cluster_key_builder_new();
+      stats_cluster_key_builder_add_label(writer_sck_builder, stats_cluster_label("driver", "file"));
+      stats_cluster_key_builder_add_legacy_label(writer_sck_builder, stats_cluster_label("filename", self->filename));
+
       log_pipe_set_config((LogPipe *) self->writer, cfg);
       log_writer_set_options(self->writer,
                              &self->super,
                              &owner->writer_options,
                              self->owner->super.super.id,
-                             self->filename);
+                             writer_sck_builder);
     }
 }
 
@@ -430,7 +466,7 @@ affile_dd_format_persist_name(const LogPipe *s)
     g_snprintf(persist_name, sizeof(persist_name), "affile_dd.%s.writers", s->persist_name);
   else
     g_snprintf(persist_name, sizeof(persist_name), "affile_dd_writers(%s)",
-               self->filename_template->template);
+               self->filename_template->template_str);
 
   return persist_name;
 }
@@ -585,7 +621,7 @@ affile_dd_deinit(LogPipe *s)
 
       log_pipe_deinit(&self->single_writer->super);
       cfg_persist_config_add(cfg, affile_dd_format_persist_name(s), self->single_writer,
-                             affile_dd_destroy_writer, FALSE);
+                             affile_dd_destroy_writer);
       self->single_writer = NULL;
     }
   else if (self->writer_hash)
@@ -594,7 +630,7 @@ affile_dd_deinit(LogPipe *s)
 
       g_hash_table_foreach(self->writer_hash, affile_dd_deinit_writer, NULL);
       cfg_persist_config_add(cfg, affile_dd_format_persist_name(s), self->writer_hash,
-                             affile_dd_destroy_writer_hash, FALSE);
+                             affile_dd_destroy_writer_hash);
       self->writer_hash = NULL;
     }
 

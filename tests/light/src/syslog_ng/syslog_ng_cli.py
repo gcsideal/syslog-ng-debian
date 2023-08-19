@@ -21,8 +21,7 @@
 #
 #############################################################################
 import logging
-
-from pathlib2 import Path
+from pathlib import Path
 
 from src.common.blocking import wait_until_false
 from src.common.blocking import wait_until_true
@@ -34,9 +33,9 @@ logger = logging.getLogger(__name__)
 
 
 class SyslogNgCli(object):
-    def __init__(self, instance_paths, testcase_parameters):
+    def __init__(self, instance_paths, testcase_parameters, teardown):
         self.__instance_paths = instance_paths
-        self.__console_log_reader = ConsoleLogReader(instance_paths)
+        self.__console_log_reader = ConsoleLogReader(instance_paths, teardown)
         self.__syslog_ng_executor = SyslogNgExecutor(instance_paths)
         self.__syslog_ng_ctl = SyslogNgCtl(instance_paths)
         self.__external_tool = testcase_parameters.get_external_tool()

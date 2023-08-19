@@ -60,6 +60,14 @@ log_rewrite_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_option
   log_pipe_forward_msg(s, msg, path_options);
 }
 
+void
+log_rewrite_clone_method(LogRewrite *dst, const LogRewrite *src)
+{
+  log_pipe_clone_method(&dst->super, &src->super);
+  dst->condition = filter_expr_clone(src->condition);
+  dst->value_handle = src->value_handle;
+}
+
 gboolean
 log_rewrite_init_method(LogPipe *s)
 {
@@ -90,6 +98,7 @@ log_rewrite_init_instance(LogRewrite *self, GlobalConfig *cfg)
 {
   log_pipe_init_instance(&self->super, cfg);
   /* indicate that the rewrite rule is changing the message */
+  self->super.flags |= PIF_CONFIG_RELATED;
   self->super.free_fn = log_rewrite_free_method;
   self->super.queue = log_rewrite_queue;
   self->super.init = log_rewrite_init_method;

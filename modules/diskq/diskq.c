@@ -21,8 +21,11 @@
  *
  */
 
+#include <math.h>
+
 #include "diskq.h"
 #include "diskq-config.h"
+#include "diskq-global-metrics.h"
 
 #include "driver.h"
 #include "messages.h"
@@ -50,66 +53,122 @@ log_queue_disk_is_file_in_directory(const gchar *file, const gchar *directory)
 }
 
 static LogQueue *
-_acquire_queue(LogDestDriver *dd, const gchar *persist_name)
+_create_disk_queue(DiskQDestPlugin *self, const gchar *filename, const gchar *persist_name, gint stats_level,
+                   const StatsClusterKeyBuilder *driver_sck_builder, StatsClusterKeyBuilder *queue_sck_builder)
 {
-  DiskQDestPlugin *self = log_driver_get_plugin(&dd->super, DiskQDestPlugin, DISKQ_PLUGIN_NAME);
-  GlobalConfig *cfg = log_pipe_get_config(&dd->super.super);
-  LogQueue *queue = NULL;
-  gchar *qfile_name;
-  gboolean success;
-
-  if (persist_name)
-    queue = cfg_persist_config_fetch(cfg, persist_name);
-
-  if (queue)
-    {
-      log_queue_unref(queue);
-      queue = NULL;
-    }
-
   if (self->options.reliable)
-    queue = log_queue_disk_reliable_new(&self->options, persist_name);
-  else
-    queue = log_queue_disk_non_reliable_new(&self->options, persist_name);
-  log_queue_set_throttle(queue, dd->throttle);
+    return log_queue_disk_reliable_new(&self->options, filename, persist_name, stats_level, driver_sck_builder,
+                                       queue_sck_builder);
 
-  qfile_name = persist_state_lookup_string(cfg->state, persist_name, NULL, NULL);
+  return log_queue_disk_non_reliable_new(&self->options, filename, persist_name, stats_level, driver_sck_builder,
+                                         queue_sck_builder);
+}
 
-  if (qfile_name && !log_queue_disk_is_file_in_directory(qfile_name, self->options.dir))
+static void
+_warn_if_dir_changed(const gchar *qfile_name, const gchar *dir)
+{
+  if (!log_queue_disk_is_file_in_directory(qfile_name, dir))
     {
       msg_warning("The disk buffer directory has changed in the configuration, but the disk queue file cannot be moved",
                   evt_tag_str("qfile", qfile_name),
-                  evt_tag_str("dir", self->options.dir));
+                  evt_tag_str("dir", dir));
     }
+}
 
-  success = log_queue_disk_load_queue(queue, qfile_name);
-  if (!success)
+static LogQueue *
+_create_and_start_disk_queue_with_filename_from_persist(DiskQDestPlugin *self, const gchar *persist_qfile_name,
+                                                        const gchar *persist_name, gint stats_level,
+                                                        const StatsClusterKeyBuilder *driver_sck_builder,
+                                                        StatsClusterKeyBuilder *queue_sck_builder)
+{
+  if (!persist_qfile_name)
+    return FALSE;
+
+  _warn_if_dir_changed(persist_qfile_name, self->options.dir);
+
+  LogQueue *queue = _create_disk_queue(self, persist_qfile_name, persist_name, stats_level, driver_sck_builder,
+                                       queue_sck_builder);
+  if (log_queue_disk_start(queue))
+    return queue;
+
+  log_queue_unref(queue);
+
+  gchar *new_qfile_name = qdisk_get_next_filename(self->options.dir, self->options.reliable);
+  if (!new_qfile_name)
+    return NULL;
+
+  queue = _create_disk_queue(self, persist_qfile_name, persist_name, stats_level, driver_sck_builder, queue_sck_builder);
+  if (log_queue_disk_start(queue))
     {
-      if (qfile_name && log_queue_disk_load_queue(queue, NULL))
-        {
-          msg_error("Error opening disk-queue file, a new one started",
-                    evt_tag_str("old_filename", qfile_name),
-                    evt_tag_str("new_filename", log_queue_disk_get_filename(queue)));
-        }
-      else
-        {
-          g_free(qfile_name);
-          msg_error("Error initializing log queue");
-          return NULL;
-        }
+      msg_error("Error opening disk-queue file, a new one started",
+                evt_tag_str("old_filename", persist_qfile_name),
+                evt_tag_str("new_filename", log_queue_disk_get_filename(queue)));
+      g_free(new_qfile_name);
+      return queue;
     }
 
-  g_free(qfile_name);
+  msg_error("Error initializing log queue");
+
+  log_queue_unref(queue);
+  g_free(new_qfile_name);
+  return NULL;
+}
+
+static LogQueue *
+_create_and_start_disk_queue_with_new_filename(DiskQDestPlugin *self, const gchar *new_qfile_name,
+                                               const gchar *persist_name, gint stats_level,
+                                               const StatsClusterKeyBuilder *driver_sck_builder,
+                                               StatsClusterKeyBuilder *queue_sck_builder)
+{
+  if (!new_qfile_name)
+    return NULL;
+
+  LogQueue *queue = _create_disk_queue(self, new_qfile_name, persist_name, stats_level, driver_sck_builder,
+                                       queue_sck_builder);
+  if (log_queue_disk_start(queue))
+    return queue;
+
+  msg_error("Error initializing log queue");
+
+  log_queue_unref(queue);
+  return NULL;
+}
+
+static LogQueue *
+_acquire_queue(LogDestDriver *dd, const gchar *persist_name, gint stats_level,
+               const StatsClusterKeyBuilder *driver_sck_builder, StatsClusterKeyBuilder *queue_sck_builder)
+{
+  DiskQDestPlugin *self = log_driver_get_plugin(&dd->super, DiskQDestPlugin, DISKQ_PLUGIN_NAME);
+  GlobalConfig *cfg = log_pipe_get_config(&dd->super.super);
+  LogQueue *queue;
+  gchar *persist_qfile_name, *new_qfile_name = NULL;
 
   if (persist_name)
+    log_queue_unref(cfg_persist_config_fetch(cfg, persist_name));
+
+  persist_qfile_name = persist_state_lookup_string(cfg->state, persist_name, NULL, NULL);
+  queue = _create_and_start_disk_queue_with_filename_from_persist(
+            self, persist_qfile_name, persist_name, stats_level, driver_sck_builder, queue_sck_builder);
+  if (queue)
+    goto exit;
+
+  new_qfile_name = qdisk_get_next_filename(self->options.dir, self->options.reliable);
+  queue = _create_and_start_disk_queue_with_new_filename(self, new_qfile_name, persist_name, stats_level,
+                                                         driver_sck_builder, queue_sck_builder);
+
+exit:
+  if (queue)
     {
-      /* save the queue file name to permanent state */
-      qfile_name = (gchar *) log_queue_disk_get_filename(queue);
-      if (qfile_name)
-        {
-          persist_state_alloc_string(cfg->state, persist_name, qfile_name, -1);
-        }
+      log_queue_set_throttle(queue, dd->throttle);
+
+      const gchar *qfile_name = log_queue_disk_get_filename(queue);
+      diskq_global_metrics_file_acquired(qfile_name);
+      if (persist_name && qfile_name)
+        persist_state_alloc_string(cfg->state, persist_name, qfile_name, -1);
     }
+
+  g_free(persist_qfile_name);
+  g_free(new_qfile_name);
 
   return queue;
 }
@@ -120,10 +179,12 @@ _release_queue(LogDestDriver *dd, LogQueue *queue)
   GlobalConfig *cfg = log_pipe_get_config(&dd->super.super);
   gboolean persistent;
 
-  log_queue_disk_save_queue(queue, &persistent);
+  log_queue_disk_stop(queue, &persistent);
+  diskq_global_metrics_file_released(log_queue_disk_get_filename(queue));
+
   if (queue->persist_name)
     {
-      cfg_persist_config_add(cfg, queue->persist_name, queue, (GDestroyNotify) log_queue_unref, FALSE);
+      cfg_persist_config_add(cfg, queue->persist_name, queue, (GDestroyNotify) log_queue_unref);
     }
   else
     {
@@ -131,20 +192,91 @@ _release_queue(LogDestDriver *dd, LogQueue *queue)
     }
 }
 
-static void
-_set_default_truncate_size_ratio(DiskQDestPlugin *self, GlobalConfig *cfg)
+static gboolean
+_is_truncate_size_ratio_set_explicitly(DiskQDestPlugin *self, LogDestDriver *dd)
 {
-  if (cfg_is_config_version_older(cfg, VERSION_VALUE_3_33))
+  GlobalConfig *cfg = log_pipe_get_config(&dd->super.super);
+  return fabs(self->options.truncate_size_ratio - (-1)) >= DBL_EPSILON
+         || disk_queue_config_is_truncate_size_ratio_set_explicitly(cfg);
+}
+
+static gboolean
+_is_prealloc_set_explicitly(DiskQDestPlugin *self, LogDestDriver *dd)
+{
+  GlobalConfig *cfg = log_pipe_get_config(&dd->super.super);
+  return self->options.prealloc != -1 || disk_queue_config_is_prealloc_set_explicitly(cfg);
+}
+
+static gboolean
+_set_truncate_size_ratio_and_prealloc(DiskQDestPlugin *self, LogDestDriver *dd)
+{
+  GlobalConfig *cfg = log_pipe_get_config(&dd->super.super);
+
+  gdouble truncate_size_ratio = self->options.truncate_size_ratio;
+  if (truncate_size_ratio < 0)
     {
-      msg_warning_once("WARNING: the truncation of the disk-buffer files is changed starting with "
-                       VERSION_3_33 ". You are using an older config version and your config does not "
-                       "set the truncate-size-ratio() option. We will not use the new truncating logic "
-                       "with this config for compatibility.");
-      self->options.truncate_size_ratio = 0;
-      return;
+      if (cfg_is_config_version_older(cfg, VERSION_VALUE_3_33))
+        {
+          msg_warning_once("WARNING: the truncation of the disk-buffer files is changed starting with "
+                           VERSION_3_33 ". You are using an older config version and your config does not "
+                           "set the truncate-size-ratio() option. We will not use the new truncating logic "
+                           "with this config for compatibility.");
+          /* Handle it as truncate-size-ratio(0) was set explicitly by the user. */
+          disk_queue_options_set_truncate_size_ratio(&self->options, 0);
+          truncate_size_ratio = 0;
+        }
+      else
+        {
+          truncate_size_ratio = disk_queue_config_get_truncate_size_ratio(cfg);
+        }
     }
 
-  self->options.truncate_size_ratio = disk_queue_config_get_truncate_size_ratio(cfg);
+  gboolean prealloc = self->options.prealloc;
+  if (prealloc < 0)
+    {
+      prealloc = disk_queue_config_get_prealloc(cfg);
+    }
+
+  if (!(prealloc && truncate_size_ratio < 1))
+    {
+      self->options.truncate_size_ratio = truncate_size_ratio;
+      self->options.prealloc = prealloc;
+      return TRUE;
+    }
+
+  if (_is_truncate_size_ratio_set_explicitly(self, dd) && _is_prealloc_set_explicitly(self, dd))
+    {
+      msg_error("Cannot enable preallocation and truncation at the same time. "
+                "Please disable either the truncation (truncate-size-ratio(1)) or the preallocation (prealloc(no))",
+                log_pipe_location_tag(&dd->super.super));
+      return FALSE;
+    }
+
+  if (_is_truncate_size_ratio_set_explicitly(self, dd))
+    {
+      msg_warning("Cannot enable preallocation and truncation at the same time. "
+                  "Preallocation disabled",
+                  log_pipe_location_tag(&dd->super.super));
+      self->options.truncate_size_ratio = truncate_size_ratio;
+      self->options.prealloc = FALSE;
+      return TRUE;
+    }
+
+  if (_is_prealloc_set_explicitly(self, dd))
+    {
+      msg_warning("Cannot enable preallocation and truncation at the same time. "
+                  "Truncation disabled",
+                  log_pipe_location_tag(&dd->super.super));
+      self->options.truncate_size_ratio = 1;
+      self->options.prealloc = prealloc;
+      return TRUE;
+    }
+
+  /*
+   * This means that our hard coded default values enabled preallocation and truncation at the same time,
+   * which is a coding error.
+   */
+  g_assert_not_reached();
 }
 
 static gboolean
@@ -154,27 +286,23 @@ _attach(LogDriverPlugin *s, LogDriver *d)
   LogDestDriver *dd = (LogDestDriver *) d;
   GlobalConfig *cfg = log_pipe_get_config(&d->super);
 
-  if (self->options.disk_buf_size == -1)
+  if (self->options.capacity_bytes < MIN_CAPACITY_BYTES && self->options.capacity_bytes > 0)
     {
-      msg_error("The required 'disk_buf_size()' parameter of diskq module has not been set.");
-      return FALSE;
+      msg_warning("The value of 'capacity_bytes()' is too low, setting to the smallest acceptable value",
+                  evt_tag_long("min_space", MIN_CAPACITY_BYTES),
+                  log_pipe_location_tag(&dd->super.super));
+      self->options.capacity_bytes = MIN_CAPACITY_BYTES;
     }
 
-  if (self->options.disk_buf_size < MIN_DISK_BUF_SIZE && self->options.disk_buf_size != 0)
-    {
-      msg_warning("The value of 'disk_buf_size()' is too low, setting to the smallest acceptable value",
-                  evt_tag_long("min_space", MIN_DISK_BUF_SIZE));
-      self->options.disk_buf_size = MIN_DISK_BUF_SIZE;
-    }
+  if (self->options.flow_control_window_size < 0)
+    self->options.flow_control_window_size = dd->log_fifo_size;
+  if (self->options.flow_control_window_size < 0)
+    self->options.flow_control_window_size = cfg->log_fifo_size;
+  if (self->options.front_cache_size < 0)
+    self->options.front_cache_size = 1000;
 
-  if (self->options.mem_buf_length < 0)
-    self->options.mem_buf_length = dd->log_fifo_size;
-  if (self->options.mem_buf_length < 0)
-    self->options.mem_buf_length = cfg->log_fifo_size;
-  if (self->options.qout_size < 0)
-    self->options.qout_size = 1000;
-  if (self->options.truncate_size_ratio < 0)
-    _set_default_truncate_size_ratio(self, cfg);
+  if (!_set_truncate_size_ratio_and_prealloc(self, dd))
+    return FALSE;
 
   dd->acquire_queue = _acquire_queue;
   dd->release_queue = _release_queue;

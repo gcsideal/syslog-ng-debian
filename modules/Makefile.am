@@ -17,9 +17,10 @@ include modules/confgen/Makefile.am
 include modules/cryptofuncs/Makefile.am
 include modules/csvparser/Makefile.am
 include modules/timestamp/Makefile.am
-include modules/dbparser/Makefile.am
+include modules/correlation/Makefile.am
 include modules/diskq/Makefile.am
 include modules/examples/Makefile.am
+include modules/ebpf/Makefile.am
 include modules/geoip2/Makefile.am
 include modules/getent/Makefile.am
 include modules/graphite/Makefile.am
@@ -38,6 +39,7 @@ include modules/openbsd/Makefile.am
 include modules/pacctformat/Makefile.am
 include modules/pseudofile/Makefile.am
 include modules/python/Makefile.am
+include modules/python-modules/Makefile.am
 include modules/redis/Makefile.am
 include modules/riemann/Makefile.am
 include modules/afsnmp/Makefile.am
@@ -50,6 +52,8 @@ include modules/tagsparser/Makefile.am
 include modules/xml/Makefile.am
 include modules/regexp-parser/Makefile.am
 include modules/rate-limit-filter/Makefile.am
+include modules/metrics-probe/Makefile.am
+include modules/grpc/Makefile.am
 
 SYSLOG_NG_CORE_JAR=$(top_builddir)/modules/java/syslog-ng-core/libs/syslog-ng-core.jar
 
@@ -57,14 +61,15 @@ SYSLOG_NG_MODULES	=	\
 	mod-afsocket mod-afstreams mod-affile mod-afprog \
 	mod-usertty mod-amqp mod-mongodb mod-smtp mod-http mod-json \
 	mod-syslogformat mod-linux-kmsg mod-pacctformat \
-	mod-confgen mod-system-source mod-csvparser mod-dbparser \
+	mod-confgen mod-system-source mod-csvparser mod-correlation \
 	mod-basicfuncs mod-cryptofuncs mod-geoip2 mod-afstomp \
 	mod-redis mod-pseudofile mod-graphite mod-riemann \
 	mod-python mod-java mod-java-modules mod-kvformat mod-date \
 	mod-native mod-cef mod-add-contextual-data mod-diskq mod-getent \
 	mod-map-value-pairs mod-tags-parser mod-xml \
 	mod-appmodel mod-openbsd mod-snmp mod-secure-logging \
-	mod-mqtt mod-regexp-parser mod-rate-limit-filter
+	mod-mqtt mod-regexp-parser mod-rate-limit-filter mod-metrics-probe \
+	mod-grpc
 
 modules modules/: ${SYSLOG_NG_MODULES}
 
@@ -74,13 +79,13 @@ modules_test_subdirs	=	\
 	modules_afmongodb modules_afsmtp modules_http modules_json \
 	modules_syslogformat modules_linux_kmsg \
 	modules_pacctformat modules_confgen modules_system_source \
-	modules_csvparser modules_dbparser modules_basicfuncs \
+	modules_csvparser modules_correlation modules_basicfuncs \
 	modules_cryptofuncs modules_geoip2 modules_afstomp \
 	modules_graphite modules_riemann modules_python \
 	modules_secure-logging modules_systemd_journal modules_kvformat modules_date \
 	modules_cef modules_diskq modules-add-contextual-data modules_getent \
 	modules_map-value-pairs modules_tagsparser modules_xml modules_appmodel \
-	modules_regexp-parser modules_rate-limit-filter
+	modules_regexp-parser modules_rate-limit-filter modules_metrics-probe
 
 EXTRA_DIST += modules/CMakeLists.txt
 

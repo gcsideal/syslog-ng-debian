@@ -14,7 +14,9 @@ modules_diskq_libsyslog_ng_disk_buffer_la_SOURCES = \
   modules/diskq/logqueue-disk-reliable.c \
   modules/diskq/logqueue-disk-reliable.h \
   modules/diskq/qdisk.h \
-  modules/diskq/qdisk.c
+  modules/diskq/qdisk.c \
+  modules/diskq/diskq-global-metrics.h \
+  modules/diskq/diskq-global-metrics.c
 
 modules_diskq_libsyslog_ng_disk_buffer_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
@@ -44,7 +46,7 @@ LIBSYSLOG_NG_DISK_BUFFER = $(top_builddir)/modules/diskq/libsyslog-ng-disk-buffe
 
 modules_diskq_libdisk_buffer_la_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/modules/diskq -I$(top_builddir)/modules/diskq
 modules_diskq_libdisk_buffer_la_LIBADD = $(MODULE_DEPS_LIBS) $(LIBSYSLOG_NG_DISK_BUFFER)
-modules_diskq_libdisk_buffer_la_LDFLAGS = $(MODULE_LDFLAGS)
+modules_diskq_libdisk_buffer_la_LDFLAGS = $(MODULE_LDFLAGS) -lm
 modules_diskq_libdisk_buffer_la_DEPENDENCIES = $(MODULE_DEPS_LIBS) $(LIBSYSLOG_NG_DISK_BUFFER)
 
 modules_diskq_dqtool_SOURCES = modules/diskq/dqtool.c

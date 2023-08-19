@@ -1,5 +1,6 @@
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/syslog-ng/syslog-ng?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=body_badge)
 [![Build Status](https://github.com/syslog-ng/syslog-ng/actions/workflows/devshell.yml/badge.svg)](https://github.com/syslog-ng/syslog-ng/actions/workflows/devshell.yml)
+[![Nightly](https://github.com/syslog-ng/syslog-ng/actions/workflows/nightly-release.yml/badge.svg)](https://github.com/syslog-ng/syslog-ng/actions/workflows/nightly-release.yml)
 [![Binary packages](https://github.com/syslog-ng/syslog-ng/actions/workflows/packages.yml/badge.svg)](https://github.com/syslog-ng/syslog-ng/actions/workflows/packages.yml)
 [![Compile dbld-images](https://github.com/syslog-ng/syslog-ng/actions/workflows/dbld-images.yml/badge.svg)](https://github.com/syslog-ng/syslog-ng/actions/workflows/dbld-images.yml)
 
@@ -17,7 +18,7 @@ applications or forwarded by systemd) and writes everything to a single
 file:
 
 ```
-@version: 3.38
+@version: 4.3
 @include "scl.conf"
 
 log {
@@ -29,7 +30,7 @@ log {
 This one additionally processes logs from the network (TCP/514 by default):
 
 ```
-@version: 3.38
+@version: 4.3
 @include "scl.conf"
 
 log {
@@ -43,7 +44,7 @@ log {
 This config is designed for structured/application logging, using local submission via JSON, and outputting in key=value format:
 
 ```
-@version: 3.38
+@version: 4.3
 @include "scl.conf"
 
 log {
@@ -170,13 +171,13 @@ syslog-ng packages are released for the following distribution versions (x86-64)
 
 | Distro version | sources.list component name |
 |---|---|
+| Ubuntu 23.04 | ubuntu-lunar |
 | Ubuntu 22.04 | ubuntu-jammy |
 | Ubuntu 20.04 | ubuntu-focal |
 | Ubuntu 18.04 | ubuntu-bionic |
-| Ubuntu 16.04 | ubuntu-xenial |
+| Debian 12 | debian-bookworm |
 | Debian 11 | debian-bullseye |
 | Debian 10 | debian-buster |
-| Debian 9 | debian-stretch |
 | Debian Unstable | debian-sid |
 | Debian Testing | debian-testing |
 
@@ -188,10 +189,10 @@ syslog-ng packages are released for the following distribution versions (x86-64)
     wget -qO - https://ose-repo.syslog-ng.com/apt/syslog-ng-ose-pub.asc | sudo apt-key add -
     ```
 
-2. Add the repository containing the latest build of syslog-ng to the APT sources. For example, stable releases on Ubuntu 20.04:
+2. Add the repository containing the latest build of syslog-ng to the APT sources. For example, stable releases on Ubuntu 22.04:
 
     ```
-    echo "deb https://ose-repo.syslog-ng.com/apt/ stable ubuntu-focal" | sudo tee -a /etc/apt/sources.list.d/syslog-ng-ose.list
+    echo "deb https://ose-repo.syslog-ng.com/apt/ stable ubuntu-jammy" | sudo tee -a /etc/apt/sources.list.d/syslog-ng-ose.list
     ```
 
 3. Run `apt update`
@@ -208,6 +209,12 @@ echo "deb https://ose-repo.syslog-ng.com/apt/ nightly ubuntu-jammy" | sudo tee -
 
 Nightly builds can be used for testing purposes (obtaining new features and bugfixes) at the risk of breakage.
 
+### Arch Linux
+
+```
+# pacman -S syslog-ng
+```
+
 ### Fedora
 
 syslog-ng is available as a Fedora package that you can install using
@@ -221,6 +228,12 @@ For instructions on how to install syslog-ng on RPM distributions, see the blog 
 
 If you wish to install the latest RPM package that comes from a recent commit in Git for testing purposes, read the blog post, [RPM packages from syslog-ng Git HEAD](https://syslog-ng.com/blog/rpm-packages-from-syslog-ng-git-head/).
 
+### macOS
+
+```
+# brew install syslog-ng
+```
+
 ### Others
 
 Binaries for other platforms are listed on the
@@ -232,9 +245,25 @@ official [third party page][3rd-party].
 
 Binaries are also available as a Docker image. To find out more, check out the blog post, [Your central log server in Docker](https://syslog-ng.com/blog/central-log-server-docker/).
 
+There are alternatives to the upstream provided, bare syslog-ng image, such
+as the [AxoSyslog image](https://github.com/axoflow/axosyslog-docker/pkgs/container/axosyslog)
+for running syslog-ng in Kubernetes.
+
+  * [AxoSyslog, a cloud native distribution for syslog-ng announcement](https://axoflow.com/cloud-ready-syslog-ng-images/)
+  * [AxoSyslog log collection for Kubernetes](https://axoflow.com/axosyslog-log-collection-for-kubernetes/)
+  * [AxoSyslog Documentation](https://axoflow.com/docs/axosyslog/)
+  * [GitHub](https://github.com/axoflow/axosyslog-docker)
+
 ## Documentation
 
-The documentation of the latest released version of syslog-ng Open Source Edition is available [here](https://www.syslog-ng.com/technical-documents/doc/syslog-ng-open-source-edition/3.26/administration-guide). For earlier versions, see the syslog-ng [Documentation Page](https://www.syslog-ng.com/technical-documents).
+The official documentation of the latest released version of syslog-ng Open
+Source Edition provided by One Identity is available
+[here](https://www.syslog-ng.com/technical-documents/doc/syslog-ng-open-source-edition/3.26/administration-guide).
+For earlier versions, see the syslog-ng [Documentation Page](https://www.syslog-ng.com/technical-documents).
+
+An alternative, markdown based, improved, community maintained version of the
+documentation is available [as AxoSyslog Core documentation](https://axoflow.com/docs/axosyslog-core/).
+[source code](https://github.com/axoflow/axosyslog-core-docs/)
 
 ## Contributing
 

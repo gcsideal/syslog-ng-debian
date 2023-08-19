@@ -31,6 +31,7 @@
 #include "logqueue-disk.h"
 #include "logqueue-disk-reliable.h"
 #include "logqueue-disk-non-reliable.h"
+#include "stats/stats-cluster-single.h"
 #include "diskq.h"
 #include "logpipe.h"
 #include "apphook.h"
@@ -61,13 +62,13 @@ Test(diskq, testcase_zero_diskbuf_and_normal_acks)
 
   _construct_options(&options, 10000000, 100000, TRUE);
 
-  q = log_queue_disk_reliable_new(&options, NULL);
-  log_queue_set_use_backlog(q, TRUE);
-
   filename = g_string_sized_new(32);
   g_string_printf(filename, "test-normal_acks.qf");
   unlink(filename->str);
-  log_queue_disk_load_queue(q, filename->str);
+  q = log_queue_disk_reliable_new(&options, filename->str, NULL, STATS_LEVEL0, NULL, NULL);
+  log_queue_set_use_backlog(q, TRUE);
+
+  log_queue_disk_start(q);
   fed_messages = 0;
   acked_messages = 0;
   for (i = 0; i < 10; i++)
@@ -79,6 +80,8 @@ Test(diskq, testcase_zero_diskbuf_and_normal_acks)
                "%s: did not receive enough acknowledgements: fed_messages=%d, acked_messages=%d\n", __FUNCTION__, fed_messages,
                acked_messages);
 
+  gboolean persistent;
+  log_queue_disk_stop(q, &persistent);
   log_queue_unref(q);
   unlink(filename->str);
   g_string_free(filename, TRUE);
@@ -94,13 +97,13 @@ Test(diskq, testcase_zero_diskbuf_alternating_send_acks)
 
   _construct_options(&options, 10000000, 100000, TRUE);
 
-  q = log_queue_disk_reliable_new(&options, NULL);
-  log_queue_set_use_backlog(q, TRUE);
-
   filename = g_string_sized_new(32);
   g_string_printf(filename, "test-send_acks.qf");
   unlink(filename->str);
-  log_queue_disk_load_queue(q, filename->str);
+  q = log_queue_disk_reliable_new(&options, filename->str, NULL, STATS_LEVEL0, NULL, NULL);
+  log_queue_set_use_backlog(q, TRUE);
+  log_queue_disk_start(q);
+
   fed_messages = 0;
   acked_messages = 0;
   for (i = 0; i < 10; i++)
@@ -113,6 +116,9 @@ Test(diskq, testcase_zero_diskbuf_alternating_send_acks)
   cr_assert_eq(fed_messages, acked_messages,
                "%s: did not receive enough acknowledgements: fed_messages=%d, acked_messages=%d\n", __FUNCTION__, fed_messages,
                acked_messages);
+
+  gboolean persistent;
+  log_queue_disk_stop(q, &persistent);
   log_queue_unref(q);
   unlink(filename->str);
   g_string_free(filename, TRUE);
@@ -128,42 +134,43 @@ Test(diskq, testcase_ack_and_rewind_messages)
 
   _construct_options(&options, 10000000, 100000, TRUE);
 
-  q = log_queue_disk_reliable_new(&options, NULL);
-  log_queue_set_use_backlog(q, TRUE);
-
-  StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_DESTINATION, "queued messages", NULL);
-  stats_lock();
-  stats_register_counter(0, &sc_key, SC_TYPE_QUEUED, &q->queued_messages);
-  stats_unlock();
-
-  cr_assert_eq(stats_counter_get(q->queued_messages), 0, "queued messages: %d", __LINE__);
-
   filename = g_string_sized_new(32);
   g_string_printf(filename, "test-rewind_and_acks.qf");
   unlink(filename->str);
-  log_queue_disk_load_queue(q, filename->str);
+  StatsClusterKeyBuilder *driver_sck_builder = stats_cluster_key_builder_new();
+  StatsClusterKeyBuilder *queue_sck_builder = stats_cluster_key_builder_new();
+  q = log_queue_disk_reliable_new(&options, filename->str, NULL, STATS_LEVEL0, driver_sck_builder, queue_sck_builder);
+  stats_cluster_key_builder_free(driver_sck_builder);
+  stats_cluster_key_builder_free(queue_sck_builder);
+  log_queue_set_use_backlog(q, TRUE);
+
+  cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 0, "queued messages: %d", __LINE__);
+
+  log_queue_disk_start(q);
 
   fed_messages = 0;
   acked_messages = 0;
   feed_some_messages(q, 1000);
-  cr_assert_eq(stats_counter_get(q->queued_messages), 1000, "queued messages: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 1000, "queued messages: %d", __LINE__);
 
   for (i = 0; i < 10; i++)
     {
       send_some_messages(q, 1);
-      cr_assert_eq(stats_counter_get(q->queued_messages), 999, "queued messages wrong number %d", __LINE__);
+      cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 999, "queued messages wrong number %d", __LINE__);
       log_queue_rewind_backlog(q, 1);
-      cr_assert_eq(stats_counter_get(q->queued_messages), 1000, "queued messages wrong number: %d", __LINE__);
+      cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 1000, "queued messages wrong number: %d", __LINE__);
     }
   send_some_messages(q, 1000);
-  cr_assert_eq(stats_counter_get(q->queued_messages), 0, "queued messages: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 0, "queued messages: %d", __LINE__);
   log_queue_ack_backlog(q, 500);
   log_queue_rewind_backlog(q, 500);
-  cr_assert_eq(stats_counter_get(q->queued_messages), 500, "queued messages: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 500, "queued messages: %d", __LINE__);
   send_some_messages(q, 500);
-  cr_assert_eq(stats_counter_get(q->queued_messages), 0, "queued messages: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 0, "queued messages: %d", __LINE__);
   log_queue_ack_backlog(q, 500);
+
+  gboolean persistent;
+  log_queue_disk_stop(q, &persistent);
   log_queue_unref(q);
   unlink(filename->str);
   g_string_free(filename, TRUE);
@@ -269,18 +276,20 @@ Test(diskq, testcase_with_threads)
   GString *filename;
   gint i, j;
 
-  log_queue_set_max_threads(FEEDERS);
+  main_loop_worker_allocate_thread_space(FEEDERS);
+  main_loop_worker_finalize_thread_space();
+
   for (i = 0; i < TEST_RUNS; i++)
     {
       DiskQueueOptions options = {0};
 
       _construct_options(&options, 10000000, 100000, TRUE);
 
-      q = log_queue_disk_reliable_new(&options, NULL);
       filename = g_string_sized_new(32);
       g_string_printf(filename, "test-%04d.qf", i);
       unlink(filename->str);
-      log_queue_disk_load_queue(q, filename->str);
+      q = log_queue_disk_reliable_new(&options, filename->str, NULL, STATS_LEVEL0, NULL, NULL);
+      log_queue_disk_start(q);
 
       for (j = 0; j < FEEDERS; j++)
         {
@@ -295,6 +304,8 @@ Test(diskq, testcase_with_threads)
         }
       g_thread_join(thread_consume);
 
+      gboolean persistent;
+      log_queue_disk_stop(q, &persistent);
       log_queue_unref(q);
       unlink(filename->str);
       g_string_free(filename, TRUE);
@@ -311,12 +322,12 @@ typedef struct restart_test_parameters
 } restart_test_parameters;
 
 static LogQueue *
-queue_new(gboolean reliable, DiskQueueOptions *options, const gchar *persist_name)
+queue_new(gboolean reliable, DiskQueueOptions *options, const gchar *filename, const gchar *persist_name)
 {
   if (reliable)
-    return log_queue_disk_reliable_new(options, persist_name);
+    return log_queue_disk_reliable_new(options, filename, persist_name, STATS_LEVEL0, NULL, NULL);
 
-  return log_queue_disk_non_reliable_new(options, persist_name);
+  return log_queue_disk_non_reliable_new(options, filename, persist_name, STATS_LEVEL0, NULL, NULL);
 }
 
 ParameterizedTestParameters(diskq, testcase_diskbuffer_restart_corrupted)
@@ -332,19 +343,19 @@ ParameterizedTestParameters(diskq, testcase_diskbuffer_restart_corrupted)
 
 ParameterizedTest(restart_test_parameters *test_case, diskq, testcase_diskbuffer_restart_corrupted)
 {
-  guint64 const original_disk_buf_size = 1000123;
+  guint64 const original_dcapacity = 1000123;
   DiskQueueOptions options;
-  _construct_options(&options, original_disk_buf_size, 100000, test_case->reliable);
-  LogQueue *q = queue_new(test_case->reliable, &options, NULL);
+  _construct_options(&options, original_dcapacity, 100000, test_case->reliable);
+  gchar *filename = test_case->filename;
+  LogQueue *q = queue_new(test_case->reliable, &options, filename, NULL);
   log_queue_set_use_backlog(q, FALSE);
 
-  gchar *filename = test_case->filename;
   gchar filename_corrupted_dq[100];
   g_snprintf(filename_corrupted_dq, 100, "%s.corrupted", filename);
   unlink(filename);
   unlink(filename_corrupted_dq);
 
-  log_queue_disk_load_queue(q, filename);
+  log_queue_disk_start(q);
   fed_messages = 0;
   feed_some_messages(q, 100);
   cr_assert_eq(fed_messages, 100, "Failed to push all messages to the disk-queue!\n");
@@ -363,7 +374,7 @@ ParameterizedTest(restart_test_parameters *test_case, diskq, testcase_diskbuffer
                "Corrupted disk-queue file does not exists!!");
   cr_assert_str_eq(qdisk_get_filename(disk_queue->qdisk), filename,
                    "New disk-queue file's name should be the same\n");
-  cr_assert_eq(qdisk_get_maximum_size(disk_queue->qdisk), original_disk_buf_size,
+  cr_assert_eq(qdisk_get_maximum_size(disk_queue->qdisk), original_dcapacity,
                "Disk-queue option does not match the original configured value!\n");
   cr_assert_eq(qdisk_get_length(disk_queue->qdisk), 0,
                "New disk-queue file should be empty!\n");
@@ -372,6 +383,8 @@ ParameterizedTest(restart_test_parameters *test_case, diskq, testcase_diskbuffer
   cr_assert_eq(qdisk_get_reader_head(disk_queue->qdisk), QDISK_RESERVED_SPACE,
                "Invalid read pointer!\n");
 
+  gboolean persistent;
+  log_queue_disk_stop(q, &persistent);
   log_queue_unref(q);
   unlink(filename);
   unlink(filename_corrupted_dq);
@@ -398,43 +411,28 @@ typedef struct diskq_tester_parameters
   guint32 disk_size;
   gboolean reliable;
   gboolean overflow_expected;
-  guint32 qout_size;
+  guint32 front_cache_size;
   const gchar *filename;
 } diskq_tester_parameters_t;
-
-void
-init_statistics(LogQueue *q)
-{
-
-  StatsClusterKey sc_key1, sc_key2;
-  stats_lock();
-  stats_cluster_logpipe_key_set(&sc_key1, SCS_DESTINATION, "queued messages", NULL);
-  stats_register_counter(0, &sc_key1, SC_TYPE_QUEUED, &q->queued_messages);
-  stats_cluster_logpipe_key_set(&sc_key2, SCS_DESTINATION, "memory usage", NULL);
-  stats_register_counter(1, &sc_key2, SC_TYPE_MEMORY_USAGE, &q->memory_usage);
-  stats_unlock();
-  stats_counter_set(q->queued_messages, 0);
-  stats_counter_set(q->memory_usage, 0);
-}
 
 static void
 assert_general_message_flow(LogQueue *q, gssize one_msg_size)
 {
   send_some_messages(q, 1);
-  cr_assert_eq(stats_counter_get(q->queued_messages), 1, "queued messages: line: %d", __LINE__);
-  cr_assert_eq(stats_counter_get(q->memory_usage), one_msg_size, "memory_usage: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 1, "queued messages: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), one_msg_size, "memory_usage: line: %d", __LINE__);
 
   send_some_messages(q, 1);
-  cr_assert_eq(stats_counter_get(q->queued_messages), 0, "queued messages: line: %d", __LINE__);
-  cr_assert_eq(stats_counter_get(q->memory_usage), 0, "memory_usage: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 0, "queued messages: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), 0, "memory_usage: line: %d", __LINE__);
 
   feed_some_messages(q, 10);
-  cr_assert_eq(stats_counter_get(q->queued_messages), 10, "queued messages: line: %d", __LINE__);
-  cr_assert_eq(stats_counter_get(q->memory_usage), one_msg_size*10, "memory_usage: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 10, "queued messages: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), one_msg_size*10, "memory_usage: line: %d", __LINE__);
 
   send_some_messages(q, 5);
-  cr_assert_eq(stats_counter_get(q->queued_messages), 5, "queued messages: line: %d", __LINE__);
-  cr_assert_eq(stats_counter_get(q->memory_usage), one_msg_size*5, "memory_usage: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 5, "queued messages: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), one_msg_size*5, "memory_usage: line: %d", __LINE__);
 }
 
 static LogQueue *
@@ -443,19 +441,24 @@ testcase_diskq_prepare(DiskQueueOptions *options, diskq_tester_parameters_t *par
   LogQueue *q;
 
   _construct_options(options, parameters->disk_size, 100000, parameters->reliable);
-  options->qout_size = parameters->qout_size;
+  options->front_cache_size = parameters->front_cache_size;
 
+  StatsClusterKeyBuilder *driver_sck_builder = stats_cluster_key_builder_new();
+  StatsClusterKeyBuilder *queue_sck_builder = stats_cluster_key_builder_new();
   if (parameters->reliable)
-    q = log_queue_disk_reliable_new(options, NULL);
+    q = log_queue_disk_reliable_new(options, parameters->filename, NULL, STATS_LEVEL0, driver_sck_builder,
+                                    queue_sck_builder);
   else
-    q = log_queue_disk_non_reliable_new(options, NULL);
+    q = log_queue_disk_non_reliable_new(options, parameters->filename, NULL, STATS_LEVEL0, driver_sck_builder,
+                                        queue_sck_builder);
+  stats_cluster_key_builder_free(driver_sck_builder);
+  stats_cluster_key_builder_free(queue_sck_builder);
 
-  init_statistics(q);
-  cr_assert_eq(stats_counter_get(q->queued_messages), 0, "queued messages: line: %d", __LINE__);
-  cr_assert_eq(stats_counter_get(q->memory_usage), 0, "memory_usage: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 0, "queued messages: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), 0, "memory_usage: line: %d", __LINE__);
 
   unlink(parameters->filename);
-  log_queue_disk_load_queue(q, parameters->filename);
+  log_queue_disk_start(q);
 
   return q;
 }
@@ -465,32 +468,32 @@ ParameterizedTestParameters(diskq, test_diskq_statistics)
   static diskq_tester_parameters_t test_cases[] =
   {
     // small enough to trigger overflow
-    { .disk_size = 10*1024, .reliable = TRUE, .overflow_expected = TRUE, .qout_size = 0, .filename = "file1.qf" },
+    { .disk_size = 10*1024, .reliable = TRUE, .overflow_expected = TRUE, .front_cache_size = 0, .filename = "file1.qf" },
 
     // no overflow
-    { .disk_size = 500*1024, .reliable = TRUE, .overflow_expected = FALSE, .qout_size = 0, .filename = "file2.qf" },
+    { .disk_size = 500*1024, .reliable = TRUE, .overflow_expected = FALSE, .front_cache_size = 0, .filename = "file2.qf" },
 
-    // nonreliable version moves msgs from qoverflow only if there is free space in qout: qout_size must be 1
-    { .disk_size = 1*1024, .reliable = FALSE, .overflow_expected = TRUE, .qout_size = 1, .filename = "file3.qf" }
+    // nonreliable version moves msgs from flow_control_window only if there is free space in front cache: front_cache_size must be 1
+    { .disk_size = 1*1024, .reliable = FALSE, .overflow_expected = TRUE, .front_cache_size = 1, .filename = "file3.qf" }
   };
 
   return cr_make_param_array(diskq_tester_parameters_t, test_cases, sizeof(test_cases) / sizeof(test_cases[0]));
 }
 
 static inline void
-assert_overflow_queue_length(diskq_tester_parameters_t *parameters, LogQueue *q, gsize sent_msgs)
+assert_flow_control_window_length(diskq_tester_parameters_t *parameters, LogQueue *q, gsize sent_msgs)
 {
-  gsize expected_length = sent_msgs - parameters->qout_size;
+  gsize expected_length = sent_msgs - parameters->front_cache_size;
 
   if (parameters->reliable)
     {
-      cr_assert_eq(((LogQueueDiskReliable *)q)->qreliable->length, 3 * expected_length,
-                   "%"G_GSIZE_FORMAT" message on overflow area: line: %d", expected_length, __LINE__);
+      cr_assert_eq(((LogQueueDiskReliable *)q)->flow_control_window->length, 3 * expected_length,
+                   "%"G_GSIZE_FORMAT" message in flow control window: line: %d", expected_length, __LINE__);
       return;
     }
 
-  cr_assert_eq(((LogQueueDiskNonReliable *)q)->qoverflow->length, 2 * expected_length,
-               "%"G_GSIZE_FORMAT" message on overflow area: line: %d", expected_length, __LINE__);
+  cr_assert_eq(((LogQueueDiskNonReliable *)q)->flow_control_window->length, 2 * expected_length,
+               "%"G_GSIZE_FORMAT" message in flow control window: line: %d", expected_length, __LINE__);
 }
 
 ParameterizedTest(diskq_tester_parameters_t *parameters, diskq, test_diskq_statistics)
@@ -501,32 +504,63 @@ ParameterizedTest(diskq_tester_parameters_t *parameters, diskq, test_diskq_stati
   q = testcase_diskq_prepare(&options, parameters);
 
   feed_some_messages(q, 1);
-  cr_assert_eq(stats_counter_get(q->queued_messages), 1, "queued messages: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 1, "queued messages: line: %d", __LINE__);
 
   if (parameters->overflow_expected)
-    assert_overflow_queue_length(parameters, q, 1);
+    assert_flow_control_window_length(parameters, q, 1);
 
-  guint32 one_msg_size = stats_counter_get(q->memory_usage);
+  guint32 one_msg_size = stats_counter_get(q->metrics.shared.memory_usage);
   if (parameters->overflow_expected)
     /* Only when overflow. If there is no overflow, the first
        msg is put to the output queue so statistics is not increased: one_msg_size == 0 */
     cr_assert(is_valid_msg_size(one_msg_size), "one_msg_size %d: line: %d", one_msg_size, __LINE__);
   else
-    cr_assert_eq(stats_counter_get(q->memory_usage), 0, "queued messages: line: %d", __LINE__);
+    cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), 0, "queued messages: line: %d", __LINE__);
 
   feed_some_messages(q, 1);
-  cr_assert_eq(stats_counter_get(q->queued_messages), 2, "queued messages: line: %d", __LINE__);
-  cr_assert_eq(stats_counter_get(q->memory_usage), one_msg_size*2, "memory_usage: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 2, "queued messages: line: %d", __LINE__);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), one_msg_size*2, "memory_usage: line: %d", __LINE__);
 
   if (parameters->overflow_expected)
-    assert_overflow_queue_length(parameters, q, 2);
+    assert_flow_control_window_length(parameters, q, 2);
 
   assert_general_message_flow(q, one_msg_size);
 
   unlink(parameters->filename);
 
+  gboolean persistent;
+  log_queue_disk_stop(q, &persistent);
   log_queue_unref(q);
   disk_queue_options_destroy(&options);
+}
+
+gchar *
+qdisk_get_next_filename(const gchar *dir, gboolean reliable)
+{
+  return NULL;
+}
+
+Test(diskq, test_no_next_filename_in_acquire)
+{
+  const gchar *queue_persist_name = "test_no_next_filename_in_acquire";
+  const gchar *persist_filename = "test_no_next_filename_in_acquire.persist";
+  configuration->state = persist_state_new(persist_filename);
+  persist_state_start(configuration->state);
+
+  LogDestDriver *driver = g_new0(LogDestDriver, 1);
+  log_dest_driver_init_instance(driver, configuration);
+
+  DiskQDestPlugin *plugin = diskq_dest_plugin_new();
+  cr_assert(log_driver_add_plugin(&driver->super, (LogDriverPlugin *) plugin));
+  cr_assert(log_pipe_init(&driver->super.super));
+
+  cr_assert_eq(log_dest_driver_acquire_queue(driver, queue_persist_name, STATS_LEVEL0, NULL, NULL), NULL);
+
+  cr_assert(log_pipe_deinit(&driver->super.super));
+  cr_assert(log_pipe_unref(&driver->super.super));
+
+  persist_state_cancel(configuration->state);
+  unlink(persist_filename);
 }
 
 static void

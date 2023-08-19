@@ -11,6 +11,8 @@ set(PYTHON_SOURCES
     python-module.h
     python-config.h
     python-config.c
+    python-confgen.h
+    python-confgen.c
     python-persist.h
     python-persist.c
     python-helpers.h
@@ -52,7 +54,13 @@ set(PYTHON_SOURCES
     python-bookmark.c
     python-ack-tracker.h
     python-ack-tracker.c
+    python-types.h
+    python-types.c
+    python-options.h
+    python-options.c
     compat/compat-python.c
+    python-flags.h
+    python-flags.c
 )
 
 add_module(
@@ -65,8 +73,5 @@ add_module(
           ${IVYKIS_LIBRARIES}
   SOURCES ${PYTHON_SOURCES}
 )
-
-add_subdirectory(pylib)
-add_dependencies(mod-python SetupPylib)
 
 add_test_subdirectory(tests)

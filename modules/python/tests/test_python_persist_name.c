@@ -36,6 +36,7 @@
 #include "mainloop-worker.h"
 #include "mainloop.h"
 #include "python-persist.h"
+#include "stats/stats-cluster-key-builder.h"
 
 
 MainLoop *main_loop;
@@ -48,20 +49,6 @@ CFG_LTYPE yyltype;
 GlobalConfig *empty_cfg;
 
 static void
-_py_init_interpreter(void)
-{
-  Py_Initialize();
-  py_init_argv();
-
-  py_init_threads();
-  py_log_fetcher_init();
-  py_log_source_init();
-  py_bookmark_init();
-  py_ack_tracker_init();
-  PyEval_SaveThread();
-}
-
-static void
 _init_python_main(void)
 {
   PyGILState_STATE gstate = PyGILState_Ensure();
@@ -72,20 +59,22 @@ _init_python_main(void)
   PyGILState_Release(gstate);
 }
 
-void setup(void)
+void
+setup(void)
 {
   app_startup();
 
   main_loop = main_loop_get_instance();
   main_loop_init(main_loop, &main_loop_options);
 
-  _py_init_interpreter();
+  _py_init_interpreter(FALSE);
   _init_python_main();
 
   empty_cfg = cfg_new_snippet();
 }
 
-void teardown(void)
+void
+teardown(void)
 {
   cfg_free(empty_cfg);
   main_loop_deinit(main_loop);
@@ -108,8 +97,15 @@ _load_code(const gchar *code)
 
 TestSuite(python_persist_name, .init = setup, .fini = teardown);
 
+static void
+_add_dummy_option(PythonOptions *options)
+{
+  python_options_add_option(options, python_option_string_new("key", "value"));
+}
+
 const gchar *python_destination_code = "\n\
-class Dest(object):\n\
+from _syslogng import LogDestination\n\
+class Dest(LogDestination):\n\
     @staticmethod\n\
     def generate_persist_name(options):\n\
         return options['key']\n\
@@ -122,7 +118,9 @@ Test(python_persist_name, test_python_dest)
 
   LogDriver *d = python_dd_new(empty_cfg);
   python_dd_set_class(d, "Dest");
-  python_dd_set_option(d, "key", "value");
+
+  _add_dummy_option(python_dd_get_options(d));
+
   cr_assert(log_pipe_init((LogPipe *)d));
 
   cr_assert_str_eq(log_pipe_get_persist_name((LogPipe *)d), "python.value");
@@ -147,7 +145,9 @@ Test(python_persist_name, test_python_fetcher)
 
   LogDriver *d = python_fetcher_new(empty_cfg);
   python_fetcher_set_class(d, "Fetcher");
-  python_fetcher_set_option(d, "key", "value");
+
+  _add_dummy_option(python_fetcher_get_options(d));
+
   cr_assert(log_pipe_init((LogPipe *)d));
 
   cr_assert_str_eq(log_pipe_get_persist_name((LogPipe *)d), "python-fetcher.value");
@@ -174,7 +174,9 @@ Test(python_persist_name, test_python_source)
 
   LogDriver *d = python_sd_new(empty_cfg);
   python_sd_set_class(d, "Source");
-  python_sd_set_option(d, "key", "value");
+
+  _add_dummy_option(python_sd_get_options(d));
+
   cr_assert(log_pipe_init((LogPipe *)d));
 
   cr_assert_str_eq(log_pipe_get_persist_name((LogPipe *)d), "python-source.value");
@@ -211,7 +213,10 @@ Test(python_persist_name, test_python_exception_in_generate_persist_name)
     .generate_persist_name_method = persist_generator_stats,
     .class = "class",
   };
-  cr_assert_str_eq(python_format_stats_instance(p, "module", &options_stats), "module,class");
+
+  StatsClusterKeyBuilder *kb = stats_cluster_key_builder_new();
+  cr_assert_str_eq(python_format_stats_key(p, kb, "module", &options_stats), "module,class");
+  stats_cluster_key_builder_free(kb);
 
   PythonPersistMembers options_persist =
   {
@@ -242,7 +247,9 @@ Test(python_persist_name, test_python_fetcher_no_generate_persist_name)
 
   LogDriver *d = python_fetcher_new(empty_cfg);
   python_fetcher_set_class(d, "Fetcher");
-  python_fetcher_set_option(d, "key", "value");
+
+  _add_dummy_option(python_fetcher_get_options(d));
+
   log_pipe_set_persist_name((LogPipe *)d, "test_persist_name");
   cr_assert(log_pipe_init((LogPipe *)d));
 
@@ -267,7 +274,9 @@ Test(python_persist_name, test_python_source_no_generate_persist_name)
 
   LogDriver *d = python_sd_new(empty_cfg);
   python_sd_set_class(d, "Source");
-  python_sd_set_option(d, "key", "value");
+
+  _add_dummy_option(python_sd_get_options(d));
+
   log_pipe_set_persist_name((LogPipe *)d, "test_persist_name");
   cr_assert(log_pipe_init((LogPipe *)d));
 
@@ -301,7 +310,6 @@ Test(python_persist_name, test_python_source_readonly)
   start_grabbing_messages();
   cr_assert_eq(log_pipe_init((LogPipe *)d), 0);
   stop_grabbing_messages();
-  display_grabbed_messages();
 
   // Python2: TypeError: readonly attribute
   // Python3: AttributeError: readonly attribute
@@ -334,7 +342,6 @@ Test(python_persist_name, test_python_fetcher_readonly)
   start_grabbing_messages();
   cr_assert_eq(log_pipe_init((LogPipe *)d), 0);
   stop_grabbing_messages();
-  display_grabbed_messages();
 
   // Python2: TypeError: readonly attribute
   // Python3: AttributeError: readonly attribute
@@ -353,7 +360,9 @@ Test(python_persist_name, test_python_fetcher_persist_preference)
   LogDriver *d = python_fetcher_new(empty_cfg);
   log_pipe_set_persist_name(&d->super, "test_persist_name");
   python_fetcher_set_class(d, "Fetcher");
-  python_fetcher_set_option(d, "key", "value");
+
+  _add_dummy_option(python_fetcher_get_options(d));
+
   cr_assert(log_pipe_init((LogPipe *)d));
 
   cr_assert_str_eq(log_pipe_get_persist_name((LogPipe *)d), "python-fetcher.test_persist_name");
@@ -371,7 +380,9 @@ Test(python_persist_name, test_python_source_persist_preference)
   LogDriver *d = python_sd_new(empty_cfg);
   log_pipe_set_persist_name(&d->super, "test_persist_name");
   python_sd_set_class(d, "Source");
-  python_sd_set_option(d, "key", "value");
+
+  _add_dummy_option(python_sd_get_options(d));
+
   cr_assert(log_pipe_init((LogPipe *)d));
 
   cr_assert_str_eq(log_pipe_get_persist_name((LogPipe *)d), "python-source.test_persist_name");

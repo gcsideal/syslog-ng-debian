@@ -27,12 +27,14 @@
 
 #include "logpipe.h"
 #include "stats/stats-registry.h"
+#include "stats/stats-compat.h"
+#include "stats/stats-cluster-key-builder.h"
 #include "window-size-counter.h"
 #include "dynamic-window.h"
 
 typedef struct _LogSourceOptions
 {
-  gint init_window_size;
+  gssize init_window_size;
   const gchar *group_name;
   gboolean keep_timestamp;
   gboolean keep_hostname;
@@ -68,7 +70,6 @@ struct _LogSource
   gboolean threaded;
   gchar *name;
   gchar *stats_id;
-  gchar *stats_instance;
   WindowSizeCounter window_size;
   DynamicWindow dynamic_window;
   gboolean window_initialized;
@@ -77,12 +78,25 @@ struct _LogSource
   gsize full_window_size;
   atomic_gssize window_size_to_be_reclaimed;
   atomic_gssize pending_reclaimed;
-  StatsCounterItem *stat_window_size;
-  StatsCounterItem *stat_full_window;
-  StatsCounterItem *last_message_seen;
-  StatsCounterItem *recvd_messages;
-  StatsCluster *stat_window_size_cluster;
-  StatsCluster *stat_full_window_cluster;
+
+  struct
+  {
+    StatsClusterKeyBuilder *stats_kb;
+
+    StatsCounterItem *stat_window_size;
+    StatsCounterItem *stat_full_window;
+    StatsCounterItem *last_message_seen;
+
+    StatsClusterKey *recvd_messages_key;
+    StatsCounterItem *recvd_messages;
+
+    gboolean raw_bytes_enabled;
+    StatsClusterKey *recvd_bytes_key;
+    StatsByteCounter recvd_bytes;
+
+    StatsCluster *stat_window_size_cluster;
+    StatsCluster *stat_full_window_cluster;
+  } metrics;
 
   guint32 last_ack_count;
   guint32 ack_count;
@@ -101,7 +115,7 @@ log_source_free_to_send(LogSource *self)
   return !window_size_counter_suspended(&self->window_size);
 }
 
-static inline gint
+static inline gsize
 log_source_get_init_window_size(LogSource *self)
 {
   return self->initial_window_size;
@@ -121,7 +135,7 @@ gboolean log_source_deinit(LogPipe *s);
 void log_source_post(LogSource *self, LogMessage *msg);
 
 void log_source_set_options(LogSource *self, LogSourceOptions *options, const gchar *stats_id,
-                            const gchar *stats_instance, gboolean threaded, LogExprNode *expr_node);
+                            StatsClusterKeyBuilder *kb, gboolean threaded, LogExprNode *expr_node);
 void log_source_set_ack_tracker_factory(LogSource *self, AckTrackerFactory *factory);
 void log_source_set_name(LogSource *self, const gchar *name);
 void log_source_mangle_hostname(LogSource *self, LogMessage *msg);

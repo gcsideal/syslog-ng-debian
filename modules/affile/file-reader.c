@@ -34,6 +34,7 @@
 #include "poll-file-changes.h"
 #include "poll-multiline-file-changes.h"
 #include "ack-tracker/ack_tracker_factory.h"
+#include "stats/stats-cluster-key-builder.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -99,7 +100,7 @@ _construct_poll_events(FileReader *self, gint fd)
     {
       LogProtoFileReaderOptions *proto_opts = file_reader_options_get_log_proto_options(self->options);
 
-      if (proto_opts->super.mode == MLM_NONE)
+      if (proto_opts->multi_line_options.mode == MLM_NONE)
         return poll_file_changes_new(fd, self->filename->str, self->options->follow_freq, &self->super);
       else
         return poll_multiline_file_changes_new(fd, self->filename->str, self->options->follow_freq,
@@ -137,9 +138,9 @@ _construct_proto(FileReader *self, gint fd)
   format_handler = reader_options->parse_options.format_handler;
   if ((format_handler && format_handler->construct_proto))
     {
-      log_proto_server_options_set_ack_tracker_factory(&proto_options->super.super,
+      log_proto_server_options_set_ack_tracker_factory(&proto_options->super,
                                                        consecutive_ack_tracker_factory_new());
-      return format_handler->construct_proto(&reader_options->parse_options, transport, &proto_options->super.super);
+      return format_handler->construct_proto(&reader_options->parse_options, transport, &proto_options->super);
     }
 
   return file_opener_construct_src_proto(self->opener, transport, proto_options);
@@ -159,12 +160,17 @@ _setup_logreader(LogPipe *s, PollEvents *poll_events, LogProtoServer *proto, gbo
   FileReader *self = (FileReader *) s;
 
   self->reader = log_reader_new(log_pipe_get_config(s));
+  log_pipe_set_options(&self->reader->super.super, &self->super.options);
   log_reader_open(self->reader, proto, poll_events);
+
+  StatsClusterKeyBuilder *kb = stats_cluster_key_builder_new();
+  stats_cluster_key_builder_add_label(kb, stats_cluster_label("driver", "file"));
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("filename", self->filename->str));
   log_reader_set_options(self->reader,
                          s,
                          &self->options->reader_options,
                          self->owner->super.id,
-                         self->filename->str);
+                         kb);
 
   if (check_immediately)
     log_reader_set_immediate_check(self->reader);
@@ -419,12 +425,11 @@ file_reader_options_init(FileReaderOptions *options, GlobalConfig *cfg, const gc
   if (!file_reader_options_validate(options))
     return FALSE;
 
-  return log_proto_file_reader_options_init(file_reader_options_get_log_proto_options(options));
+  return log_proto_file_reader_options_init(file_reader_options_get_log_proto_options(options), cfg);
 }
 
 void
 file_reader_options_deinit(FileReaderOptions *options)
 {
   log_reader_options_destroy(&options->reader_options);
-  log_proto_file_reader_options_destroy(file_reader_options_get_log_proto_options(options));
 }

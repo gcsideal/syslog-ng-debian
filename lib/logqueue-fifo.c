@@ -75,8 +75,8 @@ typedef struct _InputQueue
 {
   struct iv_list_head items;
   WorkerBatchCallback cb;
-  guint16 len;
-  guint16 non_flow_controlled_len;
+  guint32 len;
+  guint32 non_flow_controlled_len;
   guint16 finish_cb_registered;
 } InputQueue;
 
@@ -101,6 +101,7 @@ typedef struct _LogQueueFifo
   /* legacy: flow-controlled messages are included in the log_fifo_size limit */
   gboolean use_legacy_fifo_size;
 
+  gint num_input_queues;
   InputQueue input_queues[0];
 } LogQueueFifo;
 
@@ -152,7 +153,7 @@ log_queue_fifo_is_empty_racy(LogQueue *s)
   else
     {
       gint i;
-      for (i = 0; i < log_queue_max_threads && !has_message_in_queue; i++)
+      for (i = 0; i < self->num_input_queues && !has_message_in_queue; i++)
         {
           has_message_in_queue |= self->input_queues[i].finish_cb_registered;
         }
@@ -189,7 +190,7 @@ log_queue_fifo_drop_messages_from_input_queue(LogQueueFifo *self, InputQueue *in
 
       iv_list_del(&node->list);
       input_queue->len--;
-      stats_counter_inc(self->super.dropped_messages);
+      log_queue_dropped_messages_inc(&self->super);
       log_msg_free_queue_node(node);
 
       LogMessage *msg = node->msg;
@@ -254,26 +255,26 @@ log_queue_fifo_calculate_num_of_messages_to_drop(LogQueueFifo *self, InputQueue 
 
 /* move items from the per-thread input queue to the lock-protected "wait" queue */
 static void
-log_queue_fifo_move_input_unlocked(LogQueueFifo *self, gint thread_id)
+log_queue_fifo_move_input_unlocked(LogQueueFifo *self, gint thread_index)
 {
   gint num_of_messages_to_drop;
-  gboolean drop_messages = log_queue_fifo_calculate_num_of_messages_to_drop(self, &self->input_queues[thread_id],
+  gboolean drop_messages = log_queue_fifo_calculate_num_of_messages_to_drop(self, &self->input_queues[thread_index],
                            &num_of_messages_to_drop);
 
   if (drop_messages)
     {
       /* slow path, the input thread's queue would overflow the queue, let's drop some messages */
-      log_queue_fifo_drop_messages_from_input_queue(self, &self->input_queues[thread_id], num_of_messages_to_drop);
+      log_queue_fifo_drop_messages_from_input_queue(self, &self->input_queues[thread_index], num_of_messages_to_drop);
     }
 
-  log_queue_queued_messages_add(&self->super, self->input_queues[thread_id].len);
-  iv_list_update_msg_size(self, &self->input_queues[thread_id].items);
+  log_queue_queued_messages_add(&self->super, self->input_queues[thread_index].len);
+  iv_list_update_msg_size(self, &self->input_queues[thread_index].items);
 
-  iv_list_splice_tail_init(&self->input_queues[thread_id].items, &self->wait_queue.items);
-  self->wait_queue.len += self->input_queues[thread_id].len;
-  self->wait_queue.non_flow_controlled_len += self->input_queues[thread_id].non_flow_controlled_len;
-  self->input_queues[thread_id].len = 0;
-  self->input_queues[thread_id].non_flow_controlled_len = 0;
+  iv_list_splice_tail_init(&self->input_queues[thread_index].items, &self->wait_queue.items);
+  self->wait_queue.len += self->input_queues[thread_index].len;
+  self->wait_queue.non_flow_controlled_len += self->input_queues[thread_index].non_flow_controlled_len;
+  self->input_queues[thread_index].len = 0;
+  self->input_queues[thread_index].non_flow_controlled_len = 0;
 }
 
 /* move items from the per-thread input queue to the lock-protected
@@ -285,17 +286,16 @@ static gpointer
 log_queue_fifo_move_input(gpointer user_data)
 {
   LogQueueFifo *self = (LogQueueFifo *) user_data;
-  gint thread_id;
+  gint thread_index;
 
-  thread_id = main_loop_worker_get_thread_id();
-
-  g_assert(thread_id >= 0);
+  thread_index = main_loop_worker_get_thread_index();
+  g_assert(thread_index >= 0);
 
   g_mutex_lock(&self->super.lock);
-  log_queue_fifo_move_input_unlocked(self, thread_id);
+  log_queue_fifo_move_input_unlocked(self, thread_index);
   log_queue_push_notify(&self->super);
   g_mutex_unlock(&self->super.lock);
-  self->input_queues[thread_id].finish_cb_registered = FALSE;
+  self->input_queues[thread_index].finish_cb_registered = FALSE;
   log_queue_unref(&self->super);
   return NULL;
 }
@@ -324,7 +324,7 @@ _drop_message(LogMessage *msg, const LogPathOptions *path_options)
 }
 
 /**
- * Assumed to be called from one of the input threads. If the thread_id
+ * Assumed to be called from one of the input threads. If the thread_index
  * cannot be determined, the item is put directly in the wait queue.
  *
  * Puts the message to the queue, and logs an error if it caused the
@@ -338,12 +338,16 @@ static void
 log_queue_fifo_push_tail(LogQueue *s, LogMessage *msg, const LogPathOptions *path_options)
 {
   LogQueueFifo *self = (LogQueueFifo *) s;
-  gint thread_id;
+  gint thread_index;
   LogMessageQueueNode *node;
 
-  thread_id = main_loop_worker_get_thread_id();
+  thread_index = main_loop_worker_get_thread_index();
 
-  g_assert(thread_id < 0 || log_queue_max_threads > thread_id);
+  /* if this thread has an ID than the number of input queues we have (due
+   * to a config change), handle the load via the slow path */
+
+  if (thread_index >= self->num_input_queues)
+    thread_index = -1;
 
   /* NOTE: we don't use high-water marks for now, as log_fetch_limit
    * limits the number of items placed on the per-thread input queue
@@ -356,10 +360,10 @@ log_queue_fifo_push_tail(LogQueue *s, LogMessage *msg, const LogPathOptions *pat
    * the "wait" queue.
    */
 
-  if (thread_id >= 0)
+  if (thread_index >= 0)
     {
       /* fastpath, use per-thread input FIFOs */
-      if (!self->input_queues[thread_id].finish_cb_registered)
+      if (!self->input_queues[thread_index].finish_cb_registered)
         {
           /* this is the first item in the input FIFO, register a finish
            * callback to make sure it gets moved to the wait_queue if the
@@ -368,17 +372,18 @@ log_queue_fifo_push_tail(LogQueue *s, LogMessage *msg, const LogPathOptions *pat
            * avoiding use-after-free situation
            */
 
-          main_loop_worker_register_batch_callback(&self->input_queues[thread_id].cb);
-          self->input_queues[thread_id].finish_cb_registered = TRUE;
+          main_loop_worker_register_batch_callback(&self->input_queues[thread_index].cb);
+          self->input_queues[thread_index].finish_cb_registered = TRUE;
           log_queue_ref(&self->super);
         }
 
+      log_msg_write_protect(msg);
       node = log_msg_alloc_queue_node(msg, path_options);
-      iv_list_add_tail(&node->list, &self->input_queues[thread_id].items);
-      self->input_queues[thread_id].len++;
+      iv_list_add_tail(&node->list, &self->input_queues[thread_index].items);
+      self->input_queues[thread_index].len++;
 
       if (!path_options->flow_control_requested)
-        self->input_queues[thread_id].non_flow_controlled_len++;
+        self->input_queues[thread_index].non_flow_controlled_len++;
 
       log_msg_unref(msg);
       return;
@@ -390,7 +395,7 @@ log_queue_fifo_push_tail(LogQueue *s, LogMessage *msg, const LogPathOptions *pat
 
   if (_message_has_to_be_dropped(self, path_options))
     {
-      stats_counter_inc(self->super.dropped_messages);
+      log_queue_dropped_messages_inc(&self->super);
       g_mutex_unlock(&self->super.lock);
 
       _drop_message(msg, path_options);
@@ -402,6 +407,7 @@ log_queue_fifo_push_tail(LogQueue *s, LogMessage *msg, const LogPathOptions *pat
       return;
     }
 
+  log_msg_write_protect(msg);
   node = log_msg_alloc_queue_node(msg, path_options);
 
   iv_list_add_tail(&node->list, &self->wait_queue.items);
@@ -436,6 +442,7 @@ log_queue_fifo_push_head(LogQueue *s, LogMessage *msg, const LogPathOptions *pat
    * normally happens when we start processing an item, but at the end
    * can't deliver it. No checks, no drops either. */
 
+  log_msg_write_protect(msg);
   node = log_msg_alloc_dynamic_queue_node(msg, path_options);
   iv_list_add(&node->list, &self->output_queue.items);
   self->output_queue.len++;
@@ -638,7 +645,7 @@ log_queue_fifo_free(LogQueue *s)
   LogQueueFifo *self = (LogQueueFifo *) s;
   gint i;
 
-  for (i = 0; i < log_queue_max_threads; i++)
+  for (i = 0; i < self->num_input_queues; i++)
     {
       g_assert(self->input_queues[i].finish_cb_registered == FALSE);
       log_queue_fifo_free_queue(&self->input_queues[i].items);
@@ -651,14 +658,18 @@ log_queue_fifo_free(LogQueue *s)
 }
 
 LogQueue *
-log_queue_fifo_new(gint log_fifo_size, const gchar *persist_name)
+log_queue_fifo_new(gint log_fifo_size, const gchar *persist_name, gint stats_level,
+                   const StatsClusterKeyBuilder *driver_sck_builder, StatsClusterKeyBuilder *queue_sck_builder)
 {
   LogQueueFifo *self;
-  gint i;
 
-  self = g_malloc0(sizeof(LogQueueFifo) + log_queue_max_threads * sizeof(self->input_queues[0]));
+  gint max_threads = main_loop_worker_get_max_number_of_threads();
+  self = g_malloc0(sizeof(LogQueueFifo) + max_threads * sizeof(self->input_queues[0]));
 
-  log_queue_init_instance(&self->super, persist_name);
+  if (queue_sck_builder)
+    stats_cluster_key_builder_set_name_prefix(queue_sck_builder, "memory_queue_");
+
+  log_queue_init_instance(&self->super, persist_name, stats_level, driver_sck_builder, queue_sck_builder);
   self->super.type = log_queue_fifo_type;
   self->super.use_backlog = FALSE;
   self->super.get_length = log_queue_fifo_get_length;
@@ -673,7 +684,8 @@ log_queue_fifo_new(gint log_fifo_size, const gchar *persist_name)
 
   self->super.free_fn = log_queue_fifo_free;
 
-  for (i = 0; i < log_queue_max_threads; i++)
+  self->num_input_queues = max_threads;
+  for (gint i = 0; i < self->num_input_queues; i++)
     {
       INIT_IV_LIST_HEAD(&self->input_queues[i].items);
       worker_batch_callback_init(&self->input_queues[i].cb);
@@ -689,9 +701,11 @@ log_queue_fifo_new(gint log_fifo_size, const gchar *persist_name)
 }
 
 LogQueue *
-log_queue_fifo_legacy_new(gint log_fifo_size, const gchar *persist_name)
+log_queue_fifo_legacy_new(gint log_fifo_size, const gchar *persist_name, gint stats_level,
+                          const StatsClusterKeyBuilder *driver_sck_builder, StatsClusterKeyBuilder *queue_sck_builder)
 {
-  LogQueueFifo *self = (LogQueueFifo *) log_queue_fifo_new(log_fifo_size, persist_name);
+  LogQueueFifo *self = (LogQueueFifo *) log_queue_fifo_new(log_fifo_size, persist_name, stats_level,
+                                                           driver_sck_builder, queue_sck_builder);
   self->use_legacy_fifo_size = TRUE;
   return &self->super;
 }

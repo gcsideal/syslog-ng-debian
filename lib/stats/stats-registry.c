@@ -170,6 +170,9 @@ _register_external_counter(gint stats_level, const StatsClusterKey *sc_key, gint
 {
   StatsCluster *sc;
 
+  if (!external_counter)
+    return NULL;
+
   g_assert(stats_locked);
 
   sc = _grab_cluster(stats_level, sc_key, dynamic);
@@ -312,6 +315,9 @@ stats_unregister_external_counter(const StatsClusterKey *sc_key, gint type,
 {
   StatsCluster *sc;
 
+  if (!external_counter)
+    return;
+
   g_assert(stats_locked);
 
   sc = g_hash_table_lookup(stats_cluster_container.static_clusters, sc_key);
@@ -347,6 +353,31 @@ stats_get_cluster(const StatsClusterKey *sc_key)
     sc = g_hash_table_lookup(stats_cluster_container.dynamic_clusters, sc_key);
 
   return sc;
+}
+
+gboolean
+stats_remove_cluster(const StatsClusterKey *sc_key)
+{
+  g_assert(stats_locked);
+  StatsCluster *sc;
+
+  sc = g_hash_table_lookup(stats_cluster_container.dynamic_clusters, sc_key);
+  if (sc)
+    {
+      if (stats_cluster_is_orphaned(sc))
+        return g_hash_table_remove(stats_cluster_container.dynamic_clusters, sc_key);
+      return FALSE;
+    }
+
+  sc = g_hash_table_lookup(stats_cluster_container.static_clusters, sc_key);
+  if (sc)
+    {
+      if (stats_cluster_is_orphaned(sc))
+        return g_hash_table_remove(stats_cluster_container.static_clusters, sc_key);
+      return FALSE;
+    }
+
+  return FALSE;
 }
 
 gboolean
@@ -419,7 +450,7 @@ _foreach_cluster_remove_helper(gpointer key, gpointer value, gpointer user_data)
   gpointer func_data = args[1];
   StatsCluster *sc = (StatsCluster *) value;
 
-  gboolean should_be_removed = func(sc, func_data);
+  gboolean should_be_removed = func(sc, func_data) && stats_cluster_is_orphaned(sc);
 
   if (should_be_removed)
     stats_query_deindex_cluster(sc);
@@ -445,6 +476,13 @@ _foreach_counter_helper(StatsCluster *sc, gpointer user_data)
   stats_cluster_foreach_counter(sc, func, func_data);
 }
 
+static void
+_foreach_legacy_counter_helper(StatsCluster *sc, gpointer user_data)
+{
+  if (stats_cluster_key_is_legacy(&sc->key))
+    _foreach_counter_helper(sc, user_data);
+}
+
 void
 stats_foreach_counter(StatsForeachCounterFunc func, gpointer user_data, gboolean *cancelled)
 {
@@ -455,13 +493,22 @@ stats_foreach_counter(StatsForeachCounterFunc func, gpointer user_data, gboolean
 }
 
 void
+stats_foreach_legacy_counter(StatsForeachCounterFunc func, gpointer user_data, gboolean *cancelled)
+{
+  gpointer args[] = { func, user_data };
+
+  g_assert(stats_locked);
+  stats_foreach_cluster(_foreach_legacy_counter_helper, args, cancelled);
+}
+
+void
 stats_registry_init(void)
 {
-  stats_cluster_container.static_clusters = g_hash_table_new_full((GHashFunc) stats_cluster_hash,
-                                            (GEqualFunc) stats_cluster_equal, NULL,
+  stats_cluster_container.static_clusters = g_hash_table_new_full((GHashFunc) stats_cluster_key_hash,
+                                            (GEqualFunc) stats_cluster_key_equal, NULL,
                                             (GDestroyNotify) stats_cluster_free);
-  stats_cluster_container.dynamic_clusters = g_hash_table_new_full((GHashFunc) stats_cluster_hash,
-                                             (GEqualFunc) stats_cluster_equal, NULL,
+  stats_cluster_container.dynamic_clusters = g_hash_table_new_full((GHashFunc) stats_cluster_key_hash,
+                                             (GEqualFunc) stats_cluster_key_equal, NULL,
                                              (GDestroyNotify) stats_cluster_free);
 
   g_mutex_init(&stats_mutex);

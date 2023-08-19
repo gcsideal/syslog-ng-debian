@@ -25,6 +25,8 @@
 #include "afinter.h"
 #include "logreader.h"
 #include "stats/stats-registry.h"
+#include "stats/stats-cluster-logpipe.h"
+#include "stats/stats-cluster-single.h"
 #include "messages.h"
 #include "apphook.h"
 #include "mainloop-threaded-worker.h"
@@ -36,8 +38,8 @@ typedef struct _AFInterSource AFInterSource;
 static GMutex internal_msg_lock;
 static GQueue *internal_msg_queue;
 static AFInterSource *current_internal_source;
-static StatsCounterItem *internal_queue_length;
-static StatsCounterItem *internal_queue_dropped;
+
+static AFInterMetrics metrics;
 
 /* the expiration timer of the next MARK message */
 static struct timespec next_mark_target = { -1, 0 };
@@ -120,8 +122,10 @@ afinter_source_post(gpointer s)
       if (!msg)
         break;
 
-      stats_counter_dec(internal_queue_length);
+      stats_counter_dec(metrics.queued);
+      stats_counter_inc(metrics.processed);
       log_source_post(&self->super, msg);
+      main_loop_worker_invoke_batch_callbacks();
     }
   afinter_source_update_watches(self);
 }
@@ -346,6 +350,7 @@ afinter_source_init(LogPipe *s)
 
   g_mutex_lock(&internal_msg_lock);
   current_internal_source = self;
+  stats_counter_set(metrics.queue_capacity, self->options->queue_capacity);
   g_mutex_unlock(&internal_msg_lock);
 
   return TRUE;
@@ -406,6 +411,13 @@ afinter_source_options_defaults(AFInterSourceOptions *options)
 }
 
 static gboolean
+afinter_sd_pre_config_init(LogPipe *s)
+{
+  main_loop_worker_allocate_thread_space(1);
+  return TRUE;
+}
+
+static gboolean
 afinter_sd_init(LogPipe *s)
 {
   AFInterSourceDriver *self = (AFInterSourceDriver *) s;
@@ -413,8 +425,8 @@ afinter_sd_init(LogPipe *s)
 
   if (cfg_is_config_version_older(cfg, VERSION_VALUE_3_29))
     {
-      msg_warning_once("WARNING: The internal_queue_length stat counter has been renamed to internal_source.queued. "
-                       "The old name will be removed in future versions", cfg_format_config_version_tag(cfg));
+      msg_warning_once("WARNING: The internal_queue_length stat counter has been renamed to internal_source.queued",
+                       cfg_format_config_version_tag(cfg));
     }
 
   if (!log_src_driver_init_method(s))
@@ -443,7 +455,7 @@ afinter_sd_init(LogPipe *s)
 }
 
 static gboolean
-afinter_sd_on_config_inited(LogPipe *s)
+afinter_sd_post_config_init(LogPipe *s)
 {
   AFInterSourceDriver *self = (AFInterSourceDriver *) s;
 
@@ -485,10 +497,11 @@ afinter_sd_new(GlobalConfig *cfg)
   AFInterSourceDriver *self = g_new0(AFInterSourceDriver, 1);
 
   log_src_driver_init_instance((LogSrcDriver *)&self->super, cfg);
+  self->super.super.super.pre_config_init = afinter_sd_pre_config_init;
   self->super.super.super.init = afinter_sd_init;
   self->super.super.super.deinit = afinter_sd_deinit;
   self->super.super.super.free_fn = afinter_sd_free;
-  self->super.super.super.on_config_inited = afinter_sd_on_config_inited;
+  self->super.super.super.post_config_init = afinter_sd_post_config_init;
 
   afinter_source_options_defaults(&self->source_options);
 
@@ -524,33 +537,13 @@ _release_internal_msg_queue(void)
   LogMessage *internal_message = g_queue_pop_head(internal_msg_queue);
   while (internal_message)
     {
-      stats_counter_dec(internal_queue_length);
+      stats_counter_dec(metrics.queued);
       log_msg_unref(internal_message);
 
       internal_message = g_queue_pop_head(internal_msg_queue);
     }
   g_queue_free(internal_msg_queue);
   internal_msg_queue = NULL;
-}
-
-static inline void
-_register_obsolete_stats_alias(StatsCounterItem *internal_queued_ctr)
-{
-  stats_lock();
-  StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_GLOBAL, "internal_queue_length", NULL);
-  stats_register_alias_counter(0, &sc_key, SC_TYPE_PROCESSED, internal_queued_ctr);
-  stats_unlock();
-}
-
-static inline void
-_unregister_obsolete_stats_alias(StatsCounterItem *internal_queued_ctr)
-{
-  stats_lock();
-  StatsClusterKey sc_key;
-  stats_cluster_logpipe_key_set(&sc_key, SCS_GLOBAL, "internal_queue_length", NULL);
-  stats_unregister_alias_counter(&sc_key, SC_TYPE_PROCESSED, internal_queued_ctr);
-  stats_unlock();
 }
 
 void
@@ -573,23 +566,28 @@ afinter_message_posted(LogMessage *msg)
 
       stats_lock();
       StatsClusterKey sc_key;
-      stats_cluster_logpipe_key_set(&sc_key, SCS_GLOBAL, "internal_source", NULL );
-      stats_register_counter(0, &sc_key, SC_TYPE_QUEUED, &internal_queue_length);
-      stats_register_counter(0, &sc_key, SC_TYPE_DROPPED, &internal_queue_dropped);
+      stats_cluster_logpipe_key_set(&sc_key, "internal_events_total", NULL, 0);
+      stats_cluster_logpipe_key_add_legacy_alias(&sc_key, SCS_GLOBAL, "internal_source", NULL );
+      stats_register_counter(0, &sc_key, SC_TYPE_QUEUED, &metrics.queued);
+      stats_register_counter(0, &sc_key, SC_TYPE_DROPPED, &metrics.dropped);
+      stats_register_counter(0, &sc_key, SC_TYPE_PROCESSED, &metrics.processed);
+
+      stats_cluster_single_key_set(&sc_key, "internal_events_queue_capacity", NULL, 0);
+      stats_register_counter(0, &sc_key, SC_TYPE_SINGLE_VALUE, &metrics.queue_capacity);
       stats_unlock();
 
-      _register_obsolete_stats_alias(internal_queue_length);
+      stats_counter_set(metrics.queue_capacity, current_internal_source->options->queue_capacity);
     }
 
   if (g_queue_get_length(internal_msg_queue) >= current_internal_source->options->queue_capacity)
     {
-      stats_counter_inc(internal_queue_dropped);
+      stats_counter_inc(metrics.dropped);
       log_msg_unref(msg);
       goto exit;
     }
 
   g_queue_push_tail(internal_msg_queue, msg);
-  stats_counter_inc(internal_queue_length);
+  stats_counter_inc(metrics.queued);
 
   if (current_internal_source->free_to_send)
     iv_event_post(&current_internal_source->post);
@@ -614,16 +612,26 @@ afinter_global_deinit(void)
 {
   if (internal_msg_queue)
     {
-      _unregister_obsolete_stats_alias(internal_queue_length);
-
       stats_lock();
       StatsClusterKey sc_key;
-      stats_cluster_logpipe_key_set(&sc_key, SCS_GLOBAL, "internal_source", NULL );
-      stats_unregister_counter(&sc_key, SC_TYPE_QUEUED, &internal_queue_length);
-      stats_unregister_counter(&sc_key, SC_TYPE_DROPPED, &internal_queue_dropped);
+      stats_cluster_logpipe_key_set(&sc_key, "internal_events_total", NULL, 0);
+      stats_cluster_logpipe_key_add_legacy_alias(&sc_key, SCS_GLOBAL, "internal_source", NULL );
+      stats_unregister_counter(&sc_key, SC_TYPE_QUEUED, &metrics.queued);
+      stats_unregister_counter(&sc_key, SC_TYPE_DROPPED, &metrics.dropped);
+      stats_unregister_counter(&sc_key, SC_TYPE_PROCESSED, &metrics.processed);
+
+      stats_cluster_single_key_set(&sc_key, "internal_events_queue_capacity", NULL, 0);
+      stats_unregister_counter(&sc_key, SC_TYPE_SINGLE_VALUE, &metrics.queue_capacity);
       stats_unlock();
+
       g_queue_free_full(internal_msg_queue, (GDestroyNotify)log_msg_unref);
       internal_msg_queue = NULL;
     }
   current_internal_source = NULL;
+}
+
+AFInterMetrics
+afinter_get_metrics(void)
+{
+  return metrics;
 }

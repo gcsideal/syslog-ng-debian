@@ -140,6 +140,11 @@ _setup_static_options_in_curl(HTTPDestinationWorker *self)
     curl_easy_setopt(self->curl, CURLOPT_TLS13_CIPHERS, owner->tls13_ciphers);
 #endif
 
+#if SYSLOG_NG_HAVE_DECL_CURLOPT_SSL_VERIFYSTATUS
+  if (owner->ocsp_stapling_verify)
+    curl_easy_setopt(self->curl, CURLOPT_SSL_VERIFYSTATUS, 1L);
+#endif
+
   if (owner->proxy)
     curl_easy_setopt(self->curl, CURLOPT_PROXY, owner->proxy);
 
@@ -155,7 +160,11 @@ _setup_static_options_in_curl(HTTPDestinationWorker *self)
     {
       curl_easy_setopt(self->curl, CURLOPT_FOLLOWLOCATION, 1);
       curl_easy_setopt(self->curl, CURLOPT_POSTREDIR, CURL_REDIR_POST_ALL);
+#if SYSLOG_NG_HAVE_DECL_CURLOPT_REDIR_PROTOCOLS_STR
+      curl_easy_setopt(self->curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
+#else
       curl_easy_setopt(self->curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+#endif
       curl_easy_setopt(self->curl, CURLOPT_MAXREDIRS, 3);
     }
   curl_easy_setopt(self->curl, CURLOPT_TIMEOUT, owner->timeout);
@@ -239,10 +248,10 @@ _add_msg_specific_headers(HTTPDestinationWorker *self, LogMessage *msg)
               log_msg_get_value(msg, LM_V_PROGRAM, NULL));
   _add_header(self->request_headers,
               "X-Syslog-Facility",
-              syslog_name_lookup_facility_by_value(msg->pri & LOG_FACMASK));
+              syslog_name_lookup_facility_by_value(msg->pri & SYSLOG_FACMASK));
   _add_header(self->request_headers,
               "X-Syslog-Level",
-              syslog_name_lookup_severity_by_value(msg->pri & LOG_PRIMASK));
+              syslog_name_lookup_severity_by_value(msg->pri & SYSLOG_PRIMASK));
 }
 
 static void
@@ -678,6 +687,7 @@ _flush(LogThreadedDestWorker *s, LogThreadedFlushMode mode)
       if (retval == LTR_SUCCESS)
         {
           gsize msg_length = self->request_body->len;
+          log_threaded_dest_worker_written_bytes_add(&self->super, msg_length);
           log_threaded_dest_driver_insert_batch_length_stats(self->super.owner, msg_length);
 
           http_load_balancer_set_target_successful(owner->load_balancer, target);

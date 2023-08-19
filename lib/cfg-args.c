@@ -26,6 +26,8 @@
 #include "str-utils.h"
 #include "str-repr/encode.h"
 
+#include <stdlib.h>
+
 struct _CfgArgs
 {
   gint ref_cnt;
@@ -92,6 +94,20 @@ cfg_args_get(CfgArgs *self, const gchar *name)
     }
 
   return value;
+}
+
+gboolean
+cfg_args_get_as_boolean(CfgArgs *self, const gchar *name)
+{
+  const gchar *value = cfg_args_get(self, name);
+
+  if (strcmp(value, "yes") == 0)
+    return TRUE;
+  else if (strcmp(value, "no") == 0)
+    return FALSE;
+
+  gint n = atoi(value);
+  return n != 0;
 }
 
 gboolean

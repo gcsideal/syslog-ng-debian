@@ -37,7 +37,6 @@ const gchar *log_expr_node_get_content_name(gint content);
 #define LC_FALLBACK       2
 #define LC_FINAL          4
 #define LC_FLOW_CONTROL   8
-#define LC_DROP_UNMATCHED 16
 
 enum
 {
@@ -56,6 +55,7 @@ enum
   ENL_REFERENCE,
   ENL_SEQUENCE,
   ENL_JUNCTION,
+  ENL_CONDITIONAL,
 };
 
 
@@ -86,6 +86,7 @@ typedef struct _LogExprNode LogExprNode;
  *   - reference:      used to reference log expressions defined elsewhere, no children
  *   - sequence:       holds a sequence of LogExprNodes
  *   - junction:       holds a junction
+ *   - conditional:    holds a conditional (simple or compound if), three children: filter, true_expr, false_expr
  *
  * Sometimes syslog-ng needs to know what kind of object the user
  * originally defined, this is stored in the "content" member.
@@ -129,6 +130,7 @@ gint log_expr_node_lookup_flag(const gchar *flag);
 
 LogExprNode *log_expr_node_append_tail(LogExprNode *a, LogExprNode *b);
 void log_expr_node_set_object(LogExprNode *self, gpointer object, GDestroyNotify destroy);
+void log_expr_node_set_name(LogExprNode *self, const gchar *name);
 const gchar *log_expr_node_format_location(LogExprNode *self, gchar *buf, gsize buf_len);
 EVTTAG *log_expr_node_location_tag(LogExprNode *self);
 
@@ -152,10 +154,12 @@ LogExprNode *log_expr_node_new_rewrite_reference(const gchar *name, CFG_LTYPE *y
 LogExprNode *log_expr_node_new_log(LogExprNode *children, guint32 flags, CFG_LTYPE *yylloc);
 LogExprNode *log_expr_node_new_sequence(LogExprNode *children, CFG_LTYPE *yylloc);
 LogExprNode *log_expr_node_new_junction(LogExprNode *children, CFG_LTYPE *yylloc);
+LogExprNode *log_expr_node_new_source_junction(LogExprNode *children, CFG_LTYPE *yylloc);
+LogExprNode *log_expr_node_new_destination_junction(LogExprNode *children, CFG_LTYPE *yylloc);
+
 void log_expr_node_conditional_set_false_branch_of_the_last_if(LogExprNode *conditional_node, LogExprNode *false_expr);
-LogExprNode *log_expr_node_new_conditional_with_filter(LogExprNode *filter_pipe, LogExprNode *true_expr,
-                                                       CFG_LTYPE *yylloc);
-LogExprNode *log_expr_node_new_conditional_with_block(LogExprNode *block, CFG_LTYPE *yylloc);
+LogExprNode *log_expr_node_new_simple_conditional(LogExprNode *filter_expr, LogExprNode *true_expr, CFG_LTYPE *yylloc);
+LogExprNode *log_expr_node_new_compound_conditional(LogExprNode *block, CFG_LTYPE *yylloc);
 
 typedef struct _CfgTree
 {
@@ -168,22 +172,25 @@ typedef struct _CfgTree
   GPtrArray *rules;
   GHashTable *templates;
   gboolean compiled;
+  GHashTable *log_path_names;
 } CfgTree;
 
 gboolean cfg_tree_add_object(CfgTree *self, LogExprNode *rule);
 LogExprNode *cfg_tree_get_object(CfgTree *self, gint type, const gchar *name);
 GList *cfg_tree_get_objects(CfgTree *self);
 
-gboolean cfg_tree_add_template(CfgTree *self, LogTemplate *template);
+gboolean cfg_tree_add_template(CfgTree *self, LogTemplate *template_obj);
 LogTemplate *cfg_tree_lookup_template(CfgTree *self, const gchar *name);
 LogTemplate *cfg_tree_check_inline_template(CfgTree *self, const gchar *template_or_name, GError **error);
 
 gchar *cfg_tree_get_rule_name(CfgTree *self, gint content, LogExprNode *node);
 gchar *cfg_tree_get_child_id(CfgTree *self, gint content, LogExprNode *node);
 
+gboolean cfg_tree_compile(CfgTree *self);
 gboolean cfg_tree_start(CfgTree *self);
 gboolean cfg_tree_stop(CfgTree *self);
-gboolean cfg_tree_on_inited(CfgTree *self);
+gboolean cfg_tree_pre_config_init(CfgTree *self);
+gboolean cfg_tree_post_config_init(CfgTree *self);
 
 void cfg_tree_init_instance(CfgTree *self, GlobalConfig *cfg);
 void cfg_tree_free_instance(CfgTree *self);

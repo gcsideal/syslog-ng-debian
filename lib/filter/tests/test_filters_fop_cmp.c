@@ -42,13 +42,15 @@ _construct_sample_message(void)
   log_msg_set_value_by_name_with_type(msg, "jsonvalue", "{\"foo\":\"foovalue\"}", -1, LM_VT_JSON);
   log_msg_set_value_by_name_with_type(msg, "truevalue", "1", -1, LM_VT_BOOLEAN);
   log_msg_set_value_by_name_with_type(msg, "falsevalue", "0", -1, LM_VT_BOOLEAN);
-  log_msg_set_value_by_name_with_type(msg, "int32value", "32", -1, LM_VT_INT32);
-  log_msg_set_value_by_name_with_type(msg, "int64value", "64", -1, LM_VT_INT64);
+  log_msg_set_value_by_name_with_type(msg, "int32value", "32", -1, LM_VT_INTEGER);
+  log_msg_set_value_by_name_with_type(msg, "int64value", "4294967296", -1, LM_VT_INTEGER);
   log_msg_set_value_by_name_with_type(msg, "nanvalue", "nan", -1, LM_VT_DOUBLE);
-  log_msg_set_value_by_name_with_type(msg, "dblvalue", "3.1415", -1, LM_VT_INT64);
+  log_msg_set_value_by_name_with_type(msg, "dblvalue", "3.1415", -1, LM_VT_DOUBLE);
   log_msg_set_value_by_name_with_type(msg, "datevalue", "1653246684.123", -1, LM_VT_DATETIME);
   log_msg_set_value_by_name_with_type(msg, "listvalue", "foo,bar,baz", -1, LM_VT_LIST);
   log_msg_set_value_by_name_with_type(msg, "nullvalue", "", -1, LM_VT_NULL);
+  log_msg_set_value_by_name_with_type(msg, "bytesvalue", "\0\1\2\3", 4, LM_VT_BYTES);
+  log_msg_set_value_by_name_with_type(msg, "protobufvalue", "\4\5\6\7", 4, LM_VT_PROTOBUF);
   return msg;
 }
 
@@ -290,6 +292,12 @@ Test(filter, test_type_aware_comparisons_strings_to_strings_are_compared_as_stri
   cr_assert(evaluate("'$strvalue' == 'string'"));
   cr_assert(evaluate("'$strvalue' == '$strvalue'"));
   cr_assert_not(evaluate("'$strvalue' != '$strvalue'"));
+
+  /* bytes values */
+  cr_assert(evaluate("'$bytesvalue' == '$bytesvalue'"));
+  cr_assert_not(evaluate("'$bytesvalue' != '$bytesvalue'"));
+  cr_assert(evaluate("'$protobufvalue' == '$protobufvalue'"));
+  cr_assert_not(evaluate("'$protobufvalue' != '$protobufvalue'"));
 }
 
 Test(filter, test_type_aware_comparison_objects_are_compared_as_strings_if_types_match)
@@ -390,6 +398,20 @@ Test(filter, test_type_aware_comparisons_mixed_types_or_numbers_are_compared_as_
   cr_assert_not(evaluate("'$jsonvalue' < 01234"));
   cr_assert_not(evaluate("'$jsonvalue' > 01234"));
   cr_assert_not(evaluate("'$jsonvalue' == 01234"));
+
+  /* bytes and protobuf types are behaving as they were unset (return NULL values) if not explicitly cast to bytes() */
+  cr_assert(evaluate("'$bytesvalue' < 1"));
+  cr_assert(evaluate("'$bytesvalue' > -1"));
+  cr_assert(evaluate("'$protobufvalue' < 1"));
+  cr_assert(evaluate("'$protobufvalue' > -1"));
+
+  /* bytes and protobuf types are NaN values if explicitly cast to bytes() */
+  cr_assert_not(evaluate("bytes('$bytesvalue') < 01234"));
+  cr_assert_not(evaluate("bytes('$bytesvalue') > 01234"));
+  cr_assert_not(evaluate("bytes('$bytesvalue') == 01234"));
+  cr_assert_not(evaluate("protobuf('$protobufvalue') < 01234"));
+  cr_assert_not(evaluate("protobuf('$protobufvalue') > 01234"));
+  cr_assert_not(evaluate("protobuf('$protobufvalue') == 01234"));
 }
 
 Test(filter, test_type_aware_comparison_nan_is_always_different_from_anything)
@@ -416,8 +438,6 @@ Test(filter, test_type_and_value_comparison_checks_whether_type_and_value_match_
   cr_assert_not(evaluate("string(64) !== string(64)"));
   cr_assert_not(evaluate("string(64) === int64(64)"));
   cr_assert(evaluate("string(64) !== int64(64)"));
-  cr_assert(evaluate("int32(64) !== int64(64)"));
-  cr_assert_not(evaluate("int32(64) === int64(64)"));
 
   /* types match, values don't */
   cr_assert_not(evaluate("foo === bar"));
@@ -426,6 +446,14 @@ Test(filter, test_type_and_value_comparison_checks_whether_type_and_value_match_
 
   /* string conversion */
   cr_assert(evaluate("double(  1e1  ) === double(10)"));
+}
+
+Test(filter, test_int32_and_int64_are_aliases_to_int)
+{
+  cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
+  cr_assert(evaluate("int32(64) === int64(64)"));
+  cr_assert(evaluate("int32(64) === int(64)"));
+  cr_assert(evaluate("int64(64) === int(64)"));
 }
 
 static void

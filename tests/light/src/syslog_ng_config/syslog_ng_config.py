@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 
 class SyslogNgConfig(object):
-    def __init__(self, version):
+    def __init__(self, version, teardown):
         self.__raw_config = None
         self.__syslog_ng_config = {
             "version": version,
@@ -60,6 +60,7 @@ class SyslogNgConfig(object):
             "statement_groups": [],
             "logpath_groups": [],
         }
+        self.teardown = teardown
 
     @staticmethod
     def stringify(s):
@@ -75,9 +76,8 @@ class SyslogNgConfig(object):
             rendered_config = ConfigRenderer(self.__syslog_ng_config).get_rendered_config()
         logger.info("Generated syslog-ng config\n{}\n".format(rendered_config))
 
-        f = File(config_path)
-        with f.open('w+') as config_file:
-            config_file.write(rendered_config)
+        syslog_ng_config_file = File(config_path)
+        syslog_ng_config_file.write_content_and_close(rendered_config)
 
     def set_version(self, version):
         self.__syslog_ng_config["version"] = version
@@ -92,7 +92,9 @@ class SyslogNgConfig(object):
         self.__syslog_ng_config["global_options"].update(options)
 
     def create_file_source(self, **options):
-        return FileSource(**options)
+        file_source = FileSource(**options)
+        self.teardown.register(file_source.close_file)
+        return file_source
 
     def create_example_msg_generator_source(self, **options):
         return ExampleMsgGeneratorSource(**options)
@@ -127,8 +129,17 @@ class SyslogNgConfig(object):
     def create_regexp_parser(self, **options):
         return Parser("regexp-parser", **options)
 
+    def create_csv_parser(self, **options):
+        return Parser("csv-parser", **options)
+
     def create_syslog_parser(self, **options):
         return Parser("syslog-parser", **options)
+
+    def create_sdata_parser(self, **options):
+        return Parser("sdata-parser", **options)
+
+    def create_group_lines_parser(self, **options):
+        return Parser("group-lines", **options)
 
     def create_cisco_parser(self, **options):
         return Parser("cisco-parser", **options)
@@ -137,22 +148,32 @@ class SyslogNgConfig(object):
         return Parser("mariadb-audit-parser", **options)
 
     def create_file_destination(self, **options):
-        return FileDestination(**options)
+        file_destination = FileDestination(**options)
+        self.teardown.register(file_destination.close_file)
+        return file_destination
 
     def create_example_destination(self, **options):
-        return ExampleDestination(**options)
+        example_destination = ExampleDestination(**options)
+        self.teardown.register(example_destination.close_file)
+        return example_destination
 
     def create_snmp_destination(self, **options):
         return SnmpDestination(**options)
 
     def create_network_destination(self, **options):
-        return NetworkDestination(**options)
+        network_destination = NetworkDestination(**options)
+        self.teardown.register(network_destination.stop_listener)
+        return network_destination
 
     def create_unix_dgram_destination(self, **options):
-        return UnixDgramDestination(**options)
+        unix_dgram_destination = UnixDgramDestination(**options)
+        self.teardown.register(unix_dgram_destination.stop_listener)
+        return unix_dgram_destination
 
     def create_unix_stream_destination(self, **options):
-        return UnixStreamDestination(**options)
+        unix_stream_source = UnixStreamDestination(**options)
+        self.teardown.register(unix_stream_source.stop_listener)
+        return unix_stream_source
 
     def create_db_parser(self, config, **options):
         return DBParser(config, **options)
@@ -163,13 +184,13 @@ class SyslogNgConfig(object):
     def create_rewrite_credit_card_hash(self, **options):
         return CreditCardHash(**options)
 
-    def create_logpath(self, statements=None, flags=None):
-        logpath = self.__create_logpath_with_conversion(statements, flags)
+    def create_logpath(self, name=None, statements=None, flags=None):
+        logpath = self.__create_logpath_with_conversion(name, statements, flags)
         self.__syslog_ng_config["logpath_groups"].append(logpath)
         return logpath
 
-    def create_inner_logpath(self, statements=None, flags=None):
-        inner_logpath = self.__create_logpath_with_conversion(statements, flags)
+    def create_inner_logpath(self, name=None, statements=None, flags=None):
+        inner_logpath = self.__create_logpath_with_conversion(name, statements, flags)
         return inner_logpath
 
     def create_statement_group(self, statements):
@@ -183,15 +204,16 @@ class SyslogNgConfig(object):
         else:
             return self.create_statement_group(item)
 
-    def __create_logpath_with_conversion(self, items, flags):
+    def __create_logpath_with_conversion(self, name, items, flags):
         return self.__create_logpath_group(
+            name,
             map(self.__create_statement_group_if_needed, cast_to_list(items)),
             flags,
         )
 
     @staticmethod
-    def __create_logpath_group(statements=None, flags=None):
-        logpath = LogPath()
+    def __create_logpath_group(name=None, statements=None, flags=None):
+        logpath = LogPath(name)
         if statements:
             logpath.add_groups(statements)
         if flags:

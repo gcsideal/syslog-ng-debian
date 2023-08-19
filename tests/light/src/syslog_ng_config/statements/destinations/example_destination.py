@@ -20,7 +20,7 @@
 # COPYING for details.
 #
 #############################################################################
-from pathlib2 import Path
+from pathlib import Path
 
 from src.driver_io.file.file_io import FileIO
 from src.syslog_ng_config.statements.destinations.destination_driver import DestinationDriver
@@ -44,3 +44,6 @@ class ExampleDestination(DestinationDriver):
 
     def read_until_logs(self, logs):
         return self.io.read_until_messages(logs)
+
+    def close_file(self):
+        self.io.close_readable_file()

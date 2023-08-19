@@ -12,12 +12,16 @@ syslog_ng_ctl_syslog_ng_ctl_SOURCES		= 	\
 	syslog-ng-ctl/commands/credentials.c		\
 	syslog-ng-ctl/commands/verbose.h		\
 	syslog-ng-ctl/commands/verbose.c		\
+	syslog-ng-ctl/commands/log-level.h		\
+	syslog-ng-ctl/commands/log-level.c		\
 	syslog-ng-ctl/commands/ctl-stats.h		\
 	syslog-ng-ctl/commands/ctl-stats.c		\
 	syslog-ng-ctl/commands/query.h			\
 	syslog-ng-ctl/commands/query.c			\
 	syslog-ng-ctl/commands/license.h		\
 	syslog-ng-ctl/commands/license.c		\
+	syslog-ng-ctl/commands/healthcheck.h \
+	syslog-ng-ctl/commands/healthcheck.c \
 	syslog-ng-ctl/control-client.h			\
 	syslog-ng-ctl/control-client.c
 

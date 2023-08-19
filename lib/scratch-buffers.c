@@ -24,6 +24,7 @@
 #include "scratch-buffers.h"
 #include "tls-support.h"
 #include "stats/stats-registry.h"
+#include "stats/stats-cluster-single.h"
 #include "timeutils/cache.h"
 #include "messages.h"
 #include "apphook.h"
@@ -83,7 +84,7 @@ TLS_BLOCK_START
 {
   GPtrArray *scratch_buffers;
   gint scratch_buffers_used;
-  glong scratch_buffers_bytes_reported;
+  gssize scratch_buffers_bytes_reported;
   time_t scratch_buffers_time_of_last_maintenance;
   struct iv_task scratch_buffers_gc;
   gboolean scratch_buffers_gc_executed;
@@ -149,23 +150,23 @@ scratch_buffers_reclaim_marked(ScratchBuffersMarker marker)
 }
 
 /* get a snapshot of the global allocation counter, can be racy */
-gint
+gssize
 scratch_buffers_get_global_allocation_count(void)
 {
   return stats_counter_get(stats_scratch_buffers_count);
 }
 
 /* get the number of thread-local allocations does not race */
-gint
+gssize
 scratch_buffers_get_local_allocation_count(void)
 {
   return scratch_buffers->len;
 }
 
-glong
+gssize
 scratch_buffers_get_local_allocation_bytes(void)
 {
-  glong bytes = 0;
+  gssize bytes = 0;
 
   for (gint i = 0; i < scratch_buffers->len; i++)
     {
@@ -184,7 +185,7 @@ scratch_buffers_get_local_usage_count(void)
 void
 scratch_buffers_update_stats(void)
 {
-  glong prev_reported = scratch_buffers_bytes_reported;
+  gssize prev_reported = scratch_buffers_bytes_reported;
   scratch_buffers_bytes_reported = scratch_buffers_get_local_allocation_bytes();
   stats_counter_add(stats_scratch_buffers_bytes, -prev_reported + scratch_buffers_bytes_reported);
 }
@@ -299,10 +300,12 @@ scratch_buffers_register_stats(void)
   StatsClusterKey sc_key;
 
   stats_lock();
-  stats_cluster_logpipe_key_set(&sc_key, SCS_GLOBAL, "scratch_buffers_count", NULL);
-  stats_register_counter(0, &sc_key, SC_TYPE_QUEUED, &stats_scratch_buffers_count);
-  stats_cluster_logpipe_key_set(&sc_key, SCS_GLOBAL, "scratch_buffers_bytes", NULL);
-  stats_register_counter(0, &sc_key, SC_TYPE_QUEUED, &stats_scratch_buffers_bytes);
+  stats_cluster_single_key_set(&sc_key, "scratch_buffers_count", NULL, 0);
+  stats_cluster_single_key_add_legacy_alias_with_name(&sc_key, SCS_GLOBAL, "scratch_buffers_count", NULL, "queued");
+  stats_register_counter(0, &sc_key, SC_TYPE_SINGLE_VALUE, &stats_scratch_buffers_count);
+  stats_cluster_single_key_set(&sc_key, "scratch_buffers_bytes", NULL, 0);
+  stats_cluster_single_key_add_legacy_alias_with_name(&sc_key, SCS_GLOBAL, "scratch_buffers_bytes", NULL, "queued");
+  stats_register_counter(0, &sc_key, SC_TYPE_SINGLE_VALUE, &stats_scratch_buffers_bytes);
   stats_unlock();
 }
 
@@ -312,10 +315,12 @@ scratch_buffers_unregister_stats(void)
   StatsClusterKey sc_key;
 
   stats_lock();
-  stats_cluster_logpipe_key_set(&sc_key, SCS_GLOBAL, "scratch_buffers_count", NULL);
-  stats_unregister_counter(&sc_key, SC_TYPE_QUEUED, &stats_scratch_buffers_count);
-  stats_cluster_logpipe_key_set(&sc_key, SCS_GLOBAL, "scratch_buffers_bytes", NULL);
-  stats_unregister_counter(&sc_key, SC_TYPE_QUEUED, &stats_scratch_buffers_bytes);
+  stats_cluster_single_key_set(&sc_key, "scratch_buffers_count", NULL, 0);
+  stats_cluster_single_key_add_legacy_alias_with_name(&sc_key, SCS_GLOBAL, "scratch_buffers_count", NULL, "queued");
+  stats_unregister_counter(&sc_key, SC_TYPE_SINGLE_VALUE, &stats_scratch_buffers_count);
+  stats_cluster_single_key_set(&sc_key, "scratch_buffers_bytes", NULL, 0);
+  stats_cluster_single_key_add_legacy_alias_with_name(&sc_key, SCS_GLOBAL, "scratch_buffers_bytes", NULL, "queued");
+  stats_unregister_counter(&sc_key, SC_TYPE_SINGLE_VALUE, &stats_scratch_buffers_bytes);
   stats_unlock();
 }
 

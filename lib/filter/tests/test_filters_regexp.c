@@ -36,7 +36,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <pcre.h>
 
 TestSuite(filter, .init = setup, .fini = teardown);
 
@@ -53,12 +52,6 @@ typedef struct _FilterParamRegexp
   const gchar *value;
 } FilterParamRegexp;
 
-static gboolean
-check_pcre_version_is_atleast(const gchar *version)
-{
-  return strncmp(pcre_version(), version, strlen(version)) >= 0;
-}
-
 Test(filter, create_pcre_regexp_filter)
 {
   cr_assert_eq(create_pcre_regexp_filter(LM_V_PROGRAM, "((", 0), NULL);
@@ -70,8 +63,7 @@ Test(filter, create_pcre_regexp_filter)
   cr_assert_eq(create_pcre_regexp_filter(LM_V_HOST, "(?iana", 0), NULL);
   cr_assert_eq(create_pcre_regexp_match("((", 0), NULL);
   cr_assert_eq(create_pcre_regexp_match("(?P<foo_123", 0), NULL);  // Unterminated group identifier
-  if (check_pcre_version_is_atleast("8.34"))
-    cr_assert_eq(create_pcre_regexp_match("(?P<1>a)", 0), NULL);  // Begins with a digit
+  cr_assert_eq(create_pcre_regexp_match("(?P<1>a)", 0), NULL);  // Begins with a digit
   cr_assert_eq(create_pcre_regexp_match("(?P<!>a)", 0), NULL);  // Begins with an illegal char
   cr_assert_eq(create_pcre_regexp_match("(?P<foo!>a)", 0), NULL);  // Ends with an illegal char
   cr_assert_eq(create_pcre_regexp_match("\\1", 0), NULL);  // Backreference

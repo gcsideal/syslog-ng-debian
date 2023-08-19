@@ -16,6 +16,18 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 project(syslog-ng C)
 
+option(ENABLE_CPP "Enable C++" ON)
+
+if (APPLE)
+  set(ENABLE_CPP OFF)
+endif()
+
+if (ENABLE_CPP)
+  enable_language(CXX)
+  set(CMAKE_CXX_STANDARD 11)
+  set(SYSLOG_NG_ENABLE_CPP ${ENABLE_CPP})
+endif()
+
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/Modules ${PROJECT_SOURCE_DIR}/cmake/)
 set(CMAKE_POSITION_INDEPENDENT_CODE 1)
 set(BISON_FLAGS "-Wno-other -Werror=conflicts-sr -Werror=conflicts-rr")
@@ -25,6 +37,20 @@ include(ExternalProject)
 include(external_or_find_package)
 include(add_module)
 include(module_switch)
+
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
+    option(GIT_SUBMODULE "Checkout submodules during build" ON)
+    if(GIT_SUBMODULE)
+        message(STATUS "Submodule update")
+        execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+                        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                        RESULT_VARIABLE GIT_SUBMOD_RESULT)
+        if(NOT GIT_SUBMOD_RESULT EQUAL "0")
+            message(FATAL_ERROR "git submodule update --init --recursive failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
+        endif()
+    endif()
+endif()
 
 set(MEMORYCHECK_SUPPRESSIONS_FILE "${PROJECT_SOURCE_DIR}/tests/valgrind/unit-test-leak.supp")
 set(MEMORYCHECK_COMMAND_OPTIONS "--num-callers=30 --sim-hints=no-nptl-pthread-stackcache --gen-suppressions=all --leak-check=full --trace-children=yes --freelist-vol=200000000 --freelist-big-blocks=10000000 --malloc-fill=55 --free-fill=AA")
@@ -36,6 +62,7 @@ set(SYSLOG_NG_SOURCE_REVISION ${SYSLOG_NG_VERSION})
 set(SYSLOG_NG_PATH_PREFIX ${CMAKE_INSTALL_PREFIX})
 set(SYSLOG_NG_PATH_SYSCONFDIR "\${prefix}/etc")
 set(SYSLOG_NG_PATH_DATADIR "\${datarootdir}")
+set(SYSLOG_NG_PATH_PKGDATADIR "\${datarootdir}/syslog-ng")
 set(SYSLOG_NG_PATH_PIDFILEDIR "\${localstatedir}")
 set(SYSLOG_NG_PATH_LOCALSTATEDIR "\${prefix}/var")
 set(SYSLOG_NG_MODULE_PATH "\${exec_prefix}/lib/syslog-ng")
@@ -53,6 +80,8 @@ set(SYSLOG_NG_PACKAGE_NAME "${CMAKE_PROJECT_NAME}")
 set(SYSLOG_NG_PATH_XSDDIR "\${datadir}/syslog-ng/xsd")
 set(SYSLOG_NG_JAVA_MODULE_PATH "\${exec_prefix}/lib/syslog-ng/java-modules")
 set(SYSLOG_NG_PYTHON_MODULE_DIR "\${exec_prefix}/lib/syslog-ng/python")
+set(SYSLOG_NG_PYTHON_SYSCONF_MODULE_DIR "\${prefix}/etc/python")
+set(SYSLOG_NG_PYTHON_VENV_DIR "\${localstatedir}/python-venv")
 set(SYSLOG_NG_PATH_TOPSRC_DIR "${PROJECT_SOURCE_DIR}")
 set(LIBDIR "\${exec_prefix}/lib")
 set(INCLUDEDIR "\${prefix}/include")
@@ -152,6 +181,7 @@ check_symbol_exists(memrchr "string.h" SYSLOG_NG_HAVE_MEMRCHR)
 check_symbol_exists(strcasestr "string.h" SYSLOG_NG_HAVE_STRCASESTR)
 check_symbol_exists(pread "unistd.h" SYSLOG_NG_HAVE_PREAD)
 check_symbol_exists(pwrite "unistd.h" SYSLOG_NG_HAVE_PWRITE)
+check_symbol_exists(posix_fallocate "fcntl.h" SYSLOG_NG_HAVE_POSIX_FALLOCATE)
 check_symbol_exists(timezone time.h SYSLOG_NG_HAVE_TIMEZONE)
 
 check_include_files(utmp.h SYSLOG_NG_HAVE_UTMP_H)
@@ -168,6 +198,12 @@ check_struct_has_member("struct tm" "tm_gmtoff" "sys/time.h;time.h" SYSLOG_NG_HA
 
 if ((UTMPX_HAS_UT_TYPE AND UTMPX_HAS_UT_USER) OR (UTMPX_HAS_UT_TYPE AND UTMP_HAS_UT_USER))
   set(SYSLOG_NG_HAVE_MODERN_UTMP 1)
+endif()
+
+check_symbol_exists(SO_MEMINFO "sys/socket.h" SYSLOG_NG_HAVE_SO_MEMINFO)
+check_include_file("linux/sock_diag.h" SYSLOG_NG_HAVE_LINUX_SOCK_DIAG_H)
+if (SYSLOG_NG_HAVE_SO_MEMINFO)
+  set(SYSLOG_NG_ENABLE_AFSOCKET_MEMINFO_METRICS 1)
 endif()
 
 set(WITH_GETTEXT "" CACHE STRING "Set the prefix where gettext is installed (e.g. /usr)")
@@ -249,41 +285,20 @@ set(SYSLOG_NG_HAVE_INOTIFY "${Inotify_FOUND}")
 set (PYTHON_VERSION "AUTO" CACHE STRING "Version of the installed development library" )
 
 if ("${PYTHON_VERSION}" STREQUAL "AUTO")
-  find_package(PythonInterp)
-  find_package(PythonLibs)
+  find_package(PythonInterp EXACT 3)
+  find_package(PythonLibs EXACT 3)
 else ()
   find_package(PythonInterp EXACT "${PYTHON_VERSION}" REQUIRED)
   find_package(PythonLibs EXACT "${PYTHON_VERSION}" REQUIRED)
 endif ()
 
 MESSAGE(STATUS "Detected pythonlib version: ${PYTHONLIBS_VERSION_STRING}")
-
-set (PYLINT "" CACHE STRING "pylint binary")
-
-if (PYLINT)
-  set(PYLINT_BIN ${PYLINT})
-else ()
-  if (PYTHON_VERSION STREQUAL "3")
-    find_program(PYLINT_BIN "pylint3")
-      if (NOT PYLINT_BIN)
-        find_program(PYLINT_BIN "pylint")
-      endif()
-  else ()
-    find_program(PYLINT_BIN "pylint")
-  endif ()
-endif()
-
-if (PYTHONLIBS_VERSION_STRING VERSION_LESS 3)
-    set(SYSLOG_NG_ENABLE_PYTHONv2 1)
-else ()
-    set(SYSLOG_NG_ENABLE_PYTHONv3 1)
-endif ()
-
+include(python_build_venv)
 
 include(openssl_functions)
 openssl_set_defines()
 
-pkg_check_modules(LIBPCRE REQUIRED libpcre)
+pkg_check_modules(LIBPCRE REQUIRED libpcre2-8)
 
 if (WRAP_FOUND)
   set(SYSLOG_NG_ENABLE_TCP_WRAPPER 1)
@@ -317,30 +332,30 @@ set_target_properties(check-copyright PROPERTIES
   ADDITIONAL_MAKE_CLEAN_FILES
   "copyright-run.log;copyright-err.log")
 
-# The inclusion of CTest triggers enable_testing()
-# CMake will generate tests only if the enable_testing() command has been invoked.
-# The CTest module invokes the command automatically when the BUILD_TESTING option is ON.
-
 if (CRITERION_FOUND)
   option(BUILD_TESTING "Enable unit tests" ON)
 else()
   option(BUILD_TESTING  "Enable unit tests" OFF)
 endif()
 
-if (BUILD_TESTING AND NOT CRITERION_FOUND)
-  message(FATAL_ERROR "BUILD_TESTING enabled without criterion detected!")
-endif()
-
 include(add_tests)
 
-if (CRITERION_FOUND)
-  set(CTEST_ENVIRONMENT
-    "G_SLICE=always-malloc,debug-blocks"
-    "G_DEBUG=fatal-warnings,fatal-criticals,gc-friendly")
-  include(CTest)
-endif()
+# The inclusion of CTest triggers enable_testing()
+# CMake will generate tests only if the enable_testing() command has been invoked.
+# The CTest module invokes the command automatically when the BUILD_TESTING option is ON.
 
-add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} -j $$(nproc) --output-on-failure)
+if (BUILD_TESTING)
+  if (NOT CRITERION_FOUND)
+    message(FATAL_ERROR "BUILD_TESTING enabled without criterion detected!")
+  else()
+    set(CTEST_ENVIRONMENT
+      "G_SLICE=always-malloc,debug-blocks"
+      "G_DEBUG=fatal-warnings,fatal-criticals,gc-friendly")
+    include(CTest)
+
+    add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} -j $$(nproc) --output-on-failure)
+  endif()
+endif()
 
 set(IMPORTANT_WARNINGS
   -Wshadow)
@@ -353,11 +368,11 @@ set(ACCEPTABLE_WARNINGS
 option(ENABLE_EXTRA_WARNINGS "Enable extra warnings" ON)
 if (ENABLE_EXTRA_WARNINGS)
   set(EXTRA_WARNINGS
-    -Wimplicit-function-declaration
-    -Wnested-externs
-    -Wstrict-prototypes
+    $<$<COMPILE_LANGUAGE:C>:-Wimplicit-function-declaration>
+    $<$<COMPILE_LANGUAGE:C>:-Wnested-externs>
+    $<$<COMPILE_LANGUAGE:C>:-Wstrict-prototypes>
     -Wswitch-default
-    -Wimplicit-int
+    $<$<COMPILE_LANGUAGE:C>:-Wimplicit-int>
     -Wall
     -Wuninitialized
     -Wdeprecated
@@ -366,13 +381,13 @@ if (ENABLE_EXTRA_WARNINGS)
     -Wdouble-promotion
     -Wfloat-equal
     -Wpointer-arith
-    -Wpointer-sign
+    $<$<COMPILE_LANGUAGE:C>:-Wpointer-sign>
     -Wmissing-format-attribute
-    -Wold-style-definition
+    $<$<COMPILE_LANGUAGE:C>:-Wold-style-definition>
     -Wundef
     -Wignored-qualifiers
     -Wfloat-conversion
-    -Wbad-function-cast)
+    $<$<COMPILE_LANGUAGE:C>:-Wbad-function-cast>)
 
 if ("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
   set(EXTRA_WARNINGS
@@ -380,9 +395,9 @@ if ("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
     )
 else()
   set(EXTRA_WARNINGS
-    -Wold-style-declaration
+    $<$<COMPILE_LANGUAGE:C>:-Wold-style-declaration>
     -Wunused-but-set-parameter
-    -Woverride-init
+    $<$<COMPILE_LANGUAGE:C>:-Woverride-init>
     ${EXTRA_WARNINGS}
     )
 endif()
@@ -410,9 +425,11 @@ add_subdirectory(modules)
 add_subdirectory(scripts)
 add_subdirectory(syslog-ng)
 add_subdirectory(syslog-ng-ctl)
-add_test_subdirectory(libtest)
-add_subdirectory(tests)
 add_subdirectory(persist-tool)
+if (BUILD_TESTING)
+  add_test_subdirectory(libtest)
+  add_subdirectory(tests)
+endif()
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/syslog-ng-config.h.in ${CMAKE_CURRENT_BINARY_DIR}/syslog-ng-config.h)
 
@@ -438,3 +455,6 @@ set(includedir "\${includedir}")
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/syslog-ng.pc.cmake ${CMAKE_CURRENT_BINARY_DIR}/syslog-ng.pc)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/syslog-ng.pc DESTINATION lib/pkgconfig)
+
+include(print_config_summary)
+print_config_summary()

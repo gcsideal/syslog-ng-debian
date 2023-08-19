@@ -23,6 +23,7 @@
  */
 #include "python-module.h"
 #include "python-helpers.h"
+#include "python-types.h"
 
 static PyTypeObject py_global_code_loader_type;
 
@@ -45,7 +46,7 @@ _get_source(PyGlobalCodeLoader *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "s:get_source", &name))
     return NULL;
 
-  return _py_string_from_string(self->source, -1);
+  return py_string_from_string(self->source, -1);
 }
 
 
@@ -93,7 +94,7 @@ static PyTypeObject py_global_code_loader_type =
 };
 
 void
-py_global_code_loader_init(void)
+py_global_code_loader_global_init(void)
 {
   PyType_Ready(&py_global_code_loader_type);
 }

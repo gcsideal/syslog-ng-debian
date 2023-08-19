@@ -20,12 +20,10 @@
 # COPYING for details.
 #
 #############################################################################
-import atexit
 import socket
 from enum import Enum
 from enum import IntEnum
-
-from pathlib2 import Path
+from pathlib import Path
 
 from src.common.asynchronous import BackgroundEventLoop
 from src.common.blocking import DEFAULT_TIMEOUT
@@ -46,15 +44,11 @@ class NetworkIO():
         self.__server = None
         self.__message_reader = None
 
-        atexit.register(self.stop_listener)
-
     def write(self, content, rate=None):
         loggen_input_file_path = Path("loggen_input_{}.txt".format(get_unique_id()))
 
         loggen_input_file = File(loggen_input_file_path)
-        loggen_input_file.open(mode="w")
-        loggen_input_file.write(content)
-        loggen_input_file.close()
+        loggen_input_file.write_content_and_close(content)
 
         Loggen().start(self.__ip, self.__port, read_file=str(loggen_input_file_path), dont_parse=True, permanent=True, rate=rate, **self.__transport.value)
 

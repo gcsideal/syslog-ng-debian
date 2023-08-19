@@ -131,7 +131,7 @@ json_parser_extract_string_from_simple_json_object(JSONParser *self,
     case json_type_int:
       g_string_printf(value, "%"PRId64,
                       json_object_get_int64(jso));
-      *type = LM_VT_INT64;
+      *type = LM_VT_INTEGER;
       return TRUE;
     case json_type_string:
       g_string_assign(value,
@@ -205,14 +205,12 @@ json_parser_extract_values_from_complex_json_object(JSONParser *self,
       for (gint i = 0; i < json_object_array_length(jso); i++)
         {
           struct json_object *el = json_object_array_get_idx(jso, i);
-          GString *element_value = scratch_buffers_alloc();
-          LogMessageValueType element_type;
-
-          if (json_parser_extract_string_from_simple_json_object(self, el, element_value, &element_type))
+          if (json_object_get_type(el) == json_type_string)
             {
+              const gchar *element_value = json_object_get_string(el);
               if (i != 0)
                 g_string_append_c(value, ',');
-              str_repr_encode_append(value, element_value->str, element_value->len, NULL);
+              str_repr_encode_append(value, element_value, -1, NULL);
             }
           else
             {
@@ -388,11 +386,11 @@ json_parser_clone(LogPipe *s)
   LogParser *cloned;
 
   cloned = json_parser_new(s->cfg);
+  log_parser_clone_settings(&self->super, cloned);
   json_parser_set_prefix(cloned, self->prefix);
   json_parser_set_marker(cloned, self->marker);
   json_parser_set_extract_prefix(cloned, self->extract_prefix);
   json_parser_set_key_delimiter(cloned, self->key_delimiter);
-  log_parser_set_template(cloned, log_template_ref(self->super.template));
 
   return &cloned->super;
 }

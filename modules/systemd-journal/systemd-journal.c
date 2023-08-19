@@ -32,7 +32,6 @@ struct _SystemdJournalSourceDriver
   LogSrcDriver super;
   JournalReaderOptions reader_options;
   JournalReader *reader;
-  Journald *journald;
 };
 
 JournalReaderOptions *
@@ -51,12 +50,14 @@ __init(LogPipe *s)
   if (!log_src_driver_init_method(s))
     return FALSE;
 
-  self->reader = journal_reader_new(cfg, self->journald);
+  self->reader = journal_reader_new(cfg);
 
   journal_reader_options_init(&self->reader_options, cfg, self->super.super.group);
 
+  StatsClusterKeyBuilder *kb = stats_cluster_key_builder_new();
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("driver", "journal"));
   journal_reader_set_options((LogPipe *)self->reader, &self->super.super.super,  &self->reader_options,
-                             self->super.super.id, "journal");
+                             self->super.super.id, kb);
 
   log_pipe_append((LogPipe *)self->reader, &self->super.super.super);
   if (!log_pipe_init((LogPipe *)self->reader))
@@ -89,7 +90,6 @@ __free(LogPipe *s)
 {
   SystemdJournalSourceDriver *self = (SystemdJournalSourceDriver *)s;
   journal_reader_options_destroy(&self->reader_options);
-  journald_free(self->journald);
   log_src_driver_free(s);
 }
 
@@ -102,6 +102,5 @@ systemd_journal_sd_new(GlobalConfig *cfg)
   self->super.super.super.deinit = __deinit;
   self->super.super.super.free_fn = __free;
   journal_reader_options_defaults(&self->reader_options);
-  self->journald = journald_new();
   return &self->super.super;
 }

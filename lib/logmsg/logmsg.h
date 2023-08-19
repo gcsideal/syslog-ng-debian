@@ -113,6 +113,7 @@ enum
   LF_LOCAL             = 0x0004,
   /* message is a MARK mode */
   LF_MARK              = 0x0008,
+
   /* state flags that only matter during syslog-ng runtime and never
    * when a message is serialized */
   LF_STATE_MASK        = 0xFFF0,
@@ -123,8 +124,9 @@ enum
   LF_STATE_OWN_SDATA   = 0x0100,
   LF_STATE_OWN_MASK    = 0x01F0,
 
-  /* In the log header the hostname shall be printed individually (no group name, no chain hosts)*/
-  LF_SIMPLE_HOSTNAME = 0x0200,
+  /* part of the state that is kept across clones */
+  LF_STATE_CLONED_MASK = 0xFE00,
+  LF_STATE_TRACING     = 0x0200,
 
   LF_CHAINED_HOSTNAME  = 0x00010000,
 
@@ -155,12 +157,15 @@ enum _LogMessageValueType
   LM_VT_STRING = 0,
   LM_VT_JSON = 1,
   LM_VT_BOOLEAN = 2,
-  LM_VT_INT32 = 3,
-  LM_VT_INT64 = 4,
+  __COMPAT_LM_VT_INT32 = 3,
+  __COMPAT_LM_VT_INT64 = 4,
+  LM_VT_INTEGER = 4,  /* equals to LM_VT_INT64 */
   LM_VT_DOUBLE = 5,
   LM_VT_DATETIME = 6,
   LM_VT_LIST = 7,
   LM_VT_NULL = 8,
+  LM_VT_BYTES = 9,
+  LM_VT_PROTOBUF = 10,
 
   /* extremal value to indicate "unset" state.
    *
@@ -208,6 +213,8 @@ struct _LogMessage
 
   guint allocated_bytes;
 
+  guint32 recvd_rawmsg_size;
+
   AckRecord *ack_record;
   LMAckFunc ack_func;
   LogMessage *original;
@@ -251,7 +258,7 @@ struct _LogMessage
 
   guint8 num_nodes;
   guint8 cur_node;
-  guint8 protected;
+  guint8 write_protected;
 
 
   /* preallocated LogQueueNodes used to insert this message into a LogQueue */
@@ -272,7 +279,7 @@ void log_msg_write_protect(LogMessage *m);
 static inline gboolean
 log_msg_is_write_protected(const LogMessage *self)
 {
-  return self->protected;
+  return self->write_protected;
 }
 
 LogMessage *log_msg_clone_cow(LogMessage *msg, const LogPathOptions *path_options);
@@ -463,10 +470,6 @@ void log_msg_format_sdata(const LogMessage *self, GString *result, guint32 seq_n
 void log_msg_set_tag_by_id_onoff(LogMessage *self, LogTagId id, gboolean on);
 void log_msg_set_tag_by_id(LogMessage *self, LogTagId id);
 void log_msg_set_tag_by_name(LogMessage *self, const gchar *name);
-void log_msg_set_saddr(LogMessage *self, GSockAddr *saddr);
-void log_msg_set_saddr_ref(LogMessage *self, GSockAddr *saddr);
-void log_msg_set_daddr(LogMessage *self, GSockAddr *daddr);
-void log_msg_set_daddr_ref(LogMessage *self, GSockAddr *daddr);
 void log_msg_clear_tag_by_id(LogMessage *self, LogTagId id);
 void log_msg_clear_tag_by_name(LogMessage *self, const gchar *name);
 gboolean log_msg_is_tag_by_id(LogMessage *self, LogTagId id);
@@ -474,6 +477,19 @@ gboolean log_msg_is_tag_by_name(LogMessage *self, const gchar *name);
 void log_msg_tags_foreach(const LogMessage *self, LogMessageTagsForeachFunc callback, gpointer user_data);
 void log_msg_format_tags(const LogMessage *self, GString *result);
 void log_msg_format_matches(const LogMessage *self, GString *result);
+
+
+static inline void
+log_msg_set_recvd_rawmsg_size(LogMessage *self, guint32 size)
+{
+  self->recvd_rawmsg_size = size;
+}
+
+void log_msg_set_saddr(LogMessage *self, GSockAddr *saddr);
+void log_msg_set_saddr_ref(LogMessage *self, GSockAddr *saddr);
+void log_msg_set_daddr(LogMessage *self, GSockAddr *daddr);
+void log_msg_set_daddr_ref(LogMessage *self, GSockAddr *daddr);
+
 
 LogMessageQueueNode *log_msg_alloc_queue_node(LogMessage *msg, const LogPathOptions *path_options);
 LogMessageQueueNode *log_msg_alloc_dynamic_queue_node(LogMessage *msg, const LogPathOptions *path_options);

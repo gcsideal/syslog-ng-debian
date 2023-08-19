@@ -22,6 +22,7 @@
  */
 
 #include "python-integerpointer.h"
+#include "python-types.h"
 
 PyObject *
 py_integer_pointer_new(gpointer ptr)
@@ -39,7 +40,7 @@ static PyObject *
 _as_int(PyObject *s)
 {
   PyIntegerPointer *self = (PyIntegerPointer *)s;
-  return PyLong_FromLong(*self->ptr);
+  return py_long_from_long(*self->ptr);
 }
 
 static PyObject *
@@ -63,7 +64,7 @@ PyTypeObject py_integer_pointer_type =
 };
 
 void
-py_integer_pointer_init(void)
+py_integer_pointer_global_init(void)
 {
   PyType_Ready(&py_integer_pointer_type);
 }

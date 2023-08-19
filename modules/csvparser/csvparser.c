@@ -181,8 +181,8 @@ csv_parser_clone(LogPipe *s)
   CSVParser *cloned;
 
   cloned = (CSVParser *) csv_parser_new(s->cfg);
+  log_parser_clone_settings(&self->super, &cloned->super);
   csv_scanner_options_copy(&cloned->options, &self->options);
-  cloned->super.template = log_template_ref(self->super.template);
   csv_parser_set_prefix(&cloned->super, self->prefix);
   csv_parser_set_drop_invalid(&cloned->super, self->drop_invalid);
   return &cloned->super.super;
@@ -242,6 +242,8 @@ csv_parser_lookup_dialect(const gchar *flag)
     return CSV_SCANNER_ESCAPE_NONE;
   else if (strcmp(flag, "escape-backslash") == 0)
     return CSV_SCANNER_ESCAPE_BACKSLASH;
+  else if (strcmp(flag, "escape-backslash-with-sequences") == 0)
+    return CSV_SCANNER_ESCAPE_BACKSLASH_WITH_SEQUENCES;
   else if (strcmp(flag, "escape-double-char") == 0)
     return CSV_SCANNER_ESCAPE_DOUBLE_CHAR;
   return -1;

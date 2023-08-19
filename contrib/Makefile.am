@@ -21,7 +21,9 @@ EXTRA_DIST += \
 	\
 	contrib/syslog2ng \
 	contrib/syslog-mc \
-	contrib/syslog-ng.vim \
+	\
+	contrib/vim/ftdetect/syslog-ng.vim \
+	contrib/vim/syntax/syslog-ng.vim \
 	\
 	contrib/syslog-ng.conf.doc \
 	contrib/relogger.pl \
@@ -62,14 +64,15 @@ EXTRA_DIST += \
 	\
 	contrib/selinux/README \
 	contrib/selinux/src/root_unsafe/syslog_ng.el6.fc.in \
-	contrib/selinux/src/root_unsafe/syslog_ng.el78.fc.in \
+	contrib/selinux/src/root_unsafe/syslog_ng.el789.fc.in \
 	contrib/selinux/src/root_unsafe/syslog_ng.el5.fc.in \
 	contrib/selinux/src/root_safe/syslog_ng.el6.fc.in \
-	contrib/selinux/src/root_safe/syslog_ng.el78.fc.in \
+	contrib/selinux/src/root_safe/syslog_ng.el789.fc.in \
 	contrib/selinux/src/root_safe/syslog_ng.el5.fc.in \
 	contrib/selinux/src/syslog_ng.el6.0to4.te.in \
 	contrib/selinux/src/syslog_ng.el7.te.in \
 	contrib/selinux/src/syslog_ng.el8.te.in \
+	contrib/selinux/src/syslog_ng.el9.te.in \
 	contrib/selinux/src/syslog_ng.module.version \
 	contrib/selinux/src/syslog_ng.el6.5up.te.in \
 	contrib/selinux/src/syslog_ng.el5.te.in \
@@ -89,19 +92,6 @@ EXTRA_DIST += \
 	contrib/scripts/config-graph-json-to-dot.py \
 	\
 	contrib/valgrind/syslog-ng.supp \
-	\
-	contrib/config_option_database/syslog-ng-cfg-db.py \
-	contrib/config_option_database/requirements.txt \
-	contrib/config_option_database/__init__.py \
-	contrib/config_option_database/utils/BisonGraph.py \
-	contrib/config_option_database/utils/ConfigOptions.py \
-	contrib/config_option_database/utils/MergeYm.py \
-	contrib/config_option_database/utils/OptionParser.py \
-	contrib/config_option_database/utils/Yacc2Graph.py \
-	contrib/config_option_database/utils/__init__.py \
-	contrib/config_option_database/utils/test/test_BisonGraph.py \
-	contrib/config_option_database/utils/test/test_OptionParser.py \
-	contrib/config_option_database/utils/test/test_Yacc2Graph.py \
 	\
 	contrib/syslog-ng-helm-chart/.helmignore \
 	contrib/syslog-ng-helm-chart/values.yaml \

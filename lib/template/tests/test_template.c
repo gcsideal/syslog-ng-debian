@@ -144,6 +144,7 @@ Test(template, test_macros_v3x)
   /* pri 3, fac 19 == local3 */
 
   /* v3.x behavior */
+  cfg_set_version_without_validation(configuration, VERSION_VALUE_3_38);
 
   assert_template_format_value_and_type("$FACILITY", "local3", LM_VT_STRING);
   assert_template_format_value_and_type("$FACILITY_NUM", "19", LM_VT_STRING);
@@ -250,14 +251,14 @@ Test(template, test_macros_v40)
   cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
 
   assert_template_format_value_and_type("$FACILITY", "local3", LM_VT_STRING);
-  assert_template_format_value_and_type("$FACILITY_NUM", "19", LM_VT_INT32);
+  assert_template_format_value_and_type("$FACILITY_NUM", "19", LM_VT_INTEGER);
 
   assert_template_format_value_and_type("$SEVERITY", "err", LM_VT_STRING);
-  assert_template_format_value_and_type("$SEVERITY_NUM", "3", LM_VT_INT32);
+  assert_template_format_value_and_type("$SEVERITY_NUM", "3", LM_VT_INTEGER);
 
   assert_template_format_value_and_type("$PRIORITY", "err", LM_VT_STRING);
   assert_template_format_value_and_type("$LEVEL", "err", LM_VT_STRING);
-  assert_template_format_value_and_type("$LEVEL_NUM", "3", LM_VT_INT32);
+  assert_template_format_value_and_type("$LEVEL_NUM", "3", LM_VT_INTEGER);
 
   assert_template_format_value_and_type("$TAG", "9b", LM_VT_STRING);
   assert_template_format_value_and_type("$TAGS", "alma,korte,citrom,\"tag,containing,comma\"", LM_VT_LIST);
@@ -340,8 +341,8 @@ Test(template, test_macros_v40)
   assert_template_format_value_and_type("$SOURCEIP", "10.11.12.13", LM_VT_STRING);
   assert_template_format_value_and_type("$RCPTID", "555", LM_VT_STRING);
   assert_template_format_value_and_type("$DESTIP", "127.0.0.5", LM_VT_STRING);
-  assert_template_format_value_and_type("$DESTPORT", "6514", LM_VT_INT32);
-  assert_template_format_value_and_type("$PROTO", "33", LM_VT_INT32);
+  assert_template_format_value_and_type("$DESTPORT", "6514", LM_VT_INTEGER);
+  assert_template_format_value_and_type("$PROTO", "33", LM_VT_INTEGER);
 
   assert_template_format_value_and_type("$SEQNUM", "999", LM_VT_STRING);
   assert_template_format_value_and_type("$CONTEXT_ID", "test-context-id", LM_VT_STRING);
@@ -483,6 +484,7 @@ Test(template, test_single_values_and_literal_strings_are_considered_trivial)
 {
   LogMessage *msg = create_sample_message();
 
+  cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
   assert_template_trivial_value("", msg, "", LM_VT_STRING);
   assert_template_trivial_value(" ", msg, " ", LM_VT_STRING);
   assert_template_trivial_value("literal", msg, "literal", LM_VT_STRING);
@@ -490,10 +492,11 @@ Test(template, test_single_values_and_literal_strings_are_considered_trivial)
   assert_template_trivial_value("$MSG", msg, "árvíztűrőtükörfúrógép", LM_VT_STRING);
   assert_template_trivial_value("$HOST", msg, "bzorp", LM_VT_STRING);
   assert_template_trivial_value("${APP.VALUE}", msg, "value", LM_VT_STRING);
-  assert_template_trivial_value("${number1}", msg, "123", LM_VT_STRING);
+  assert_template_trivial_value("${number1}", msg, "123", LM_VT_INTEGER);
 
-  cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
-  assert_template_trivial_value("${number1}", msg, "123", LM_VT_INT64);
+
+  cfg_set_version_without_validation(configuration, VERSION_VALUE_3_38);
+  assert_template_trivial_value("${number1}", msg, "123", LM_VT_STRING);
 
   log_msg_unref(msg);
 }
@@ -629,7 +632,7 @@ Test(template, test_single_element_typed_value_refs_are_typed_as_the_value)
 {
   cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
 
-  assert_template_format_value_and_type("${number1}", "123", LM_VT_INT64);
+  assert_template_format_value_and_type("${number1}", "123", LM_VT_INTEGER);
 }
 
 Test(template, test_single_element_typed_value_refs_with_escaping_are_typed_as_strings)
@@ -655,7 +658,7 @@ Test(template, test_type_hint_overrides_the_calculated_type)
   /* no type-hint */
   log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
   cr_assert_str_eq("123", formatted_value->str);
-  cr_assert_eq(type, LM_VT_INT64);
+  cr_assert_eq(type, LM_VT_INTEGER);
 
   cr_assert(log_template_set_type_hint(template, "float", NULL));
   log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
@@ -672,7 +675,7 @@ Test(template, test_type_hint_overrides_the_calculated_type)
   cr_assert(log_template_set_type_hint(template, "int64", NULL));
   log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
   cr_assert_str_eq("bzorp", formatted_value->str);
-  cr_assert_eq(type, LM_VT_INT64);
+  cr_assert_eq(type, LM_VT_INTEGER);
 
   /* empty string with a type uses the type hint */
   log_template_unref(template);
@@ -705,7 +708,7 @@ Test(template, test_log_template_compile_with_type_hint_sets_the_type_hint_membe
   result = log_template_compile_with_type_hint(template, "int64(1234)", &error);
   cr_assert(result);
   cr_assert_eq(error, NULL);
-  cr_assert_eq(template->type_hint, LM_VT_INT64);
+  cr_assert_eq(template->type_hint, LM_VT_INTEGER);
   result = log_template_compile_with_type_hint(template, "string(1234)", &error);
   cr_assert(result);
   cr_assert_eq(error, NULL);
@@ -733,7 +736,7 @@ Test(template, test_log_template_compile_with_invalid_type_hint_resets_the_type_
   result = log_template_compile_with_type_hint(template, "int64(1234)", &error);
   cr_assert(result);
   cr_assert_eq(error, NULL);
-  cr_assert_eq(template->type_hint, LM_VT_INT64);
+  cr_assert_eq(template->type_hint, LM_VT_INTEGER);
   result = log_template_compile_with_type_hint(template, "unknown(generic-string)", &error);
   cr_assert_not(result);
   cr_assert_neq(error, NULL);
@@ -752,24 +755,92 @@ Test(template, test_log_template_with_escaping_produces_string_even_if_the_value
   LogTemplate *template = compile_template("$FACILITY_NUM");
   log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
   cr_assert_str_eq("19", formatted_value->str);
-  cr_assert_eq(type, LM_VT_INT32);
+  cr_assert_eq(type, LM_VT_INTEGER);
+  log_template_unref(template);
 
   template = compile_escaped_template("$FACILITY_NUM");
   log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
   cr_assert_str_eq("19", formatted_value->str);
   cr_assert_eq(type, LM_VT_STRING);
+  log_template_unref(template);
 
   template = compile_template("$number1");
   log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
   cr_assert_str_eq("123", formatted_value->str);
-  cr_assert_eq(type, LM_VT_INT64);
+  cr_assert_eq(type, LM_VT_INTEGER);
+  log_template_unref(template);
 
   template = compile_escaped_template("$number1");
   log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
   cr_assert_str_eq("123", formatted_value->str);
   cr_assert_eq(type, LM_VT_STRING);
+  log_template_unref(template);
 
   log_msg_unref(msg);
+  g_string_free(formatted_value, TRUE);
+}
+
+Test(template, test_bytes_and_protobuf_types_are_rendered_when_necessary)
+{
+  cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
+
+  LogTemplate *template = log_template_new(configuration, NULL);
+  GError *error = NULL;
+  gboolean result;
+
+  GString *formatted_value = g_string_sized_new(64);
+  LogMessage *msg = create_sample_message();
+  LogMessageValueType type;
+
+  result = log_template_compile(template, "$bytes", &error);
+  cr_assert(result);
+  cr_assert_eq(error, NULL);
+  log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
+  cr_assert_str_eq("", formatted_value->str);
+  cr_assert_eq(type, LM_VT_NULL);
+
+  result = log_template_compile(template, "$protobuf", &error);
+  cr_assert(result);
+  cr_assert_eq(error, NULL);
+  log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
+  cr_assert_str_eq("", formatted_value->str);
+  cr_assert_eq(type, LM_VT_NULL);
+
+  result = log_template_compile_with_type_hint(template, "bytes($bytes almafa)", &error);
+  cr_assert(result);
+  cr_assert_eq(error, NULL);
+  cr_assert_eq(template->type_hint, LM_VT_BYTES);
+  log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
+  cr_assert_eq(formatted_value->len, 11);
+  cr_assert_eq(memcmp(formatted_value->str, "\0\1\2\3 almafa", 11), 0);
+  cr_assert_eq(type, LM_VT_BYTES);
+
+  result = log_template_compile_with_type_hint(template, "protobuf($protobuf almafa)", &error);
+  cr_assert(result);
+  cr_assert_eq(error, NULL);
+  cr_assert_eq(template->type_hint, LM_VT_PROTOBUF);
+  log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
+  cr_assert_eq(formatted_value->len, 11);
+  cr_assert_eq(memcmp(formatted_value->str, "\4\5\6\7 almafa", 11), 0);
+  cr_assert_eq(type, LM_VT_PROTOBUF);
+
+  result = log_template_compile_with_type_hint(template, "bytes($protobuf)", &error);
+  cr_assert(result);
+  cr_assert_eq(error, NULL);
+  cr_assert_eq(template->type_hint, LM_VT_BYTES);
+  log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
+  cr_assert_str_eq("", formatted_value->str);
+  cr_assert_eq(type, LM_VT_BYTES);
+
+  result = log_template_compile_with_type_hint(template, "protobuf($bytes)", &error);
+  cr_assert(result);
+  cr_assert_eq(error, NULL);
+  cr_assert_eq(template->type_hint, LM_VT_PROTOBUF);
+  log_template_format_value_and_type(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value, &type);
+  cr_assert_str_eq("", formatted_value->str);
+  cr_assert_eq(type, LM_VT_PROTOBUF);
+
   log_template_unref(template);
+  log_msg_unref(msg);
   g_string_free(formatted_value, TRUE);
 }

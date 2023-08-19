@@ -47,6 +47,12 @@ void msg_event_print_event_to_stderr(EVTREC *e);
 
 
 void msg_set_post_func(MsgPostFunc func);
+gint msg_map_string_to_log_level(const gchar *log_level);
+void msg_set_log_level(gint new_log_level);
+gint msg_get_log_level(void);
+void msg_apply_cmdline_log_level(gint new_log_level);
+void msg_apply_config_log_level(gint new_log_level);
+
 void msg_init(gboolean interactive);
 void msg_deinit(void);
 
@@ -107,6 +113,12 @@ void msg_add_option_group(GOptionContext *ctx);
             msg_event_create(EVT_PRI_DEBUG, desc, ##tags, NULL ));          \
   } while (0)
 
+#define msg_trace_printf(fmt, values...)       \
+  do {                                    \
+    if (G_UNLIKELY(trace_flag))                               \
+      msg_send_message_printf(EVT_PRI_DEBUG, fmt, ##values);        \
+  } while (0)
+
 #define msg_diagnostics(desc, tags...)              \
   do {                    \
     if (G_UNLIKELY(trace_flag))                     \
@@ -130,5 +142,6 @@ void msg_add_option_group(GOptionContext *ctx);
 
 void msg_post_message(LogMessage *msg);
 void msg_send_formatted_message(int prio, const char *msg);
+void msg_send_message_printf(int prio, const gchar *fmt, ...) G_GNUC_PRINTF(2, 3);
 
 #endif

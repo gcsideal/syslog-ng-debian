@@ -36,13 +36,13 @@
 typedef struct
 {
   gchar *name;
-  LogTemplate *template;
+  LogTemplate *template_obj;
 } AFSMTPHeader;
 
 typedef struct
 {
   gchar *phrase;
-  LogTemplate *template;
+  LogTemplate *template_obj;
   afsmtp_rcpt_type_t type;
 } AFSMTPRecipient;
 
@@ -129,9 +129,9 @@ afsmtp_dd_set_from(LogDriver *d, LogTemplate *phrase, LogTemplate *mbox)
   AFSMTPDriver *self = (AFSMTPDriver *)d;
 
   g_free(self->mail_from->phrase);
-  self->mail_from->phrase = afsmtp_wash_string(g_strdup(phrase->template));
-  log_template_unref(self->mail_from->template);
-  self->mail_from->template = log_template_ref(mbox);
+  self->mail_from->phrase = afsmtp_wash_string(g_strdup(phrase->template_str));
+  log_template_unref(self->mail_from->template_obj);
+  self->mail_from->template_obj = log_template_ref(mbox);
 }
 
 void
@@ -142,9 +142,9 @@ afsmtp_dd_add_rcpt(LogDriver *d, afsmtp_rcpt_type_t type, LogTemplate *phrase,
   AFSMTPRecipient *rcpt;
 
   rcpt = g_new0(AFSMTPRecipient, 1);
-  rcpt->phrase = afsmtp_wash_string(g_strdup(phrase->template));
-  log_template_unref(rcpt->template);
-  rcpt->template = log_template_ref(mbox);
+  rcpt->phrase = afsmtp_wash_string(g_strdup(phrase->template_str));
+  log_template_unref(rcpt->template_obj);
+  rcpt->template_obj = log_template_ref(mbox);
   rcpt->type = type;
 
   self->rcpt_tos = g_list_append(self->rcpt_tos, rcpt);
@@ -176,8 +176,8 @@ afsmtp_dd_add_header(LogDriver *d, const gchar *header, LogTemplate *value)
 
   h = g_new0(AFSMTPHeader, 1);
   h->name = g_strdup(header);
-  log_template_unref(h->template);
-  h->template = log_template_ref(value);
+  log_template_unref(h->template_obj);
+  h->template_obj = log_template_ref(value);
 
   self->headers = g_list_append(self->headers, h);
 
@@ -199,17 +199,18 @@ ignore_sigpipe (void)
 }
 
 static const gchar *
-afsmtp_dd_format_stats_instance(LogThreadedDestDriver *d)
+afsmtp_dd_format_stats_key(LogThreadedDestDriver *d, StatsClusterKeyBuilder *kb)
 {
   AFSMTPDriver *self = (AFSMTPDriver *)d;
-  static gchar persist_name[1024];
 
-  if (d->super.super.super.persist_name)
-    g_snprintf(persist_name, sizeof(persist_name), "smtp,%s", d->super.super.super.persist_name);
-  else
-    g_snprintf(persist_name, sizeof(persist_name), "smtp,%s,%u", self->host, self->port);
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("driver", "smtp"));
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("host", self->host));
 
-  return persist_name;
+  gchar num[64];
+  g_snprintf(num, sizeof(num), "%u", self->port);
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("port", num));
+
+  return NULL;
 }
 
 static const gchar *
@@ -254,13 +255,13 @@ _smtp_message_add_recipient_header(smtp_message_t self, AFSMTPRecipient *rcpt, A
 }
 
 static void
-_smtp_message_add_recipient_from_template(smtp_message_t self, AFSMTPDriver *driver, LogTemplate *template,
+_smtp_message_add_recipient_from_template(smtp_message_t self, AFSMTPDriver *driver, LogTemplate *template_obj,
                                           LogMessage *msg)
 {
   LogTemplateEvalOptions options = {&driver->template_options, LTZ_SEND,
                                     driver->super.worker.instance.seq_num, NULL, LM_VT_STRING
                                    };
-  log_template_format(template, msg, &options, driver->str);
+  log_template_format(template_obj, msg, &options, driver->str);
   smtp_add_recipient(self, afsmtp_wash_string (driver->str->str));
 }
 
@@ -271,7 +272,7 @@ afsmtp_dd_msg_add_recipient(AFSMTPRecipient *rcpt, gpointer user_data)
   LogMessage *msg = ((gpointer *)user_data)[1];
   smtp_message_t message = ((gpointer *)user_data)[2];
 
-  _smtp_message_add_recipient_from_template(message, self, rcpt->template, msg);
+  _smtp_message_add_recipient_from_template(message, self, rcpt->template_obj, msg);
   _smtp_message_add_recipient_header(message, rcpt, self);
 }
 
@@ -285,7 +286,7 @@ afsmtp_dd_msg_add_header(AFSMTPHeader *hdr, gpointer user_data)
   LogTemplateEvalOptions options = {&self->template_options, LTZ_LOCAL,
                                     self->super.worker.instance.seq_num, NULL, LM_VT_STRING
                                    };
-  log_template_format(hdr->template, msg, &options, self->str);
+  log_template_format(hdr->template_obj, msg, &options, self->str);
 
   smtp_set_header(message, hdr->name, afsmtp_wash_string (self->str->str), NULL);
   smtp_set_header_option(message, hdr->name, Hdr_OVERRIDE, 1);
@@ -400,7 +401,7 @@ __build_message(AFSMTPDriver *self, LogMessage *msg, smtp_session_t session)
   LogTemplateEvalOptions options = {&self->template_options, LTZ_SEND,
                                     self->super.worker.instance.seq_num, NULL, LM_VT_STRING
                                    };
-  log_template_format(self->mail_from->template, msg, &options, self->str);
+  log_template_format(self->mail_from->template_obj, msg, &options, self->str);
   smtp_set_reverse_path(message, afsmtp_wash_string(self->str->str));
 
   /* Defaults */
@@ -550,7 +551,7 @@ __check_rcpt_tos(AFSMTPDriver *self)
                                     rcpt->type == AFSMTP_RCPT_TYPE_CC  ||
                                     rcpt->type == AFSMTP_RCPT_TYPE_TO;
 
-      if (rcpt->template && rcpt_type_accepted)
+      if (rcpt->template_obj && rcpt_type_accepted)
         {
           result = TRUE;
           break;
@@ -564,7 +565,7 @@ __check_rcpt_tos(AFSMTPDriver *self)
 static gboolean
 __check_required_options(AFSMTPDriver *self)
 {
-  if (!self->mail_from->template)
+  if (!self->mail_from->template_obj)
     {
       msg_error("Error: from or sender option is required",
                 evt_tag_str("driver", self->super.super.super.id));
@@ -623,7 +624,7 @@ afsmtp_dd_free(LogPipe *d)
 
   g_free(self->host);
   g_free(self->mail_from->phrase);
-  log_template_unref(self->mail_from->template);
+  log_template_unref(self->mail_from->template_obj);
   g_free(self->mail_from);
   log_template_unref(self->subject_template);
   log_template_unref(self->body_template);
@@ -633,7 +634,7 @@ afsmtp_dd_free(LogPipe *d)
     {
       AFSMTPRecipient *rcpt = (AFSMTPRecipient *)l->data;
       g_free(rcpt->phrase);
-      log_template_unref(rcpt->template);
+      log_template_unref(rcpt->template_obj);
       g_free(rcpt);
       l = g_list_delete_link(l, l);
     }
@@ -644,7 +645,7 @@ afsmtp_dd_free(LogPipe *d)
       AFSMTPHeader *hdr = (AFSMTPHeader *)l->data;
 
       g_free(hdr->name);
-      log_template_unref(hdr->template);
+      log_template_unref(hdr->template_obj);
       g_free(hdr);
       l = g_list_delete_link(l, l);
     }
@@ -670,7 +671,7 @@ afsmtp_dd_new(GlobalConfig *cfg)
   self->super.worker.thread_deinit = afsmtp_worker_thread_deinit;
   self->super.worker.insert = afsmtp_worker_insert;
 
-  self->super.format_stats_instance = afsmtp_dd_format_stats_instance;
+  self->super.format_stats_key = afsmtp_dd_format_stats_key;
   self->super.stats_source = stats_register_type("smtp");
 
   afsmtp_dd_set_host((LogDriver *)self, "127.0.0.1");

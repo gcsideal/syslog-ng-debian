@@ -34,6 +34,7 @@
 #include "poll-fd-events.h"
 #include "logproto/logproto-dgram-server.h"
 #include "transport/transport-socket.h"
+#include "stats/stats-cluster-key-builder.h"
 
 #define OPENBSD_LOG_DEV  "/dev/klog"
 
@@ -121,15 +122,19 @@ _openbsd_sd_init(LogPipe *s)
     }
 
   self->reader = log_reader_new(cfg);
+  log_pipe_set_options(&self->reader->super.super, &self->super.super.super.options);
   log_reader_open(self->reader, log_proto_dgram_server_new(log_transport_stream_socket_new(syslog_fd),
                                                            &self->reader_options.proto_options.super),
                   poll_fd_events_new(syslog_fd));
 
+  StatsClusterKeyBuilder *kb = stats_cluster_key_builder_new();
+  stats_cluster_key_builder_add_label(kb, stats_cluster_label("driver", "openbsd"));
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("filename", OPENBSD_LOG_DEV));
   log_reader_set_options(self->reader,
                          s,
                          &self->reader_options,
                          self->super.super.id,
-                         OPENBSD_LOG_DEV);
+                         kb);
   log_pipe_append((LogPipe *) self->reader, s);
 
   if (!log_pipe_init((LogPipe *) self->reader))

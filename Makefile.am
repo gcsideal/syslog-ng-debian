@@ -33,7 +33,7 @@ endif
 
 ACLOCAL_AMFLAGS		= -I m4 --install
 
-EXTRA_DIST		= ${BUILT_SOURCES} VERSION NEWS.md autogen.sh \
+EXTRA_DIST		= $(filter-out ${NODIST_BUILT_SOURCES},${BUILT_SOURCES}) VERSION NEWS.md autogen.sh \
 			  dist.conf dist.conf.in syslog-ng.pc.in \
 			  syslog-ng-config.h.in	\
 			  CONTRIBUTING.md	\
@@ -42,9 +42,9 @@ EXTRA_DIST		= ${BUILT_SOURCES} VERSION NEWS.md autogen.sh \
 			  syslog-ng-native-connector.pc.cmake	\
 			  syslog-ng-ctl/CMakeLists.txt	\
 			  requirements.txt	\
+			  dev-requirements.txt  \
 			  README.md	\
-			  .astylerc	\
-			  .travis.yml
+			  .astylerc
 
 
 pkgconfigdir		= $(libdir)/pkgconfig
@@ -59,8 +59,16 @@ AM_CPPFLAGS		= -I$(top_srcdir)/lib -I$(top_srcdir)/modules -I$(top_builddir)/lib
 AM_CFLAGS = \
 	-Wshadow
 
+AM_CXXFLAGS = \
+	-Wshadow
+
 # Acceptable warnings
 AM_CFLAGS += \
+	-Wno-stack-protector \
+	-Wno-unused-parameter \
+	-Wno-variadic-macros
+
+AM_CXXFLAGS += \
 	-Wno-stack-protector \
 	-Wno-unused-parameter \
 	-Wno-variadic-macros
@@ -90,6 +98,22 @@ AM_CFLAGS += \
 	-Woverride-init \
 	-Wfloat-conversion \
 	-Wbad-function-cast
+
+AM_CXXFLAGS += \
+	-Wswitch-default \
+	-Wall \
+	-Wuninitialized \
+	-Wdeprecated \
+	-Wdeprecated-declarations \
+	-Woverflow \
+	-Wdouble-promotion \
+	-Wfloat-equal \
+	-Wpointer-arith \
+	-Wmissing-format-attribute \
+	-Wundef \
+	-Wignored-qualifiers \
+	-Wfloat-conversion \
+	-Wunused-but-set-parameter
 endif
 
 if ENABLE_DEBUG
@@ -97,6 +121,8 @@ AM_CFLAGS += -DYYDEBUG=1
 endif
 
 TEST_CFLAGS		= -DTOP_SRCDIR=\"$(abs_top_srcdir)\" $(AM_CFLAGS) $(CRITERION_CFLAGS)
+
+TEST_CXXFLAGS		= -DTOP_SRCDIR=\"$(abs_top_srcdir)\" $(AM_CXXFLAGS) $(CRITERION_CFLAGS) -lstdc++
 
 TEST_LDADD		= $(LIBTEST_LIBS) $(CRITERION_LIBS) \
 			  $(top_builddir)/lib/libsyslog-ng.la \
@@ -150,6 +176,7 @@ pkginclude_HEADERS	= syslog-ng-config.h
 module_LTLIBRARIES	=
 loggenplugin_LTLIBRARIES	=
 BUILT_SOURCES		=
+NODIST_BUILT_SOURCES		=
 CLEANFILES 		= $(BUILT_SOURCES)
 check_PROGRAMS		=
 check_SCRIPTS		=
@@ -213,6 +240,7 @@ install_loggenpluginLTLIBRARIES	= install-loggenpluginLTLIBRARIES
 $(install_loggenpluginLTLIBRARIES): install-libLTLIBRARIES
 
 include Mk/lex-rules.am
+include Mk/python-venv.am
 include Mk/Makefile.am
 if ENABLE_TESTING
 include libtest/Makefile.am

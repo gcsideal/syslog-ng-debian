@@ -15,6 +15,7 @@ lib/eventlog
 modules/java/org_syslog_ng_[^./_-]+\.h$
 modules/(afmongodb|afamqp)/dummy\.c$
 modules/kafka/tests/sample\.properties
+modules/grpc/otel/opentelemetry-proto
 dev-utils/plugin_skeleton_creator/plugin_template.*
 (lib|modules)/.*\.conf$
 dist\.conf$
@@ -34,7 +35,6 @@ doc/man
 (_configs\.sed|\.project|\.cproject|config\.status)$
 stamp-h1$
 tests/functional/test\.conf$
-contrib/config_option_database/.coveragerc
 scripts/update-patterndb$
 (contrib|debian)
 packaging/debian
@@ -58,7 +58,8 @@ tests/light/tox.ini
 tests/light/.pre-commit-config.yaml
 .github/workflows/.*$
 lib/logmsg/tests/messages/syslog-ng-(pe-)?[.0-9]*-msg.h$
-
+modules/python-modules/requirements\.lock
+lib/multi-line/smart-multi-line\.fsm$
 
 ###########################################################################
 # These files are LGPLd and are external contributions _without_ a Balabit
@@ -66,12 +67,18 @@ lib/logmsg/tests/messages/syslog-ng-(pe-)?[.0-9]*-msg.h$
 ###########################################################################
                                                  LGPLv2.1+_SSL,non-balabit
 
+cmake/Modules/FindLIBBPF\.cmake
 lib/timeutils/zonecache.[ch]$
 modules/secure-logging
 modules/secure-logging/tests
 modules/secure-logging/slogencrypt
 modules/secure-logging/slogverify
 modules/secure-logging/slogkey
+lib/compat/cpp-(start|end).\h$
+lib/healthcheck
+lib/healthcheck/tests
+lib/cfg-monitor\.[ch]
+lib/metrics-pipe\.[ch]
 lib/rewrite/rewrite-set-facility\.h
 lib/rewrite/rewrite-set-matches\.[ch]
 lib/rewrite/rewrite-unset-matches\.[ch]
@@ -80,11 +87,32 @@ lib/rewrite/tests/test_set_facility\.c
 lib/rewrite/tests/test_set_tag\.c
 lib/rewrite/rewrite-set-pri\.h
 lib/rewrite/rewrite-set-pri\.c
+lib/stats/stats-cluster-key-builder\.[ch]
+lib/stats/stats-prometheus\.c
+lib/stats/stats-prometheus\.h
+lib/stats/stats-compat\.h
+lib/stats/tests/test_stats_prometheus\.c
+lib/stats/tests/test_stats_cluster_key_builder\.c
 lib/timeutils/timeutils\.h
+lib/logscheduler\.[ch]
+lib/logscheduler-pipe\.[ch]
 lib/logmsg/tests/dump_logmsg\.c
+lib/multi-line/smart-multi-line\.[ch]
+lib/multi-line/tests/test_smart_multi_line\.c
 libtest/mock-logpipe\.[ch]
 lib/generic-number\.[ch]
 lib/tests/test_generic_number\.c
+syslog-ng-ctl/commands/log-level.[ch]
+modules/afsocket/afsocket-signals.h
+syslog-ng-ctl/commands/healthcheck.[ch]
+modules/python-modules/syslogng/confgen\.py
+modules/python-modules/syslogng/dest\.py
+modules/python-modules/syslogng/logger\.py
+modules/python-modules/syslogng/message\.py
+modules/python-modules/syslogng/parser\.py
+modules/python-modules/syslogng/template\.py
+modules/python/python-confgen\.[ch]
+lib/tests/test_logscheduler\.c
 
 ###########################################################################
 # These tests are GPLd even though they reside under lib/ and are excluded
@@ -111,7 +139,7 @@ autogen\.sh$
 sub-configure\.sh$
 configure\.ac$
 Makefile\.am$
-lib/(compat|str-repr|timeutils|control|debugger|filter|logproto|parser|rewrite|stats|template|tests|transport|logmsg|value-pairs|secret-storage|logthrdest|logthrsource|ack-tracker|signal-slot-connector|[^/]*$)
+lib/(compat|str-repr|timeutils|control|debugger|filter|logproto|multi-line|parser|rewrite|stats|template|tests|transport|logmsg|value-pairs|secret-storage|logthrdest|logthrsource|ack-tracker|signal-slot-connector|[^/]*$)
 lib/scanner/(csv-scanner|list-scanner|kv-scanner|xml-scanner|[^/]*$)
 libtest
 syslog-ng(-ctl)?
@@ -121,32 +149,71 @@ modules/native
 modules/http/http-signals.h
 tests/loggen
 persist-tool
-
+modules/python-modules/syslogng/__init__\.py
+modules/python-modules/syslogng/persist\.py
+modules/python-modules/syslogng/source\.py
 
 ###########################################################################
 # These files are GPLd and non-balabit contributions.
 ###########################################################################
                                                  GPLv2+_SSL,non-balabit
 
+modules/diskq/tests/test_diskq_counters\.c
 modules/http/(http|http-parser|http-plugin|)\.[ch]
 modules/http/http-grammar.ym
 modules/timestamp/rewrite-.*$
+modules/timestamp/tf-format-date.*$
+modules/timestamp/tests/test_format_date.*$
 modules/add-contextual-data/add-contextual-data-glob-selector\.[ch]$
 modules/add-contextual-data/tests/test_glob_selector\.c$
 modules/affile/tests/test_file_writer\.c$
 modules/afsocket/socket-options-unix\.[ch]$
 modules/basicfuncs/vp-funcs\.[ch]$
+modules/correlation/group-lines\.[ch]$
+modules/diskq/diskq-global-metrics\.[ch]$
+modules/diskq/tests/test_logqueue_disk\.c$
+modules/metrics-probe/metrics-probe(|-parser|-plugin|-grammar)\.(c|h|ym)$
+modules/metrics-probe/label-template\.(c|h)$
+modules/metrics-probe/tests/test_metrics_probe\.c$
+modules/grpc/otel/otel-(grammar|parser|plugin|source|source-services|servicecall|protobuf-parser|protobuf-formatter|dest|dest-worker)\.(c|h|cpp|hpp|ym)$
+modules/grpc/otel/grpc-credentials-builder\.(h|cpp|hpp)$
+modules/grpc/otel/tests/test-otel-(protobuf-parser|protobuf-formatter)\.cpp$
+modules/examples/inner-destinations/tls-test-validation
+modules/examples/sources/random-choice-generator
+modules/python/python-options.(c|h)$
+modules/python/python-flags.(c|h)$
+modules/python/tests/test_python_options.c$
 scl/fortigate/.*\.conf$
 scl/cee/.*\.conf$
+scl/logscale/logscale\.conf$
 scl/mariadb/.*\.conf$
-scl/kubernetes/.*\.conf$
+scl/python/python-modules\.conf$
+scl/splunk/splunk\.conf$
+modules/python-modules/syslogng/modules/kubernetes/.*
+modules/ebpf/.*
+modules/python-modules/syslogng/modules/hypr/.*
+modules/python-modules/syslogng/modules/example/.*
+modules/python-modules/setup\.py
+scripts/build-python-venv\.sh
+modules/syslogformat/sdata-parser\.[ch]
+tests/light/functional_tests/config_change/test_python_custom_options\.py
+tests/light/functional_tests/logpath/__init__.py
+tests/light/functional_tests/logpath/test_named_logpaths.py
+tests/light/functional_tests/logpath/test_named_logpaths_with_catchall_flag.py
+tests/light/functional_tests/logpath/test_named_logpaths_with_fallback_flag.py
+tests/light/functional_tests/logpath/test_named_logpaths_with_final_flag.py
+tests/light/functional_tests/parsers/sdata-parser/test_sdata_parser\.py
+tests/light/functional_tests/parsers/group-lines-parser/test_group_lines_parser\.py
+tests/light/functional_tests/logpath/test_conditionals\.py
+tests/light/functional_tests/logpath/test_midpoint_destinations\.py
+tests/light/functional_tests/value-pairs/test_value_pairs\.py
+tests/light/src/syslog_ng_ctl/prometheus_stats_handler.py
 
 ###########################################################################
 # These files are GPLd with Balabit origin.
 ###########################################################################
                                                  GPLv2+_SSL
 
-contib/config_option_database
 news/create-newsfile.py
 news/next-pr-id.py
 dev-utils/plugin_skeleton_creator/create_plugin.sh
@@ -160,7 +227,7 @@ tests/copyright/check.sh
 tests/light
 modules/java/(tools|[^/]*$)
 modules/java-modules/(dummy|elastic-v2|hdfs|http|kafka|[^/]*$)
-modules/(afamqp|affile|afmongodb|afprog|afsmtp|afsocket|afsql|afstomp|afstreams|afuser|azure-auth-header|basicfuncs|cef|confgen|cryptofuncs|csvparser|timestamp|diskq|dbparser|geoip2|graphite|json|kvformat|linux-kmsg-format|pacctformat|pseudofile|python|redis|riemann|syslogformat|systemd-journal|getent|system-source|stardate|snmptrapd-parser|xml|openbsd|examples|kafka|afsnmp|mqtt|regexp-parser|rate-limit-filter|[^/]*$)
+modules/(afamqp|affile|afmongodb|afprog|afsmtp|afsocket|afsql|afstomp|afstreams|afuser|azure-auth-header|basicfuncs|cef|confgen|cryptofuncs|csvparser|timestamp|diskq|correlation|geoip2|graphite|json|kvformat|linux-kmsg-format|pacctformat|pseudofile|python|python-modules|redis|riemann|syslogformat|systemd-journal|getent|system-source|stardate|snmptrapd-parser|xml|openbsd|examples|kafka|afsnmp|mqtt|regexp-parser|rate-limit-filter|[^/]*$)
 modules/(add-contextual-data|tagsparser|map-value-pairs|hook-commands|appmodel|[^/]*$)
 modules/cryptofuncs/cryptofuncs\.c$
 modules/cryptofuncs/tests/test_cryptofuncs\.c$

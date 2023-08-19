@@ -1,5 +1,5 @@
 Name: syslog-ng
-Version: 3.38.1
+Version: 4.3.1
 Release: 2%{?dist}
 Summary: Next-generation syslog server
 
@@ -60,7 +60,7 @@ BuildRequires: libcap-devel
 BuildRequires: libdbi-devel
 BuildRequires: libnet-devel
 BuildRequires: openssl-devel
-BuildRequires: pcre-devel
+BuildRequires: pcre2-devel
 BuildRequires: libuuid-devel
 BuildRequires: libesmtp-devel
 BuildRequires: libcurl-devel
@@ -376,12 +376,16 @@ rm %{buildroot}/usr/lib/systemd/system/syslog-ng@.service
 %{__install} -p -m 644 lib/*.h %{buildroot}%{_includedir}/%{name}
 
 # install vim files
-%{__install} -d -m 755 %{buildroot}%{_datadir}/%{name}
-%{__install} -p -m 644 contrib/syslog-ng.vim %{buildroot}%{_datadir}/%{name}
+%{__install} -d -m 755 %{buildroot}%{_datadir}/%{name}/vim/ftdetect
+%{__install} -d -m 755 %{buildroot}%{_datadir}/%{name}/vim/syntax
+%{__install} -p -m 644 contrib/vim/ftdetect/syslog-ng.vim %{buildroot}%{_datadir}/%{name}/vim/ftdetect
+%{__install} -p -m 644 contrib/vim/syntax/syslog-ng.vim %{buildroot}%{_datadir}/%{name}/vim/syntax
 for vimver in 73 ; do
+    %{__install} -d -m 755 %{buildroot}%{_datadir}/vim/vim$vimver/ftdetect
     %{__install} -d -m 755 %{buildroot}%{_datadir}/vim/vim$vimver/syntax
-    cd %{buildroot}%{_datadir}/vim/vim$vimver/syntax
-    ln -s ../../../%{name}/syslog-ng.vim .
+    cd %{buildroot}%{_datadir}/vim/vim$vimver
+    ln -s ../../../%{name}/vim/ftdetect/syslog-ng.vim ftdetect
+    ln -s ../../../%{name}/vim/syntax/syslog-ng.vim syntax
     cd -
 done
 
@@ -408,22 +412,28 @@ fi
 
 %triggerin -- vim-common
 VIMVERNEW=`rpm -q --qf='%%{epoch}:%%{version}\n' vim-common | sort | tail -n 1 | sed -e 's/[0-9]*://' | sed -e 's/\.[0-9]*$//' | sed -e 's/\.//'`
+[ -d %{_datadir}/vim/vim${VIMVERNEW}/ftdetect ] && \
+    cd %{_datadir}/vim/vim${VIMVERNEW}/ftdetect && \
+    ln -sf ../../../%{name}/vim/ftdetect/syslog-ng.vim . || :
 [ -d %{_datadir}/vim/vim${VIMVERNEW}/syntax ] && \
     cd %{_datadir}/vim/vim${VIMVERNEW}/syntax && \
-    ln -sf ../../../%{name}/syslog-ng.vim . || :
+    ln -sf ../../../%{name}/vim/syntax/syslog-ng.vim . || :
 
 %triggerun -- vim-common
 VIMVEROLD=`rpm -q --qf='%%{epoch}:%%{version}\n' vim-common | sort | head -n 1 | sed -e 's/[0-9]*://' | sed -e 's/\.[0-9]*$//' | sed -e 's/\.//'`
-[ $2 = 0 ] && rm -f %{_datadir}/vim/vim${VIMVEROLD}/syntax/syslog-ng.vim || :
+[ $2 = 0 ] && rm -f %{_datadir}/vim/vim${VIMVEROLD}/ftdetect/syslog-ng.vim %{_datadir}/vim/vim${VIMVEROLD}/syntax/syslog-ng.vim || :
 
 %triggerpostun -- vim-common
 VIMVEROLD=`rpm -q --qf='%%{epoch}:%%{version}\n' vim-common | sort | head -n 1 | sed -e 's/[0-9]*://' | sed -e 's/\.[0-9]*$//' | sed -e 's/\.//'`
 VIMVERNEW=`rpm -q --qf='%%{epoch}:%%{version}\n' vim-common | sort | tail -n 1 | sed -e 's/[0-9]*://' | sed -e 's/\.[0-9]*$//' | sed -e 's/\.//'`
 if [ $1 = 1 ]; then
-    rm -f %{_datadir}/vim/vim${VIMVEROLD}/syntax/syslog-ng.vim || :
+    rm -f %{_datadir}/vim/vim${VIMVEROLD}/ftdetect/syslog-ng.vim %{_datadir}/vim/vim${VIMVEROLD}/syntax/syslog-ng.vim || :
+    [ -d %{_datadir}/vim/vim${VIMVERNEW}/ftdetect ] && \
+        cd %{_datadir}/vim/vim${VIMVERNEW}/ftdetect && \
+        ln -sf ../../../%{name}/vim/ftdetect/syslog-ng.vim . || :
     [ -d %{_datadir}/vim/vim${VIMVERNEW}/syntax ] && \
         cd %{_datadir}/vim/vim${VIMVERNEW}/syntax && \
-        ln -sf ../../../%{name}/syslog-ng.vim . || :
+        ln -sf ../../../%{name}/vim/syntax/syslog-ng.vim . || :
 fi
 
 
@@ -436,7 +446,7 @@ fi
 %dir %{_sysconfdir}/%{name}/conf.d
 %dir %{_sysconfdir}/%{name}/patterndb.d
 %config(noreplace) %{_sysconfdir}/%{name}/%{name}.conf
-%config(noreplace) %{_sysconfdir}/%{name}/scl.conf
+%config(noreplace) %{_datadir}/%{name}/include/scl.conf
 %if 0%{?rhel} == 7
 %config(noreplace) %{_sysconfdir}/logrotate.d/syslog
 %endif
@@ -467,7 +477,7 @@ fi
 %{_libdir}/%{name}/libcryptofuncs.so
 %{_libdir}/%{name}/libcsvparser.so
 %{_libdir}/%{name}/libtimestamp.so
-%{_libdir}/%{name}/libdbparser.so
+%{_libdir}/%{name}/libcorrelation.so
 %{_libdir}/%{name}/libdisk-buffer.so
 %{_libdir}/%{name}/libexamples.so
 %{_libdir}/%{name}/libgraphite.so
@@ -486,6 +496,7 @@ fi
 %{_libdir}/%{name}/libtfgetent.so
 %{_libdir}/%{name}/libxml.so
 %{_libdir}/%{name}/libpacctformat.so
+%{_libdir}/%{name}/libmetrics-probe.so
 
 %if %{with systemd}
 %{_unitdir}/%{name}.service
@@ -496,7 +507,8 @@ fi
 %{_libdir}/%{name}/loggen/libloggen*
 
 %dir %{_datadir}/%{name}
-%{_datadir}/%{name}/syslog-ng.vim
+%{_datadir}/%{name}/vim/ftdetect/syslog-ng.vim
+%{_datadir}/%{name}/vim/syntax/syslog-ng.vim
 %ghost %{_datadir}/vim/
 
 # scl files
@@ -504,6 +516,7 @@ fi
 
 # uhm, some better places for those?
 %{_datadir}/%{name}/xsd/
+%{_datadir}/%{name}/smart-multi-line.fsm
 
 %{_mandir}/man1/loggen.1*
 %{_mandir}/man1/pdbtool.1*
@@ -586,7 +599,14 @@ fi
 %files python
 %{_libdir}/%{name}/python/syslogng-1.0-py%{py_ver}.egg-info
 %{_libdir}/%{name}/python/syslogng/*
+%{_libdir}/%{name}/python/requirements.txt
 %{_libdir}/%{name}/libmod-python.so
+%dir %{_sysconfdir}/%{name}/python
+%{_sysconfdir}/%{name}/python/README.md
+%{_bindir}/syslog-ng-update-virtualenv
+
+%post python
+/usr/bin/syslog-ng-update-virtualenv -y
 
 %files devel
 %{_libdir}/libsyslog-ng.so
@@ -621,6 +641,27 @@ fi
 
 
 %changelog
+* Fri Jul 28 2023 github-actions <41898282+github-actions@users.noreply.github.com> - 4.3.1-1
+- updated to 4.3.1
+
+* Wed Jul 19 2023 github-actions <41898282+github-actions@users.noreply.github.com> - 4.3.0-1
+- updated to 4.3.0
+
+* Mon May  8 2023 github-actions <41898282+github-actions@users.noreply.github.com> - 4.2.0-1
+- updated to 4.2.0
+
+* Fri Mar 10 2023 github-actions <41898282+github-actions@users.noreply.github.com> - 4.1.1-1
+- updated to 4.1.1
+
+* Tue Feb 28 2023 github-actions <41898282+github-actions@users.noreply.github.com> - 4.1.0-1
+- updated to 4.1.0
+
+* Wed Dec 21 2022 github-actions <github-actions@github.com> - 4.0.1-1
+- updated to 4.0.1
+
+* Fri Nov  4 2022 github-actions <github-actions@github.com> - 4.0.0-1
+- updated to 4.0.0
+
 * Mon Aug 15 2022 github-actions <github-actions@github.com> - 3.38.1-1
 - updated to 3.38.1
 

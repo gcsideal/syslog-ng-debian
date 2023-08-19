@@ -12,10 +12,12 @@ add_flex_bison_dependency(CfgLexer CfgGrammar)
 add_subdirectory(ack-tracker)
 add_subdirectory(compat)
 add_subdirectory(control)
+add_subdirectory(healthcheck)
 add_subdirectory(debugger)
 add_subdirectory(filter)
 add_subdirectory(logmsg)
 add_subdirectory(logproto)
+add_subdirectory(multi-line)
 add_subdirectory(parser)
 add_subdirectory(rewrite)
 add_subdirectory(stats)
@@ -35,10 +37,12 @@ set(LIB_SUBDIR_HEADERS
     ${ACK_TRACKER_HEADERS}
     ${COMPAT_HEADERS}
     ${CONTROL_HEADERS}
+    ${HEALTHCHECK_HEADERS}
     ${DEBUGGER_HEADERS}
     ${FILTER_HEADERS}
     ${LOGMSG_HEADERS}
     ${LOGPROTO_HEADERS}
+    ${MULTI_LINE_HEADERS}
     ${PARSER_HEADERS}
     ${REWRITE_HEADERS}
     ${STATS_HEADERS}
@@ -78,6 +82,8 @@ set (LIB_HEADERS
     cfg-path.h
     cfg-tree.h
     cfg-walker.h
+    cfg-persist.h
+    cfg-monitor.h
     children.h
     crypto.h
     dnscache.h
@@ -101,6 +107,8 @@ set (LIB_HEADERS
     logqueue.h
     logreader.h
     logsource.h
+    logscheduler.h
+    logscheduler-pipe.h
     logwriter.h
     mainloop.h
     mainloop-call.h
@@ -110,6 +118,7 @@ set (LIB_HEADERS
     module-config.h
     memtrace.h
     messages.h
+    metrics-pipe.h
     ml-batched-timer.h
     mainloop-control.h
     msg-format.h
@@ -139,7 +148,6 @@ set (LIB_HEADERS
     string-list.h
     tls-support.h
     thread-utils.h
-    tlscontext.h
     uuid.h
     userdb.h
     utf8utils.h
@@ -171,6 +179,8 @@ set(LIB_SOURCES
     cfg-path.c
     cfg-tree.c
     cfg-walker.c
+    cfg-persist.c
+    cfg-monitor.c
     children.c
     dnscache.c
     driver.c
@@ -192,6 +202,8 @@ set(LIB_SOURCES
     logqueue.c
     logqueue-fifo.c
     logreader.c
+    logscheduler.c
+    logscheduler-pipe.c
     logsource.c
     logwriter.c
     mainloop.c
@@ -203,6 +215,7 @@ set(LIB_SOURCES
     module-config.c
     memtrace.c
     messages.c
+    metrics-pipe.c
     ml-batched-timer.c
     mainloop-control.c
     msg-format.c
@@ -227,7 +240,6 @@ set(LIB_SOURCES
     string-list.c
     ringbuffer.c
     crypto.c
-    tlscontext.c
     uuid.c
     userdb.c
     utf8utils.c
@@ -237,10 +249,12 @@ set(LIB_SOURCES
     ${ACK_TRACKER_SOURCES}
     ${COMPAT_SOURCES}
     ${CONTROL_SOURCES}
+    ${HEALTHCHECK_SOURCES}
     ${DEBUGGER_SOURCES}
     ${FILTER_SOURCES}
     ${LOGMSG_SOURCES}
     ${LOGPROTO_SOURCES}
+    ${MULTI_LINE_SOURCES}
     ${PARSER_SOURCES}
     ${REWRITE_SOURCES}
     ${STATS_SOURCES}
@@ -352,6 +366,7 @@ install(FILES ${LIB_HEADERS} DESTINATION include/syslog-ng)
 install(FILES ${VALUE_PAIRS_HEADERS} DESTINATION include/syslog-ng/value-pairs)
 install(FILES ${COMPAT_HEADERS} DESTINATION include/syslog-ng/compat)
 install(FILES ${CONTROL_HEADERS} DESTINATION include/syslog-ng/control)
+install(FILES ${HEALTHCHECK_HEADERS} DESTINATION include/syslog-ng/healthcheck)
 install(FILES ${DEBUGGER_HEADERS} DESTINATION include/syslog-ng/debugger)
 install(FILES ${FILTER_HEADERS} DESTINATION include/syslog-ng/filter)
 install(FILES ${LOGMSG_HEADERS} DESTINATION include/syslog-ng/logmsg)

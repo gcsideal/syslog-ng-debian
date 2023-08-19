@@ -27,6 +27,7 @@
 #include "messages.h"
 #include "apphook.h"
 #include "ack-tracker/ack_tracker_factory.h"
+#include "stats/stats-cluster-key-builder.h"
 
 #include <iv.h>
 
@@ -85,9 +86,9 @@ log_threaded_source_worker_logpipe(LogThreadedSourceWorker *self)
 static void
 log_threaded_source_worker_set_options(LogThreadedSourceWorker *self, LogThreadedSourceDriver *control,
                                        LogThreadedSourceWorkerOptions *options,
-                                       const gchar *stats_id, const gchar *stats_instance)
+                                       const gchar *stats_id, StatsClusterKeyBuilder *kb)
 {
-  log_source_set_options(&self->super, &options->super, stats_id, stats_instance, TRUE,
+  log_source_set_options(&self->super, &options->super, stats_id, kb, TRUE,
                          control->super.super.super.expr_node);
   log_source_set_ack_tracker_factory(&self->super, ack_tracker_factory_ref(options->ack_tracker_factory));
 
@@ -236,6 +237,13 @@ log_threaded_source_worker_new(GlobalConfig *cfg)
 }
 
 gboolean
+log_threaded_source_driver_pre_config_init(LogPipe *s)
+{
+  main_loop_worker_allocate_thread_space(1);
+  return TRUE;
+}
+
+gboolean
 log_threaded_source_driver_init_method(LogPipe *s)
 {
   LogThreadedSourceDriver *self = (LogThreadedSourceDriver *) s;
@@ -246,11 +254,13 @@ log_threaded_source_driver_init_method(LogPipe *s)
   if (!log_src_driver_init_method(s))
     return FALSE;
 
-  g_assert(self->format_stats_instance);
+  g_assert(self->format_stats_key);
 
+  StatsClusterKeyBuilder *kb = stats_cluster_key_builder_new();
+  self->format_stats_key(self, kb);
   log_threaded_source_worker_options_init(&self->worker_options, cfg, self->super.super.group);
   log_threaded_source_worker_set_options(self->worker, self, &self->worker_options,
-                                         self->super.super.id, self->format_stats_instance(self));
+                                         self->super.super.id, kb);
 
   LogPipe *worker_pipe = log_threaded_source_worker_logpipe(self->worker);
   log_pipe_append(worker_pipe, s);
@@ -311,6 +321,26 @@ _apply_default_priority_and_facility(LogThreadedSourceDriver *self, LogMessage *
   msg->pri = parse_options->default_pri;
 }
 
+/*
+ * Call this every some messages so consumers that accumulate multiple
+ * messages (LogQueueFifo for instance) can finish accumulation and go on
+ * processing a batch.
+ *
+ * Basically this calls main_loop_worker_invoke_batch_callbacks(), which is
+ * done by the minaloop-io-worker layer whenever we go back to the main
+ * loop.  Whether this is done automatically by LogThreadedSourceDriver is
+ * controlled by the auto_close_batches member, in which case we do this
+ * every message.
+ *
+ * Doing it every message defeats the purpose more or less, as consumers
+ * tend to do batching to improve performance.
+ */
+void
+log_threaded_source_close_batch(LogThreadedSourceDriver *self)
+{
+  main_loop_worker_invoke_batch_callbacks();
+}
+
 void
 log_threaded_source_post(LogThreadedSourceDriver *self, LogMessage *msg)
 {
@@ -319,6 +349,9 @@ log_threaded_source_post(LogThreadedSourceDriver *self, LogMessage *msg)
             evt_tag_msg_reference(msg));
   _apply_default_priority_and_facility(self, msg);
   log_source_post(&self->worker->super, msg);
+
+  if (self->auto_close_batches)
+    log_threaded_source_close_batch(self);
 }
 
 gboolean
@@ -360,7 +393,10 @@ log_threaded_source_driver_init_instance(LogThreadedSourceDriver *self, GlobalCo
   self->super.super.super.init = log_threaded_source_driver_init_method;
   self->super.super.super.deinit = log_threaded_source_driver_deinit_method;
   self->super.super.super.free_fn = log_threaded_source_driver_free_method;
-  self->super.super.super.on_config_inited = log_threaded_source_driver_start_worker;
+  self->super.super.super.pre_config_init = log_threaded_source_driver_pre_config_init;
+  self->super.super.super.post_config_init = log_threaded_source_driver_start_worker;
 
   self->wakeup = log_threaded_source_wakeup;
+
+  self->auto_close_batches = TRUE;
 }

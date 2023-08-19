@@ -54,10 +54,10 @@ _generate_persist_name(const LogPipe *s)
   return "test_threaded_source_driver";
 }
 
-static const gchar *
-_format_stats_instance(LogThreadedSourceDriver *s)
+static void
+_format_stats_key(LogThreadedSourceDriver *s, StatsClusterKeyBuilder *kb)
 {
-  return "test_threaded_source_driver_stats";
+  stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("driver", "test_threaded_source_driver_stats"));
 }
 
 static void
@@ -65,7 +65,7 @@ _source_queue_mock(LogPipe *s, LogMessage *msg, const LogPathOptions *path_optio
 {
   LogSource *self = (LogSource *) s;
 
-  stats_counter_inc(self->recvd_messages);
+  stats_counter_inc(self->metrics.recvd_messages);
   log_pipe_forward_msg(s, msg, path_options);
 }
 
@@ -99,7 +99,7 @@ test_threaded_sd_new(GlobalConfig *cfg, gboolean blocking_post)
   log_threaded_source_driver_init_instance(&self->super, cfg);
 
   self->super.super.super.super.init = test_threaded_source_driver_init_method;
-  self->super.format_stats_instance = _format_stats_instance;
+  self->super.format_stats_key = _format_stats_key;
   self->super.super.super.super.generate_persist_name = _generate_persist_name;
 
   self->super.request_exit = _request_exit;
@@ -127,7 +127,7 @@ static void
 start_test_threaded_source(TestThreadedSourceDriver *s)
 {
   cr_assert(log_pipe_init(&s->super.super.super.super));
-  cr_assert(log_pipe_on_config_inited(&s->super.super.super.super));
+  cr_assert(log_pipe_post_config_init(&s->super.super.super.super));
 }
 
 static void
@@ -212,7 +212,7 @@ Test(logthrsourcedrv, test_threaded_source_blocking_post)
   start_test_threaded_source(s);
   request_exit_and_wait_for_stop(s);
 
-  StatsCounterItem *recvd_messages = _get_source(s)->recvd_messages;
+  StatsCounterItem *recvd_messages = _get_source(s)->metrics.recvd_messages;
   cr_assert(stats_counter_get(recvd_messages) == 10);
   cr_assert(s->exit_requested);
 
@@ -230,7 +230,7 @@ Test(logthrsourcedrv, test_threaded_source_suspend)
   start_test_threaded_source(s);
   request_exit_and_wait_for_stop(s);
 
-  StatsCounterItem *recvd_messages = _get_source(s)->recvd_messages;
+  StatsCounterItem *recvd_messages = _get_source(s)->metrics.recvd_messages;
   cr_assert(stats_counter_get(recvd_messages) == 5);
   cr_assert(s->suspended);
   cr_assert(s->exit_requested);

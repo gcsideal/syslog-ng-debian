@@ -43,6 +43,7 @@
 #include "resolved-configurable-paths.h"
 #include "mainloop.h"
 #include "timeutils/format.h"
+#include "apphook.h"
 
 #include <sys/types.h>
 #include <signal.h>
@@ -50,46 +51,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <iv_work.h>
+#include <openssl/sha.h>
 
-/* PersistConfig */
-
-struct _PersistConfig
-{
-  GHashTable *keys;
-};
-
-typedef struct _PersistConfigEntry
-{
-  gpointer value;
-  GDestroyNotify destroy;
-} PersistConfigEntry;
-
-static void
-persist_config_entry_free(PersistConfigEntry *self)
-{
-  if (self->destroy)
-    {
-      self->destroy(self->value);
-    }
-  g_free(self);
-}
-
-PersistConfig *
-persist_config_new(void)
-{
-  PersistConfig *self = g_new0(PersistConfig, 1);
-
-  self->keys = g_hash_table_new_full(g_str_hash, g_str_equal, (GDestroyNotify) g_free,
-                                     (GDestroyNotify) persist_config_entry_free);
-  return self;
-}
-
-void
-persist_config_free(PersistConfig *self)
-{
-  g_hash_table_destroy(self->keys);
-  g_free(self);
-}
+#define CONFIG_HASH_LENGTH SHA256_DIGEST_LENGTH
+#define CONFIG_HASH_STR_LENGTH (CONFIG_HASH_LENGTH * 2 + 1)
 
 gint
 cfg_ts_format_value(gchar *format)
@@ -141,6 +106,17 @@ void
 cfg_set_mark_mode(GlobalConfig *self, const gchar *mark_mode)
 {
   self->mark_mode = cfg_lookup_mark_mode(mark_mode);
+}
+
+gboolean
+cfg_set_log_level(GlobalConfig *self, const gchar *log_level)
+{
+  gint ll = msg_map_string_to_log_level(log_level);
+
+  if (ll < 0)
+    return FALSE;
+  configuration->log_level = ll;
+  return TRUE;
 }
 
 static void
@@ -314,6 +290,7 @@ cfg_init(GlobalConfig *cfg)
 {
   gint regerr;
 
+  msg_apply_config_log_level(cfg->log_level);
   if (cfg->file_template_name && !(cfg->file_template = cfg_tree_lookup_template(&cfg->tree, cfg->file_template_name)))
     msg_error("Error resolving file template",
               evt_tag_str("name", cfg->file_template_name));
@@ -348,6 +325,12 @@ cfg_init(GlobalConfig *cfg)
   log_template_options_init(&cfg->template_options, cfg);
   if (!cfg_init_modules(cfg))
     return FALSE;
+  if (!cfg_tree_compile(&cfg->tree))
+    return FALSE;
+  app_config_pre_pre_init();
+  if (!cfg_tree_pre_config_init(&cfg->tree))
+    return FALSE;
+  app_config_pre_init();
   if (!cfg_tree_start(&cfg->tree))
     return FALSE;
 
@@ -358,7 +341,7 @@ cfg_init(GlobalConfig *cfg)
    * task/timer/fdwatch ordering in ivykis during this action).
    * See: https://github.com/syslog-ng/syslog-ng/pull/3176#issuecomment-638849597
    */
-  g_assert(cfg_tree_on_inited(&cfg->tree));
+  g_assert(cfg_tree_post_config_init(&cfg->tree));
   return TRUE;
 }
 
@@ -475,6 +458,7 @@ cfg_new(gint version)
   self->module_config = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify) module_config_free);
   self->globals = cfg_args_new();
   self->user_version = version;
+  self->config_hash = g_malloc0(CONFIG_HASH_LENGTH * sizeof(guint8));
 
   self->flush_lines = 100;
   self->mark_freq = 1200; /* 20 minutes */
@@ -492,15 +476,12 @@ cfg_new(gint version)
   self->threaded = TRUE;
   self->pass_unix_credentials = -1;
 
-  log_template_options_defaults(&self->template_options);
-  self->template_options.ts_format = TS_FMT_BSD;
-  self->template_options.frac_digits = 0;
-  self->template_options.on_error = ON_ERROR_DROP_MESSAGE;
-
+  log_template_options_global_defaults(&self->template_options);
   host_resolve_options_global_defaults(&self->host_resolve_options);
 
   self->recv_time_zone = NULL;
   self->keep_timestamp = TRUE;
+  self->log_level = -1;
 
   self->use_uniqid = FALSE;
 
@@ -510,6 +491,7 @@ cfg_new(gint version)
     self->use_uniqid = TRUE;
 
   stats_options_defaults(&self->stats_options);
+  healthcheck_stats_options_defaults(&self->healthcheck_options);
 
   self->min_iw_size_per_reader = 100;
 
@@ -553,8 +535,8 @@ cfg_set_global_paths(GlobalConfig *self)
   cfg_args_set(self->globals, "syslog-ng-include", get_installation_path_for(SYSLOG_NG_PATH_CONFIG_INCLUDEDIR));
   cfg_args_set(self->globals, "syslog-ng-sysconfdir", get_installation_path_for(SYSLOG_NG_PATH_SYSCONFDIR));
   cfg_args_set(self->globals, "scl-root", get_installation_path_for(SYSLOG_NG_PATH_SCLDIR));
-  cfg_args_set(self->globals, "module-path", resolvedConfigurablePaths.initial_module_path);
-  cfg_args_set(self->globals, "module-install-dir", resolvedConfigurablePaths.initial_module_path);
+  cfg_args_set(self->globals, "module-path", resolved_configurable_paths.initial_module_path);
+  cfg_args_set(self->globals, "module-install-dir", resolved_configurable_paths.initial_module_path);
 
   include_path = g_strdup_printf("%s:%s",
                                  get_installation_path_for(SYSLOG_NG_PATH_SYSCONFDIR),
@@ -646,6 +628,41 @@ _cfg_file_path_free(gpointer data)
   g_free(self);
 }
 
+static inline const gchar *
+_format_config_hash(GlobalConfig *self, gchar *str, size_t str_size)
+{
+  for (gsize i = 0; i < CONFIG_HASH_LENGTH; ++i)
+    {
+      g_snprintf(str + (i * 2), str_size - (i * 2), "%02x", self->config_hash[i]);
+    }
+
+  return str;
+}
+
+void
+cfg_set_user_config_id(GlobalConfig *self, const gchar *id)
+{
+  g_free(self->user_config_id);
+  self->user_config_id = g_strdup(id);
+}
+
+void
+cfg_format_id(GlobalConfig *self, GString *id)
+{
+  gchar buf[CONFIG_HASH_STR_LENGTH];
+
+  if (self->user_config_id)
+    g_string_printf(id, "%s (%s)", self->user_config_id, _format_config_hash(self, buf, sizeof(buf)));
+  else
+    g_string_assign(id, _format_config_hash(self, buf, sizeof(buf)));
+}
+
+static void
+cfg_hash_config(GlobalConfig *self)
+{
+  SHA256((const guchar *) self->preprocess_config->str, self->preprocess_config->len, self->config_hash);
+}
+
 gboolean
 cfg_read_config(GlobalConfig *self, const gchar *fname, gchar *preprocess_into)
 {
@@ -666,6 +683,9 @@ cfg_read_config(GlobalConfig *self, const gchar *fname, gchar *preprocess_into)
       lexer = cfg_lexer_new(self, cfg_file, fname, self->preprocess_config);
       res = cfg_run_parser(self, lexer, &main_parser, (gpointer *) &self, NULL);
       fclose(cfg_file);
+
+      cfg_hash_config(self);
+
       if (preprocess_into)
         {
           cfg_dump_processed_config(self->preprocess_config, preprocess_into);
@@ -729,6 +749,9 @@ cfg_free(GlobalConfig *self)
 
   g_list_free_full(self->file_list, _cfg_file_path_free);
 
+  g_free(self->user_config_id);
+  g_free(self->config_hash);
+
   g_free(self);
 }
 
@@ -744,59 +767,26 @@ cfg_persist_config_move(GlobalConfig *src, GlobalConfig *dest)
 }
 
 void
-cfg_persist_config_add(GlobalConfig *cfg, const gchar *name, gpointer value, GDestroyNotify destroy,
-                       gboolean force)
+cfg_persist_config_add(GlobalConfig *cfg, const gchar *name, gpointer value, GDestroyNotify destroy)
 {
-  PersistConfigEntry *p;
+  if (!value)
+    return;
 
-  if (cfg->persist && value)
+  if (!cfg->persist)
     {
-      if (g_hash_table_lookup(cfg->persist->keys, name))
-        {
-          if (!force)
-            {
-              msg_error("Internal error, duplicate configuration elements refer to the same persistent config",
-                        evt_tag_str("name", name));
-              if (destroy)
-                destroy(value);
-              return;
-            }
-        }
-
-      p = g_new0(PersistConfigEntry, 1);
-
-      p->value = value;
-      p->destroy = destroy;
-      g_hash_table_insert(cfg->persist->keys, g_strdup(name), p);
+      if (destroy)
+        destroy(value);
       return;
     }
-  else if (destroy && value)
-    {
-      destroy(value);
-    }
-  return;
+  persist_config_add(cfg->persist, name, value, destroy);
 }
 
 gpointer
 cfg_persist_config_fetch(GlobalConfig *cfg, const gchar *name)
 {
-  gpointer res = NULL;
-  gchar *orig_key;
-  PersistConfigEntry *p;
-  gpointer tmp1, tmp2;
-
-  if (cfg->persist && g_hash_table_lookup_extended(cfg->persist->keys, name, &tmp1, &tmp2))
-    {
-      orig_key = (gchar *) tmp1;
-      p = (PersistConfigEntry *) tmp2;
-
-      res = p->value;
-
-      g_hash_table_steal(cfg->persist->keys, name);
-      g_free(orig_key);
-      g_free(p);
-    }
-  return res;
+  if (!cfg->persist)
+    return NULL;
+  return persist_config_fetch(cfg->persist, name);
 }
 
 gint

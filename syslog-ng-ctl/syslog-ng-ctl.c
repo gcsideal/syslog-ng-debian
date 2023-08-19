@@ -32,9 +32,11 @@
 #include "commands/config.h"
 #include "commands/credentials.h"
 #include "commands/verbose.h"
+#include "commands/log-level.h"
 #include "commands/ctl-stats.h"
 #include "commands/query.h"
 #include "commands/license.h"
+#include "commands/healthcheck.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -109,10 +111,11 @@ slng_export_config_graph(int argc, char *argv[], const gchar *mode, GOptionConte
 
 static CommandDescriptor modes[] =
 {
-  { "stats", stats_options, "Get syslog-ng statistics in CSV format", slng_stats, NULL },
+  { "stats", stats_options, "Get syslog-ng statistics. Possible commands: csv, prometheus; default: csv", slng_stats, NULL },
   { "verbose", verbose_options, "Enable/query verbose messages", slng_verbose, NULL },
   { "debug", verbose_options, "Enable/query debug messages", slng_verbose, NULL },
   { "trace", verbose_options, "Enable/query trace messages", slng_verbose, NULL },
+  { "log-level", log_level_options, "Set syslog-ng loglevel (verbose, debug, trace)", slng_log_level, NULL },
   { "stop", no_options, "Stop syslog-ng process", slng_stop, NULL },
   { "reload", no_options, "Reload syslog-ng", slng_reload, NULL },
   { "reopen", no_options, "Re-open of log destination files", slng_reopen, NULL },
@@ -122,6 +125,7 @@ static CommandDescriptor modes[] =
   { "config", config_options, "Print current config", slng_config, NULL },
   { "list-files", no_options, "Print files present in config", slng_listfiles, NULL },
   { "export-config-graph", no_options, "export configuration graph", slng_export_config_graph, NULL },
+  { "healthcheck", healthcheck_options, "Health check", slng_healthcheck, NULL },
   { NULL, NULL },
 };
 

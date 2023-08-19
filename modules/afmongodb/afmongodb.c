@@ -85,14 +85,81 @@ afmongodb_dd_set_value_pairs(LogDriver *d, ValuePairs *vp)
   self->vp = vp;
 }
 
+void afmongodb_dd_set_bulk(LogDriver *d, gboolean bulk)
+{
+  MongoDBDestDriver *self = (MongoDBDestDriver *)d;
+
+  self->use_bulk = bulk;
+}
+
+void
+afmongodb_dd_set_bulk_unordered(LogDriver *d, gboolean unordered)
+{
+  MongoDBDestDriver *self = (MongoDBDestDriver *)d;
+
+  self->bulk_unordered = unordered;
+}
+
+void
+afmongodb_dd_set_bulk_bypass_validation(LogDriver *d, gboolean bypass_validation)
+{
+  MongoDBDestDriver *self = (MongoDBDestDriver *)d;
+
+  self->bulk_bypass_validation = bypass_validation;
+}
+
+void
+afmongodb_dd_set_write_concern(LogDriver *d, int32_t write_concern_level)
+{
+  MongoDBDestDriver *self = (MongoDBDestDriver *)d;
+
+  self->write_concern_level = write_concern_level;
+}
+
 /*
  * Utilities
  */
 
 static gchar *
-_format_instance_id(const LogThreadedDestDriver *d, const gchar *format)
+_format_instance_id(const LogThreadedDestDriver *d, const gchar *format, StatsClusterKeyBuilder *kb)
 {
   const MongoDBDestDriver *self = (const MongoDBDestDriver *)d;
+
+  const gchar *first_host = "";
+  const gchar *db;
+  const gchar *replica_set;
+  const gchar *coll;
+
+  if (kb || !((LogPipe *)d)->persist_name)
+    {
+      const mongoc_host_list_t *hosts = mongoc_uri_get_hosts(self->uri_obj);
+
+      if (hosts)
+        {
+          if (hosts->family == AF_UNIX)
+            first_host = hosts->host;
+          else
+            first_host = hosts->host_and_port;
+        }
+
+      db = self->const_db ? self->const_db : "";
+
+      replica_set = mongoc_uri_get_replica_set(self->uri_obj);
+      if (!replica_set)
+        replica_set = "";
+
+      coll = self->collection_template->template_str ? self->collection_template->template_str : "";
+    }
+
+  if (kb)
+    {
+      stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("driver", "mongodb"));
+      stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("host", first_host));
+      stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("database", db));
+      stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("replica_set", replica_set));
+      stats_cluster_key_builder_add_legacy_label(kb, stats_cluster_label("collection", coll));
+    }
+
   static gchar args[1024];
   static gchar id[1024];
 
@@ -102,24 +169,6 @@ _format_instance_id(const LogThreadedDestDriver *d, const gchar *format)
     }
   else
     {
-      const mongoc_host_list_t *hosts = mongoc_uri_get_hosts(self->uri_obj);
-      const gchar *first_host = "";
-      if (hosts)
-        {
-          if (hosts->family == AF_UNIX)
-            first_host = hosts->host;
-          else
-            first_host = hosts->host_and_port;
-        }
-
-      const gchar *db = self->const_db ? self->const_db : "";
-
-      const gchar *replica_set = mongoc_uri_get_replica_set(self->uri_obj);
-      if (!replica_set)
-        replica_set = "";
-
-      const gchar *coll = self->collection_template->template ? self->collection_template->template : "";
-
       g_snprintf(args, sizeof(args), "%s,%s,%s,%s", first_host, db, replica_set, coll);
     }
   g_snprintf(id, sizeof(id), format, args);
@@ -127,9 +176,9 @@ _format_instance_id(const LogThreadedDestDriver *d, const gchar *format)
 }
 
 static const gchar *
-_format_stats_instance(LogThreadedDestDriver *d)
+_format_stats_key(LogThreadedDestDriver *d, StatsClusterKeyBuilder *kb)
 {
-  return _format_instance_id(d, "mongodb,%s");
+  return _format_instance_id(d, "mongodb,%s", kb);
 }
 
 static const gchar *
@@ -137,8 +186,8 @@ _format_persist_name(const LogPipe *s)
 {
   const LogThreadedDestDriver *self = (const LogThreadedDestDriver *)s;
 
-  return s->persist_name ? _format_instance_id(self, "afmongodb.%s")
-         : _format_instance_id(self, "afmongodb(%s)");
+  return s->persist_name ? _format_instance_id(self, "afmongodb.%s", NULL)
+         : _format_instance_id(self, "afmongodb(%s)", NULL);
 }
 
 static inline void
@@ -182,7 +231,7 @@ afmongodb_dd_private_uri_init(LogDriver *d)
   msg_verbose("Initializing MongoDB destination",
               evt_tag_str("uri", self->uri_str->str),
               evt_tag_str("db", self->const_db),
-              evt_tag_str("collection", self->collection_template->template),
+              evt_tag_str("collection", self->collection_template->template_str),
               evt_tag_str("driver", self->super.super.super.id));
 
   return TRUE;
@@ -334,7 +383,7 @@ afmongodb_dd_new(GlobalConfig *cfg)
   self->super.super.super.super.free_fn = _free;
   self->super.super.super.super.generate_persist_name = _format_persist_name;
 
-  self->super.format_stats_instance = _format_stats_instance;
+  self->super.format_stats_key = _format_stats_key;
   self->super.stats_source = stats_register_type("mongodb");
   self->super.worker.construct = afmongodb_dw_new;
 
@@ -343,7 +392,14 @@ afmongodb_dd_new(GlobalConfig *cfg)
   afmongodb_dd_set_collection(&self->super.super.super, template);
 
   log_template_options_defaults(&self->template_options);
-  afmongodb_dd_set_value_pairs(&self->super.super.super, value_pairs_new_default(cfg));
+  ValuePairs *vp = value_pairs_new_default(cfg);
+  value_pairs_set_include_bytes(vp, TRUE);
+  afmongodb_dd_set_value_pairs(&self->super.super.super, vp);
+
+  self->use_bulk = TRUE;
+  self->bulk_unordered = FALSE;
+  self->bulk_bypass_validation = FALSE;
+  self->write_concern_level = MONGOC_WRITE_CONCERN_W_DEFAULT;
 
   return &self->super.super.super;
 }

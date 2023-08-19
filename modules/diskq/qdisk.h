@@ -54,10 +54,12 @@ QDiskQueuePosition;
 
 typedef struct _QDisk QDisk;
 
-QDisk *qdisk_new(DiskQueueOptions *options, const gchar *file_id);
+QDisk *qdisk_new(DiskQueueOptions *options, const gchar *file_id, const gchar *filename);
 
 gboolean qdisk_is_space_avail(QDisk *self, gint at_least);
+gint64 qdisk_get_max_useful_space(QDisk *self);
 gint64 qdisk_get_empty_space(QDisk *self);
+gint64 qdisk_get_used_useful_space(QDisk *self);
 gboolean qdisk_push_tail(QDisk *self, GString *record);
 gboolean qdisk_pop_head(QDisk *self, GString *record);
 gboolean qdisk_remove_head(QDisk *self);
@@ -66,14 +68,11 @@ gboolean qdisk_rewind_backlog(QDisk *self, guint rewind_count);
 void qdisk_empty_backlog(QDisk *self);
 gint64 qdisk_get_next_tail_position(QDisk *self);
 gint64 qdisk_get_next_head_position(QDisk *self);
-gboolean qdisk_start(QDisk *self, const gchar *filename, GQueue *qout, GQueue *qbacklog, GQueue *qoverflow);
-void qdisk_init_instance(QDisk *self, DiskQueueOptions *options, const gchar *file_id);
-void qdisk_stop(QDisk *self);
+gboolean qdisk_start(QDisk *self, GQueue *front_cache, GQueue *backlog, GQueue *flow_control_window);
+gboolean qdisk_stop(QDisk *self, GQueue *front_cache, GQueue *backlog, GQueue *flow_control_window);
 void qdisk_reset_file_if_empty(QDisk *self);
 gboolean qdisk_started(QDisk *self);
 void qdisk_free(QDisk *self);
-
-gboolean qdisk_save_state(QDisk *self, GQueue *qout, GQueue *qbacklog, GQueue *qoverflow);
 
 DiskQueueOptions *qdisk_get_options(QDisk *self);
 gint64 qdisk_get_length(QDisk *self);
@@ -82,10 +81,14 @@ gint64 qdisk_get_writer_head(QDisk *self);
 gint64 qdisk_get_reader_head(QDisk *self);
 gint64 qdisk_get_backlog_head(QDisk *self);
 gint64 qdisk_get_backlog_count(QDisk *self);
-gint qdisk_get_memory_size(QDisk *self);
+gint qdisk_get_flow_control_window_bytes(QDisk *self);
 gboolean qdisk_is_read_only(QDisk *self);
 const gchar *qdisk_get_filename(QDisk *self);
 gint64 qdisk_get_file_size(QDisk *self);
+
+gchar *qdisk_get_next_filename(const gchar *dir, gboolean reliable);
+gboolean qdisk_is_file_a_disk_buffer_file(const gchar *filename);
+gboolean qdisk_is_disk_buffer_file_reliable(const gchar *filename, gboolean *reliable);
 
 gboolean qdisk_serialize(GString *serialized, QDiskSerializeFunc serialize_func, gpointer user_data, GError **error);
 gboolean qdisk_deserialize(GString *serialized, QDiskDeSerializeFunc deserialize_func, gpointer user_data,

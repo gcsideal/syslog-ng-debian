@@ -67,7 +67,15 @@ modules_python_libmod_python_la_SOURCES		= \
 	modules/python/python-bookmark.h \
 	modules/python/python-bookmark.c \
 	modules/python/python-ack-tracker.h \
-	modules/python/python-ack-tracker.c
+	modules/python/python-ack-tracker.c \
+	modules/python/python-types.h \
+	modules/python/python-types.c \
+	modules/python/python-confgen.h \
+	modules/python/python-confgen.c \
+	modules/python/python-options.h \
+	modules/python/python-options.c \
+	modules/python/python-flags.h \
+	modules/python/python-flags.c
 
 
 modules_python_libmod_python_la_LDFLAGS		 = \
@@ -83,16 +91,12 @@ else
 modules/python mod-python:
 endif
 
-include modules/python/pylib/Makefile.am
-
 BUILT_SOURCES					+= \
 	modules/python/python-grammar.y		   \
 	modules/python/python-grammar.c		   \
 	modules/python/python-grammar.h
 
 EXTRA_DIST					+= \
-	modules/python/compat/compat-python-v2.c   \
-	modules/python/compat/compat-python-v3.c   \
 	modules/python/python-grammar.ym	   \
 	modules/python/python-example.conf	   \
 	modules/python/sngexample.py	\
