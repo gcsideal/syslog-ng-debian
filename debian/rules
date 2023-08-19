@@ -115,6 +115,8 @@ override_dh_auto_configure:
 		--with-module-dir='$${exec_prefix}/lib/syslog-ng/${UMAJOR}' \
 		--with-systemdsystemunitdir="/lib/systemd/system" \
 		\
+		--with-python-packages=none \
+		\
 		SOURCE_REVISION="$${SOURCE_REVISION}" \
 		${SYSTEMD_CONFIGURE_OPTS} \
 		${EXTRA_CONFIGURE_OPTS}
