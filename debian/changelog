@@ -1,3 +1,16 @@
+syslog-ng (4.3.1-1) unstable; urgency=medium
+
+  [ Attila Szalay ]
+  * New upstream version 4.3.1
+  * Dropping patches merged upstream
+  * Drop python venv creation
+  * Remove files from package definition which does not generated in the new release
+  * Add the new scl files to scl package
+  * Ignore the new modules for now
+  * Adapt packaging to that upstream moved the scl.conf out from /etc/syslog-ng
+
+ -- SZALAY Attila <sasa@debian.org>  Sun, 20 Aug 2023 16:51:02 +0100
+
 syslog-ng (3.38.1-5) unstable; urgency=medium
 
   * Build without Criterion support.
