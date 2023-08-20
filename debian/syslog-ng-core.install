@@ -51,3 +51,5 @@ debian/syslog-ng.conf                   /etc/syslog-ng/
 
 debian/tty10.plugin   => /usr/share/syslog-ng/include/scl/getvirtconsole/plugin.conf
 debian/tty10.sh   => /usr/share/syslog-ng/include/scl/getvirtconsole/tty10.sh
+
+usr/share/syslog-ng/include/scl.conf
