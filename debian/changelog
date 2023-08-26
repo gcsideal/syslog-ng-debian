@@ -1,3 +1,10 @@
+syslog-ng (4.3.1-2) unstable; urgency=medium
+
+  [ Attila Szalay ]
+  * Change libpcre dependency (Closes: #99946)
+
+ -- SZALAY Attila <sasa@debian.org>  Sat, 26 Aug 2023 15:05:12 +0100
+
 syslog-ng (4.3.1-1) unstable; urgency=medium
 
   [ Attila Szalay ]
