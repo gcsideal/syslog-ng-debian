@@ -15,7 +15,8 @@ lib/eventlog
 modules/java/org_syslog_ng_[^./_-]+\.h$
 modules/(afmongodb|afamqp)/dummy\.c$
 modules/kafka/tests/sample\.properties
-modules/grpc/otel/opentelemetry-proto
+modules/grpc/protos/opentelemetry-proto
+modules/grpc/protos/grafana-loki
 dev-utils/plugin_skeleton_creator/plugin_template.*
 (lib|modules)/.*\.conf$
 dist\.conf$
@@ -75,6 +76,7 @@ modules/secure-logging/slogencrypt
 modules/secure-logging/slogverify
 modules/secure-logging/slogkey
 lib/compat/cpp-(start|end).\h$
+lib/compat/getline.\c$
 lib/healthcheck
 lib/healthcheck/tests
 lib/cfg-monitor\.[ch]
@@ -110,6 +112,7 @@ modules/python-modules/syslogng/dest\.py
 modules/python-modules/syslogng/logger\.py
 modules/python-modules/syslogng/message\.py
 modules/python-modules/syslogng/parser\.py
+modules/python-modules/syslogng/reloc\.py
 modules/python-modules/syslogng/template\.py
 modules/python/python-confgen\.[ch]
 lib/tests/test_logscheduler\.c
@@ -147,29 +150,31 @@ modules/java-modules/common
 modules/java/(native|proxies|src)
 modules/native
 modules/http/http-signals.h
+modules/http/compression\.[ch]
 tests/loggen
 persist-tool
 modules/python-modules/syslogng/__init__\.py
 modules/python-modules/syslogng/persist\.py
 modules/python-modules/syslogng/source\.py
+modules/python/python-startup.(c|h)$
+modules/python/python-global.(c|h)$
 
 ###########################################################################
 # These files are GPLd and non-balabit contributions.
 ###########################################################################
                                                  GPLv2+_SSL,non-balabit
-
 modules/diskq/tests/test_diskq_counters\.c
-modules/http/(http|http-parser|http-plugin|)\.[ch]
-modules/http/http-grammar.ym
+modules/http/http-plugin\.[ch]
+modules/http/http-parser.h
 modules/timestamp/rewrite-.*$
 modules/timestamp/tf-format-date.*$
 modules/timestamp/tests/test_format_date.*$
 modules/add-contextual-data/add-contextual-data-glob-selector\.[ch]$
 modules/add-contextual-data/tests/test_glob_selector\.c$
 modules/affile/tests/test_file_writer\.c$
+modules/affile/stdout\.[ch]
 modules/afsocket/socket-options-unix\.[ch]$
 modules/basicfuncs/vp-funcs\.[ch]$
-modules/correlation/group-lines\.[ch]$
 modules/diskq/diskq-global-metrics\.[ch]$
 modules/diskq/tests/test_logqueue_disk\.c$
 modules/metrics-probe/metrics-probe(|-parser|-plugin|-grammar)\.(c|h|ym)$
@@ -177,12 +182,19 @@ modules/metrics-probe/label-template\.(c|h)$
 modules/metrics-probe/tests/test_metrics_probe\.c$
 modules/grpc/otel/otel-(grammar|parser|plugin|source|source-services|servicecall|protobuf-parser|protobuf-formatter|dest|dest-worker)\.(c|h|cpp|hpp|ym)$
 modules/grpc/otel/grpc-credentials-builder\.(h|cpp|hpp)$
+modules/grpc/otel/syslog-ng-otlp-(dest|dest-worker)\.(h|cpp|hpp)$
 modules/grpc/otel/tests/test-otel-(protobuf-parser|protobuf-formatter)\.cpp$
+modules/grpc/otel/tests/test-syslog-ng-otlp\.cpp$
+modules/grpc/loki
+modules/grpc/credentials
 modules/examples/inner-destinations/tls-test-validation
 modules/examples/sources/random-choice-generator
 modules/python/python-options.(c|h)$
+modules/python/python-reloc\.(c|h)$
+modules/python/python-binding.(c|h)$
 modules/python/python-flags.(c|h)$
 modules/python/tests/test_python_options.c$
+modules/python/tests/test_python_reloc\.c$
 scl/fortigate/.*\.conf$
 scl/cee/.*\.conf$
 scl/logscale/logscale\.conf$
@@ -193,6 +205,7 @@ modules/python-modules/syslogng/modules/kubernetes/.*
 modules/ebpf/.*
 modules/python-modules/syslogng/modules/hypr/.*
 modules/python-modules/syslogng/modules/example/.*
+modules/python-modules/syslogng/modules/s3/.*
 modules/python-modules/setup\.py
 scripts/build-python-venv\.sh
 modules/syslogformat/sdata-parser\.[ch]
@@ -208,6 +221,8 @@ tests/light/functional_tests/logpath/test_conditionals\.py
 tests/light/functional_tests/logpath/test_midpoint_destinations\.py
 tests/light/functional_tests/value-pairs/test_value_pairs\.py
 tests/light/src/syslog_ng_ctl/prometheus_stats_handler.py
+modules/correlation/id-counter\.[ch]$
+modules/correlation/group-lines.h
 
 ###########################################################################
 # These files are GPLd with Balabit origin.
@@ -239,3 +254,7 @@ packaging/package-indexer/.*\.py$
 scl
 scripts
 modules/http/tests
+modules/http/http\.[ch]
+modules/http/http-parser.c
+modules/http/http-grammar.ym
+modules/correlation/group-lines.c

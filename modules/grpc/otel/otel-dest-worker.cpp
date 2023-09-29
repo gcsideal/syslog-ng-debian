@@ -266,15 +266,15 @@ DestWorker::insert(LogMessage *msg)
     {
     case MessageType::LOG:
       if (!insert_log_record_from_log_msg(msg))
-        return LTR_DROP;
+        goto drop;
       break;
     case MessageType::METRIC:
       if (!insert_metric_from_log_msg(msg))
-        return LTR_DROP;
+        goto drop;
       break;
     case MessageType::SPAN:
       if (!insert_span_from_log_msg(msg))
-        return LTR_DROP;
+        goto drop;
       break;
     case MessageType::UNKNOWN:
       insert_fallback_log_record_from_log_msg(msg);
@@ -283,6 +283,14 @@ DestWorker::insert(LogMessage *msg)
       g_assert_not_reached();
     }
 
+  return LTR_QUEUED;
+
+drop:
+  msg_error("OpenTelemetry: Failed to insert message, dropping message",
+            log_pipe_location_tag(&owner.super->super.super.super.super),
+            evt_tag_msg_reference(msg));
+
+  /* LTR_DROP currently drops the entire batch */
   return LTR_QUEUED;
 }
 
@@ -432,22 +440,27 @@ _free(LogThreadedDestWorker *s)
   log_threaded_dest_worker_free_method(s);
 }
 
+void
+otel_dw_init_super(LogThreadedDestWorker *s, LogThreadedDestDriver *o, gint worker_index)
+{
+  log_threaded_dest_worker_init_instance(s, o, worker_index);
+
+  s->init = _init;
+  s->deinit = _deinit;
+  s->connect = _connect;
+  s->disconnect = _disconnect;
+  s->insert = _insert;
+  s->flush = _flush;
+  s->free_fn = _free;
+}
+
 LogThreadedDestWorker *
-otel_dest_worker_new(LogThreadedDestDriver *o, gint worker_index)
+DestWorker::construct(LogThreadedDestDriver *o, gint worker_index)
 {
   OtelDestWorker *self = g_new0(OtelDestWorker, 1);
 
-  log_threaded_dest_worker_init_instance(&self->super, o, worker_index);
-
+  otel_dw_init_super(&self->super, o, worker_index);
   self->cpp = new DestWorker(self);
-
-  self->super.init = _init;
-  self->super.deinit = _deinit;
-  self->super.connect = _connect;
-  self->super.disconnect = _disconnect;
-  self->super.insert = _insert;
-  self->super.flush = _flush;
-  self->super.free_fn = _free;
 
   return &self->super;
 }

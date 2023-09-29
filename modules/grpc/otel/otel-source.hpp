@@ -31,7 +31,7 @@
 
 #include "otel-source.h"
 #include "otel-servicecall.hpp"
-#include "grpc-credentials-builder.hpp"
+#include "credentials/grpc-credentials-builder.hpp"
 
 
 namespace syslogng {
@@ -46,6 +46,7 @@ public:
   void run();
   void request_exit();
   void format_stats_key(StatsClusterKeyBuilder *kb);
+  const char *generate_persist_name();
   gboolean init();
   gboolean deinit();
 

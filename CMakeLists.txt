@@ -16,21 +16,22 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 project(syslog-ng C)
 
-option(ENABLE_CPP "Enable C++" ON)
-
 if (APPLE)
-  set(ENABLE_CPP OFF)
+  option(ENABLE_CPP "Enable C++" OFF)
+else()
+  option(ENABLE_CPP "Enable C++" ON)
 endif()
 
 if (ENABLE_CPP)
   enable_language(CXX)
-  set(CMAKE_CXX_STANDARD 11)
+  set(CMAKE_CXX_STANDARD 11 CACHE STRING "C++ standard")
   set(SYSLOG_NG_ENABLE_CPP ${ENABLE_CPP})
 endif()
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/Modules ${PROJECT_SOURCE_DIR}/cmake/)
 set(CMAKE_POSITION_INDEPENDENT_CODE 1)
-set(BISON_FLAGS "-Wno-other -Werror=conflicts-sr -Werror=conflicts-rr")
+set(BISON_FLAGS "-Wno-other -Werror=conflicts-sr -Werror=conflicts-rr -Wcounterexamples")
+set(BISON_BUILT_SOURCE_CFLAGS "-Wno-unused-but-set-variable")
 
 include(CheckIncludeFiles)
 include(ExternalProject)
@@ -162,6 +163,7 @@ __thread int a; int main() { a=0; }" SYSLOG_NG_HAVE_THREAD_KEYWORD)
 
 check_symbol_exists(strtoll stdlib.h SYSLOG_NG_HAVE_STRTOLL)
 check_symbol_exists(strnlen string.h SYSLOG_NG_HAVE_STRNLEN)
+check_symbol_exists(getline "stdio.h" SYSLOG_NG_HAVE_GETLINE)
 check_symbol_exists(strtok_r string.h SYSLOG_NG_HAVE_STRTOK_R)
 check_symbol_exists(strtoimax inttypes.h SYSLOG_NG_HAVE_STRTOIMAX)
 check_symbol_exists(inet_aton "sys/socket.h;netinet/in.h;arpa/inet.h" SYSLOG_NG_HAVE_INET_ATON)
@@ -426,10 +428,8 @@ add_subdirectory(scripts)
 add_subdirectory(syslog-ng)
 add_subdirectory(syslog-ng-ctl)
 add_subdirectory(persist-tool)
-if (BUILD_TESTING)
-  add_test_subdirectory(libtest)
-  add_subdirectory(tests)
-endif()
+add_subdirectory(tests)
+add_subdirectory(libtest)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/syslog-ng-config.h.in ${CMAKE_CURRENT_BINARY_DIR}/syslog-ng-config.h)
 

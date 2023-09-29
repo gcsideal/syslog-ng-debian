@@ -110,7 +110,7 @@ typedef struct _LogQueueFifo
  *
  * In the output thread, this means that this can get race-free. In the
  * input thread, the output_queue can change because of a
- * log_queue_fifo_push_head() or log_queue_fifo_rewind_backlog().
+ * log_queue_fifo_rewind_backlog().
  *
  */
 
@@ -215,9 +215,9 @@ static inline gboolean
 log_queue_fifo_calculate_num_of_messages_to_drop(LogQueueFifo *self, InputQueue *input_queue,
                                                  gint *num_of_messages_to_drop)
 {
-  /* since we're in the input thread, queue_len will be racy.
-   * It can increase due to log_queue_fifo_push_head() and can also decrease as
-   * items are removed from the output queue using log_queue_pop_head().
+  /* since we're in the input thread, queue_len will be racy.  It can
+   * increase due to log_queue_fifo_rewind_backlog() and can also decrease
+   * as items are removed from the output queue using log_queue_pop_head().
    *
    * The only reason we're using it here is to check for qoverflow
    * overflows, however the only side-effect of the race (if lost) is that
@@ -426,34 +426,41 @@ log_queue_fifo_push_tail(LogQueue *s, LogMessage *msg, const LogPathOptions *pat
 }
 
 /*
- * Put an item back to the front of the queue.
- *
- * This is assumed to be called only from the output thread.
- *
- * NOTE: It consumes the reference passed by the caller.
+ * Can only run from the output thread.
  */
-static void
-log_queue_fifo_push_head(LogQueue *s, LogMessage *msg, const LogPathOptions *path_options)
+static inline void
+_move_items_from_wait_queue_to_output_queue(LogQueueFifo *self)
+{
+  /* slow path, output queue is empty, get some elements from the wait queue */
+  g_mutex_lock(&self->super.lock);
+  iv_list_splice_tail_init(&self->wait_queue.items, &self->output_queue.items);
+  self->output_queue.len = self->wait_queue.len;
+  self->output_queue.non_flow_controlled_len = self->wait_queue.non_flow_controlled_len;
+  self->wait_queue.len = 0;
+  self->wait_queue.non_flow_controlled_len = 0;
+  g_mutex_unlock(&self->super.lock);
+}
+
+/*
+ * Can only run from the output thread.
+ */
+static LogMessage *
+log_queue_fifo_peek_head(LogQueue *s)
 {
   LogQueueFifo *self = (LogQueueFifo *) s;
   LogMessageQueueNode *node;
+  LogMessage *msg = NULL;
 
-  /* we don't check limits when putting items "in-front", as it
-   * normally happens when we start processing an item, but at the end
-   * can't deliver it. No checks, no drops either. */
+  if (self->output_queue.len == 0)
+    _move_items_from_wait_queue_to_output_queue(self);
 
-  log_msg_write_protect(msg);
-  node = log_msg_alloc_dynamic_queue_node(msg, path_options);
-  iv_list_add(&node->list, &self->output_queue.items);
-  self->output_queue.len++;
+  if (self->output_queue.len == 0)
+    return NULL;
 
-  if (!path_options->flow_control_requested)
-    self->output_queue.non_flow_controlled_len++;
+  node = iv_list_entry(self->output_queue.items.next, LogMessageQueueNode, list);
+  msg = node->msg;
 
-  log_msg_unref(msg);
-
-  log_queue_queued_messages_inc(&self->super);
-  log_queue_memory_usage_add(&self->super, log_msg_get_size(msg));
+  return msg;
 }
 
 /*
@@ -469,16 +476,7 @@ log_queue_fifo_pop_head(LogQueue *s, LogPathOptions *path_options)
   LogMessage *msg = NULL;
 
   if (self->output_queue.len == 0)
-    {
-      /* slow path, output queue is empty, get some elements from the wait queue */
-      g_mutex_lock(&self->super.lock);
-      iv_list_splice_tail_init(&self->wait_queue.items, &self->output_queue.items);
-      self->output_queue.len = self->wait_queue.len;
-      self->output_queue.non_flow_controlled_len = self->wait_queue.non_flow_controlled_len;
-      self->wait_queue.len = 0;
-      self->wait_queue.non_flow_controlled_len = 0;
-      g_mutex_unlock(&self->super.lock);
-    }
+    _move_items_from_wait_queue_to_output_queue(self);
 
   if (self->output_queue.len > 0)
     {
@@ -491,15 +489,7 @@ log_queue_fifo_pop_head(LogQueue *s, LogPathOptions *path_options)
       if (!node->flow_control_requested)
         self->output_queue.non_flow_controlled_len--;
 
-      if (!self->super.use_backlog)
-        {
-          iv_list_del(&node->list);
-          log_msg_free_queue_node(node);
-        }
-      else
-        {
-          iv_list_del_init(&node->list);
-        }
+      iv_list_del_init(&node->list);
     }
   else
     {
@@ -516,15 +506,13 @@ log_queue_fifo_pop_head(LogQueue *s, LogPathOptions *path_options)
   log_queue_queued_messages_dec(&self->super);
   log_queue_memory_usage_sub(&self->super, log_msg_get_size(msg));
 
-  if (self->super.use_backlog)
-    {
-      log_msg_ref(msg);
-      iv_list_add_tail(&node->list, &self->backlog_queue.items);
-      self->backlog_queue.len++;
+  /* push to backlog */
+  log_msg_ref(msg);
+  iv_list_add_tail(&node->list, &self->backlog_queue.items);
+  self->backlog_queue.len++;
 
-      if (!node->flow_control_requested)
-        self->backlog_queue.non_flow_controlled_len++;
-    }
+  if (!node->flow_control_requested)
+    self->backlog_queue.non_flow_controlled_len++;
 
   return msg;
 }
@@ -659,7 +647,7 @@ log_queue_fifo_free(LogQueue *s)
 
 LogQueue *
 log_queue_fifo_new(gint log_fifo_size, const gchar *persist_name, gint stats_level,
-                   const StatsClusterKeyBuilder *driver_sck_builder, StatsClusterKeyBuilder *queue_sck_builder)
+                   StatsClusterKeyBuilder *driver_sck_builder, StatsClusterKeyBuilder *queue_sck_builder)
 {
   LogQueueFifo *self;
 
@@ -667,17 +655,19 @@ log_queue_fifo_new(gint log_fifo_size, const gchar *persist_name, gint stats_lev
   self = g_malloc0(sizeof(LogQueueFifo) + max_threads * sizeof(self->input_queues[0]));
 
   if (queue_sck_builder)
-    stats_cluster_key_builder_set_name_prefix(queue_sck_builder, "memory_queue_");
+    {
+      stats_cluster_key_builder_push(queue_sck_builder);
+      stats_cluster_key_builder_set_name_prefix(queue_sck_builder, "memory_queue_");
+    }
 
   log_queue_init_instance(&self->super, persist_name, stats_level, driver_sck_builder, queue_sck_builder);
   self->super.type = log_queue_fifo_type;
-  self->super.use_backlog = FALSE;
   self->super.get_length = log_queue_fifo_get_length;
   self->super.is_empty_racy = log_queue_fifo_is_empty_racy;
   self->super.keep_on_reload = log_queue_fifo_keep_on_reload;
   self->super.push_tail = log_queue_fifo_push_tail;
-  self->super.push_head = log_queue_fifo_push_head;
   self->super.pop_head = log_queue_fifo_pop_head;
+  self->super.peek_head = log_queue_fifo_peek_head;
   self->super.ack_backlog = log_queue_fifo_ack_backlog;
   self->super.rewind_backlog = log_queue_fifo_rewind_backlog;
   self->super.rewind_backlog_all = log_queue_fifo_rewind_backlog_all;
@@ -697,12 +687,16 @@ log_queue_fifo_new(gint log_fifo_size, const gchar *persist_name, gint stats_lev
   INIT_IV_LIST_HEAD(&self->backlog_queue.items);
 
   self->log_fifo_size = log_fifo_size;
+
+  if (queue_sck_builder)
+    stats_cluster_key_builder_pop(queue_sck_builder);
+
   return &self->super;
 }
 
 LogQueue *
 log_queue_fifo_legacy_new(gint log_fifo_size, const gchar *persist_name, gint stats_level,
-                          const StatsClusterKeyBuilder *driver_sck_builder, StatsClusterKeyBuilder *queue_sck_builder)
+                          StatsClusterKeyBuilder *driver_sck_builder, StatsClusterKeyBuilder *queue_sck_builder)
 {
   LogQueueFifo *self = (LogQueueFifo *) log_queue_fifo_new(log_fifo_size, persist_name, stats_level,
                                                            driver_sck_builder, queue_sck_builder);

@@ -28,8 +28,10 @@
 #include "logthrdestdrv.h"
 #include "seqnum.h"
 #include "scratch-buffers.h"
-#include "timeutils/misc.h"
+#include "template/eval.h"
 #include "mainloop-threaded-worker.h"
+
+#include <string.h>
 
 #define MAX_RETRIES_ON_ERROR_DEFAULT 3
 #define MAX_RETRIES_BEFORE_SUSPEND_DEFAULT 3
@@ -369,9 +371,10 @@ _process_result(LogThreadedDestWorker *self, gint result)
 
 }
 
-static void
+static LogThreadedResult
 _perform_flush(LogThreadedDestWorker *self)
 {
+  LogThreadedResult result = LTR_SUCCESS;
   /* NOTE: earlier we had a condition on only calling flush() if batch_size
    * is non-zero.  This was removed, as the language bindings that were done
    * _before_ the batching support in LogThreadedDestDriver relies on
@@ -385,11 +388,33 @@ _perform_flush(LogThreadedDestWorker *self)
                 evt_tag_int("worker_index", self->worker_index),
                 evt_tag_int("batch_size", self->batch_size));
 
-      LogThreadedResult result = log_threaded_dest_worker_flush(self, LTF_FLUSH_NORMAL);
+      result = log_threaded_dest_worker_flush(self, LTF_FLUSH_NORMAL);
       _process_result(self, result);
     }
 
   iv_invalidate_now();
+  return result;
+}
+
+static inline gboolean
+_flush_on_worker_partition_key_change_enabled(LogThreadedDestWorker *self)
+{
+  return self->owner->flush_on_key_change && self->owner->worker_partition_key;
+}
+
+static inline gboolean
+_should_flush_due_to_partition_key_change(LogThreadedDestWorker *self, LogMessage *msg)
+{
+  GString *buffer = scratch_buffers_alloc();
+
+  LogTemplateEvalOptions options = DEFAULT_TEMPLATE_EVAL_OPTIONS;
+  log_template_format(self->owner->worker_partition_key, msg, &options, buffer);
+
+  gboolean should_flush = self->batch_size != 0 && strcmp(self->partitioning.last_key->str, buffer->str) != 0;
+
+  g_string_assign(self->partitioning.last_key, buffer->str);
+
+  return should_flush;
 }
 
 /* NOTE: runs in the worker thread, whenever items on our queue are
@@ -398,7 +423,6 @@ _perform_flush(LogThreadedDestWorker *self)
 static void
 _perform_inserts(LogThreadedDestWorker *self)
 {
-  LogMessage *msg;
   LogThreadedResult result;
   LogPathOptions path_options = LOG_PATH_OPTIONS_INIT;
 
@@ -412,19 +436,40 @@ _perform_inserts(LogThreadedDestWorker *self)
       self->last_flush_time = iv_now;
     }
 
-  while (G_LIKELY(!self->owner->under_termination) &&
-         !self->suspended &&
-         (msg = log_queue_pop_head(self->queue, &path_options)) != NULL)
+  while (G_LIKELY(!self->owner->under_termination) && !self->suspended)
     {
+      ScratchBuffersMarker mark;
+      scratch_buffers_mark(&mark);
+
+      if (G_UNLIKELY(_flush_on_worker_partition_key_change_enabled(self)))
+        {
+          LogMessage *msg = log_queue_peek_head(self->queue);
+          if (!msg)
+            {
+              scratch_buffers_reclaim_marked(mark);
+              break;
+            }
+
+          if (_should_flush_due_to_partition_key_change(self, msg))
+            {
+              gboolean flush_result = _perform_flush(self);
+              if (flush_result != LTR_SUCCESS && flush_result != LTR_EXPLICIT_ACK_MGMT)
+                goto flush_error;
+            }
+        }
+
+      LogMessage *msg = log_queue_pop_head(self->queue, &path_options);
+      if (!msg)
+        {
+          scratch_buffers_reclaim_marked(mark);
+          break;
+        }
+
       msg_set_context(msg);
       log_msg_refcache_start_consumer(msg, &path_options);
 
       self->batch_size++;
-      ScratchBuffersMarker mark;
-      scratch_buffers_mark(&mark);
-
       result = log_threaded_dest_worker_insert(self, msg);
-      scratch_buffers_reclaim_marked(mark);
 
       _process_result(self, result);
 
@@ -435,6 +480,8 @@ _perform_inserts(LogThreadedDestWorker *self)
       msg_set_context(NULL);
       log_msg_refcache_stop();
 
+flush_error:
+      scratch_buffers_reclaim_marked(mark);
       if (self->rewound_batch_size)
         {
           self->rewound_batch_size--;
@@ -755,8 +802,6 @@ _format_stats_key(LogThreadedDestDriver *self, StatsClusterKeyBuilder *kb)
 static const gchar *
 _format_legacy_stats_instance(LogThreadedDestDriver *self, StatsClusterKeyBuilder *kb)
 {
-  stats_cluster_key_builder_clear_legacy_labels(kb);
-
   const gchar *legacy_stats_instance = self->format_stats_key(self, kb);
   if (legacy_stats_instance)
     return legacy_stats_instance;
@@ -767,7 +812,7 @@ _format_legacy_stats_instance(LogThreadedDestDriver *self, StatsClusterKeyBuilde
 }
 
 static void
-_init_queue_sck_builder(LogThreadedDestWorker *self, StatsClusterKeyBuilder *builder)
+_init_worker_sck_builder(LogThreadedDestWorker *self, StatsClusterKeyBuilder *builder)
 {
   stats_cluster_key_builder_add_label(builder, stats_cluster_label("id", self->owner->super.super.id ? : ""));
   _format_stats_key(self->owner, builder);
@@ -778,11 +823,11 @@ _init_queue_sck_builder(LogThreadedDestWorker *self, StatsClusterKeyBuilder *bui
 }
 
 static gboolean
-_acquire_worker_queue(LogThreadedDestWorker *self, gint stats_level, const StatsClusterKeyBuilder *driver_sck_builder)
+_acquire_worker_queue(LogThreadedDestWorker *self, gint stats_level, StatsClusterKeyBuilder *driver_sck_builder)
 {
   gchar *persist_name = _format_queue_persist_name(self);
   StatsClusterKeyBuilder *queue_sck_builder = stats_cluster_key_builder_new();
-  _init_queue_sck_builder(self, queue_sck_builder);
+  _init_worker_sck_builder(self, queue_sck_builder);
 
   self->queue = log_dest_driver_acquire_queue(&self->owner->super, persist_name, stats_level, driver_sck_builder,
                                               queue_sck_builder);
@@ -793,36 +838,91 @@ _acquire_worker_queue(LogThreadedDestWorker *self, gint stats_level, const Stats
   if (!self->queue)
     return FALSE;
 
-  log_queue_set_use_backlog(self->queue, TRUE);
-
   return TRUE;
 }
 
 static void
-_register_raw_bytes_stats(LogThreadedDestWorker *self)
+_register_worker_stats(LogThreadedDestWorker *self)
 {
-  StatsClusterKeyBuilder *kb = stats_cluster_key_builder_new();
-  stats_cluster_key_builder_set_name(kb, "output_event_bytes_total");
-  stats_cluster_key_builder_add_label(kb, stats_cluster_label("id", self->owner->super.super.id ? : ""));
-  _format_stats_key(self->owner, kb);
-
   gint level = log_pipe_is_internal(&self->owner->super.super.super) ? STATS_LEVEL3 : STATS_LEVEL1;
 
-  self->metrics.output_event_bytes_sc_key = stats_cluster_key_builder_build_single(kb);
-  stats_cluster_key_builder_free(kb);
+  StatsClusterKeyBuilder *kb = stats_cluster_key_builder_new();
+  stats_cluster_key_builder_push(kb);
+  {
+    stats_cluster_key_builder_add_label(kb, stats_cluster_label("id", self->owner->super.super.id ? : ""));
+    _format_stats_key(self->owner, kb);
 
-  stats_byte_counter_init(&self->metrics.written_bytes, self->metrics.output_event_bytes_sc_key, level, SBCP_KIB);
+    if (self->owner->metrics.raw_bytes_enabled)
+      {
+        stats_cluster_key_builder_set_name(kb, "output_event_bytes_total");
+        self->metrics.output_event_bytes_sc_key = stats_cluster_key_builder_build_single(kb);
+        stats_byte_counter_init(&self->metrics.written_bytes, self->metrics.output_event_bytes_sc_key, level, SBCP_KIB);
+      }
+  }
+  stats_cluster_key_builder_pop(kb);
+
+  stats_cluster_key_builder_push(kb);
+  {
+    _init_worker_sck_builder(self, kb);
+
+    stats_lock();
+    {
+      /* Up to 49 days and 17 hours on 32 bit machines. */
+      stats_cluster_key_builder_set_name(kb, "output_event_delay_sample_seconds");
+      stats_cluster_key_builder_set_unit(kb, SCU_MILLISECONDS);
+      self->metrics.message_delay_sample_key = stats_cluster_key_builder_build_single(kb);
+      stats_register_counter(level, self->metrics.message_delay_sample_key, SC_TYPE_SINGLE_VALUE,
+                             &self->metrics.message_delay_sample);
+
+      stats_cluster_key_builder_set_name(kb, "output_event_delay_sample_age_seconds");
+      stats_cluster_key_builder_set_unit(kb, SCU_SECONDS);
+      stats_cluster_key_builder_set_frame_of_reference(kb, SCFOR_RELATIVE_TO_TIME_OF_QUERY);
+      self->metrics.message_delay_sample_age_key = stats_cluster_key_builder_build_single(kb);
+      stats_register_counter(level, self->metrics.message_delay_sample_age_key, SC_TYPE_SINGLE_VALUE,
+                             &self->metrics.message_delay_sample_age);
+    }
+    stats_unlock();
+  }
+  stats_cluster_key_builder_pop(kb);
+
+  UnixTime now;
+  unix_time_set_now(&now);
+  stats_counter_set_time(self->metrics.message_delay_sample_age, now.ut_sec);
+  self->metrics.last_delay_update = now.ut_sec;
+
+  stats_cluster_key_builder_free(kb);
 }
 
 static void
-_unregister_raw_bytes_stats(LogThreadedDestWorker *self)
+_unregister_worker_stats(LogThreadedDestWorker *self)
 {
-  if (!self->metrics.output_event_bytes_sc_key)
-    return;
+  if (self->metrics.output_event_bytes_sc_key)
+    {
+      stats_byte_counter_deinit(&self->metrics.written_bytes, self->metrics.output_event_bytes_sc_key);
+      stats_cluster_key_free(self->metrics.output_event_bytes_sc_key);
+      self->metrics.output_event_bytes_sc_key = NULL;
+    }
 
-  stats_byte_counter_deinit(&self->metrics.written_bytes, self->metrics.output_event_bytes_sc_key);
-  stats_cluster_key_free(self->metrics.output_event_bytes_sc_key);
-  self->metrics.output_event_bytes_sc_key = NULL;
+  stats_lock();
+  {
+    if (self->metrics.message_delay_sample_key)
+      {
+        stats_unregister_counter(self->metrics.message_delay_sample_key, SC_TYPE_SINGLE_VALUE,
+                                 &self->metrics.message_delay_sample);
+        stats_cluster_key_free(self->metrics.message_delay_sample_key);
+        self->metrics.message_delay_sample_key = NULL;
+      }
+
+    if (self->metrics.message_delay_sample_age_key)
+      {
+        stats_unregister_counter(self->metrics.message_delay_sample_age_key, SC_TYPE_SINGLE_VALUE,
+                                 &self->metrics.message_delay_sample_age);
+        stats_cluster_key_free(self->metrics.message_delay_sample_age_key);
+        self->metrics.message_delay_sample_age_key = NULL;
+      }
+  }
+  stats_unlock();
+
 }
 
 gboolean
@@ -831,19 +931,23 @@ log_threaded_dest_worker_init_method(LogThreadedDestWorker *self)
   if (self->time_reopen == -1)
     self->time_reopen = self->owner->time_reopen;
 
+  if (self->owner->flush_on_key_change)
+    self->partitioning.last_key = g_string_sized_new(128);
+
   return TRUE;
 }
 
 void
 log_threaded_dest_worker_deinit_method(LogThreadedDestWorker *self)
 {
+  if (self->partitioning.last_key)
+    g_string_free(self->partitioning.last_key, TRUE);
 }
 
 void
 log_threaded_dest_worker_free_method(LogThreadedDestWorker *self)
 {
-  if (self->owner->metrics.raw_bytes_enabled)
-    _unregister_raw_bytes_stats(self);
+  _unregister_worker_stats(self);
 
   main_loop_threaded_worker_clear(&self->thread);
 }
@@ -862,11 +966,13 @@ log_threaded_dest_worker_init_instance(LogThreadedDestWorker *self, LogThreadedD
   self->free_fn = log_threaded_dest_worker_free_method;
   self->owner = owner;
   self->time_reopen = -1;
+
+  self->partitioning.last_key = NULL;
+
   _init_watches(self);
 
   /* cannot be moved to the thread's init() as neither StatsByteCounter nor format_stats_key() is thread-safe */
-  if (self->owner->metrics.raw_bytes_enabled)
-    _register_raw_bytes_stats(self);
+  _register_worker_stats(self);
 }
 
 void
@@ -885,6 +991,23 @@ log_threaded_dest_driver_set_num_workers(LogDriver *s, gint num_workers)
   LogThreadedDestDriver *self = (LogThreadedDestDriver *) s;
 
   self->num_workers = num_workers;
+}
+
+void
+log_threaded_dest_driver_set_worker_partition_key_ref(LogDriver *s, LogTemplate *key)
+{
+  LogThreadedDestDriver *self = (LogThreadedDestDriver *) s;
+
+  log_template_unref(self->worker_partition_key);
+  self->worker_partition_key = key;
+}
+
+void
+log_threaded_dest_driver_set_flush_on_worker_key_change(LogDriver *s, gboolean f)
+{
+  LogThreadedDestDriver *self = (LogThreadedDestDriver *) s;
+
+  self->flush_on_key_change = f;
 }
 
 /* compatibility bridge between LogThreadedDestWorker */
@@ -938,25 +1061,27 @@ _compat_flush(LogThreadedDestWorker *self, LogThreadedFlushMode mode)
   return LTR_SUCCESS;
 }
 
-static void
-_init_worker_compat_layer(LogThreadedDestWorker *self)
-{
-  self->init = _compat_init;
-  self->deinit = _compat_deinit;
-  self->connect = _compat_connect;
-  self->disconnect = _compat_disconnect;
-  self->insert = _compat_insert;
-  self->flush = _compat_flush;
-}
-
 static gboolean
 _is_worker_compat_mode(LogThreadedDestDriver *self)
 {
   return !self->worker.construct;
 }
 
-/* temporary function until proper LogThreadedDestWorker allocation logic is
- * created.  Right now it is just using a singleton within the driver */
+static LogThreadedDestWorker *
+_init_compat_worker(LogThreadedDestDriver *self)
+{
+  LogThreadedDestWorker *worker = &self->worker.instance;
+  log_threaded_dest_worker_init_instance(worker, self, 0);
+  worker->init = _compat_init;
+  worker->deinit = _compat_deinit;
+  worker->connect = _compat_connect;
+  worker->disconnect = _compat_disconnect;
+  worker->insert = _compat_insert;
+  worker->flush = _compat_flush;
+
+  return worker;
+}
+
 static LogThreadedDestWorker *
 _construct_worker(LogThreadedDestDriver *self, gint worker_index)
 {
@@ -966,8 +1091,9 @@ _construct_worker(LogThreadedDestDriver *self, gint worker_index)
        * single worker we have and all Worker related state is in the
        * (derived) Driver class. */
 
-      return &self->worker.instance;
+      return _init_compat_worker(self);
     }
+
   return self->worker.construct(self, worker_index);
 }
 
@@ -983,10 +1109,15 @@ log_threaded_dest_driver_set_max_retries_on_error(LogDriver *s, gint max_retries
 LogThreadedDestWorker *
 _lookup_worker(LogThreadedDestDriver *self, LogMessage *msg)
 {
-  gint worker_index = self->last_worker % self->num_workers;
-  self->last_worker++;
+  if (self->worker_partition_key)
+    {
+      LogTemplateEvalOptions options = DEFAULT_TEMPLATE_EVAL_OPTIONS;
+      guint worker_index = log_template_hash(self->worker_partition_key, msg, &options) % self->num_workers;
+      return self->workers[worker_index];
+    }
 
-  /* here would come the lookup mechanism that maps msg -> worker that doesn't exist yet. */
+  guint worker_index = self->last_worker;
+  self->last_worker = (self->last_worker + 1) % self->num_workers;
   return self->workers[worker_index];
 }
 
@@ -1021,15 +1152,15 @@ log_threaded_dest_worker_written_bytes_add(LogThreadedDestWorker *self, gsize b)
 void
 log_threaded_dest_driver_insert_msg_length_stats(LogThreadedDestDriver *self, gsize len)
 {
-  stats_aggregator_insert_data(self->metrics.max_message_size, len);
-  stats_aggregator_insert_data(self->metrics.average_messages_size, len);
+  stats_aggregator_add_data_point(self->metrics.max_message_size, len);
+  stats_aggregator_add_data_point(self->metrics.average_messages_size, len);
 }
 
 void
 log_threaded_dest_driver_insert_batch_length_stats(LogThreadedDestDriver *self, gsize len)
 {
-  stats_aggregator_insert_data(self->metrics.max_batch_size, len);
-  stats_aggregator_insert_data(self->metrics.average_batch_size, len);
+  stats_aggregator_add_data_point(self->metrics.max_batch_size, len);
+  stats_aggregator_add_data_point(self->metrics.average_batch_size, len);
 }
 
 void
@@ -1075,11 +1206,11 @@ log_threaded_dest_driver_unregister_aggregated_stats(LogThreadedDestDriver *self
 {
   stats_aggregator_lock();
 
-  stats_unregister_aggregator_maximum(&self->metrics.max_message_size);
-  stats_unregister_aggregator_average(&self->metrics.average_messages_size);
-  stats_unregister_aggregator_maximum(&self->metrics.max_batch_size);
-  stats_unregister_aggregator_average(&self->metrics.average_batch_size);
-  stats_unregister_aggregator_cps(&self->metrics.CPS);
+  stats_unregister_aggregator(&self->metrics.max_message_size);
+  stats_unregister_aggregator(&self->metrics.average_messages_size);
+  stats_unregister_aggregator(&self->metrics.max_batch_size);
+  stats_unregister_aggregator(&self->metrics.average_batch_size);
+  stats_unregister_aggregator(&self->metrics.CPS);
 
   stats_aggregator_unlock();
 }
@@ -1092,15 +1223,22 @@ _register_driver_stats(LogThreadedDestDriver *self, StatsClusterKeyBuilder *driv
 
   gint level = log_pipe_is_internal(&self->super.super.super) ? STATS_LEVEL3 : STATS_LEVEL0;
 
-  stats_cluster_key_builder_set_name(driver_sck_builder, "output_events_total");
-  self->metrics.output_events_sc_key = stats_cluster_key_builder_build_logpipe(driver_sck_builder);
+  stats_cluster_key_builder_push(driver_sck_builder);
+  {
+    stats_cluster_key_builder_set_name(driver_sck_builder, "output_events_total");
+    self->metrics.output_events_sc_key = stats_cluster_key_builder_build_logpipe(driver_sck_builder);
+  }
+  stats_cluster_key_builder_pop(driver_sck_builder);
 
-  stats_cluster_key_builder_reset(driver_sck_builder);
-  stats_cluster_key_builder_set_legacy_alias(driver_sck_builder, self->stats_source | SCS_DESTINATION,
-                                             self->super.super.id,
-                                             _format_legacy_stats_instance(self, driver_sck_builder));
-  stats_cluster_key_builder_set_legacy_alias_name(driver_sck_builder, "processed");
-  self->metrics.processed_sc_key = stats_cluster_key_builder_build_single(driver_sck_builder);
+  stats_cluster_key_builder_push(driver_sck_builder);
+  {
+    stats_cluster_key_builder_set_legacy_alias(driver_sck_builder, self->stats_source | SCS_DESTINATION,
+                                               self->super.super.id,
+                                               _format_legacy_stats_instance(self, driver_sck_builder));
+    stats_cluster_key_builder_set_legacy_alias_name(driver_sck_builder, "processed");
+    self->metrics.processed_sc_key = stats_cluster_key_builder_build_single(driver_sck_builder);
+  }
+  stats_cluster_key_builder_pop(driver_sck_builder);
 
   stats_lock();
   {
@@ -1159,7 +1297,7 @@ _format_seqnum_persist_name(LogThreadedDestDriver *self)
 }
 
 static gboolean
-_create_workers(LogThreadedDestDriver *self, gint stats_level, const StatsClusterKeyBuilder *driver_sck_builder)
+_create_workers(LogThreadedDestDriver *self, gint stats_level, StatsClusterKeyBuilder *driver_sck_builder)
 {
   /* free previous workers array if set to cope with num_workers change */
   g_free(self->workers);
@@ -1206,6 +1344,13 @@ log_threaded_dest_driver_init_method(LogPipe *s)
   if (!self->shared_seq_num)
     init_sequence_number(&self->shared_seq_num);
 
+  if (self->worker_partition_key && log_template_is_literal_string(self->worker_partition_key))
+    {
+      msg_error("worker-partition-key() should not be literal string, use macros to form proper partitions",
+                log_expr_node_location_tag(self->super.super.super.expr_node));
+      return FALSE;
+    }
+
   StatsClusterKeyBuilder *driver_sck_builder = stats_cluster_key_builder_new();
   _init_driver_sck_builder(self, driver_sck_builder);
 
@@ -1239,6 +1384,22 @@ log_threaded_dest_driver_start_workers(LogPipe *s)
   return TRUE;
 }
 
+static void
+_destroy_worker(LogThreadedDestDriver *self, LogThreadedDestWorker *worker)
+{
+  if (_is_worker_compat_mode(self))
+    log_threaded_dest_worker_free_method(&self->worker.instance);
+  else
+    log_threaded_dest_worker_free(worker);
+}
+
+static void
+_destroy_workers(LogThreadedDestDriver *self)
+{
+  for (int i = 0; i < self->created_workers; i++)
+    _destroy_worker(self, self->workers[i]);
+}
+
 gboolean
 log_threaded_dest_driver_deinit_method(LogPipe *s)
 {
@@ -1253,11 +1414,7 @@ log_threaded_dest_driver_deinit_method(LogPipe *s)
 
   _unregister_driver_stats(self);
 
-  if (!_is_worker_compat_mode(self))
-    {
-      for (int i = 0; i < self->created_workers; i++)
-        log_threaded_dest_worker_free(self->workers[i]);
-    }
+  _destroy_workers(self);
 
   return log_dest_driver_deinit_method(s);
 }
@@ -1268,8 +1425,6 @@ log_threaded_dest_driver_free(LogPipe *s)
 {
   LogThreadedDestDriver *self = (LogThreadedDestDriver *)s;
 
-  log_threaded_dest_worker_free_method(&self->worker.instance);
-  g_mutex_clear(&self->lock);
   g_free(self->workers);
   log_dest_driver_free((LogPipe *)self);
 }
@@ -1293,7 +1448,6 @@ log_threaded_dest_driver_init_instance(LogThreadedDestDriver *self, GlobalConfig
 
   self->retries_on_error_max = MAX_RETRIES_ON_ERROR_DEFAULT;
   self->retries_max = MAX_RETRIES_BEFORE_SUSPEND_DEFAULT;
-  g_mutex_init(&self->lock);
-  log_threaded_dest_worker_init_instance(&self->worker.instance, self, 0);
-  _init_worker_compat_layer(&self->worker.instance);
+
+  self->flush_on_key_change = FALSE;
 }

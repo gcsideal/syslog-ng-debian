@@ -227,6 +227,33 @@ _is_next_message_in_front_cache(LogQueueDiskReliable *self)
 }
 
 static LogMessage *
+_peek_head(LogQueue *s)
+{
+  LogQueueDiskReliable *self = (LogQueueDiskReliable *)s;
+  LogMessage *msg = NULL;
+
+  g_mutex_lock(&s->lock);
+
+  if (_is_next_message_in_flow_control_window(self))
+    {
+      msg = g_queue_peek_nth(self->flow_control_window, 1);
+      goto exit;
+    }
+
+  if (_is_next_message_in_front_cache(self))
+    {
+      msg = g_queue_peek_nth(self->front_cache, 1);
+      goto exit;
+    }
+
+  msg = log_queue_disk_peek_message(&self->super);
+
+exit:
+  g_mutex_unlock(&s->lock);
+  return msg;
+}
+
+static LogMessage *
 _pop_head(LogQueue *s, LogPathOptions *path_options)
 {
   LogQueueDiskReliable *self = (LogQueueDiskReliable *)s;
@@ -244,12 +271,10 @@ _pop_head(LogQueue *s, LogPathOptions *path_options)
       if (!_skip_message(&self->super))
         qdisk_corrupt = TRUE;
 
-      if (s->use_backlog)
-        {
-          log_msg_ref(msg);
-          _push_to_memory_queue_tail(self->backlog, position, msg, path_options);
-          log_queue_memory_usage_add(s, log_msg_get_size(msg));
-        }
+      /* push to backlog */
+      log_msg_ref(msg);
+      _push_to_memory_queue_tail(self->backlog, position, msg, path_options);
+      log_queue_memory_usage_add(s, log_msg_get_size(msg));
 
       goto exit;
     }
@@ -277,9 +302,6 @@ exit:
       g_mutex_unlock(&s->lock);
       return NULL;
     }
-
-  if (!s->use_backlog)
-    qdisk_empty_backlog(self->super.qdisk);
 
   log_queue_disk_update_disk_related_counters(&self->super);
   log_queue_queued_messages_dec(s);
@@ -390,12 +412,6 @@ exit:
 }
 
 static void
-_push_head(LogQueue *s, LogMessage *msg, const LogPathOptions *path_options)
-{
-  g_assert_not_reached();
-}
-
-static void
 _free(LogQueue *s)
 {
   LogQueueDiskReliable *self = (LogQueueDiskReliable *)s;
@@ -453,8 +469,8 @@ _set_logqueue_virtual_functions(LogQueue *s)
   s->rewind_backlog = _rewind_backlog;
   s->rewind_backlog_all = _rewind_backlog_all;
   s->pop_head = _pop_head;
+  s->peek_head = _peek_head;
   s->push_tail = _push_tail;
-  s->push_head = _push_head;
   s->free_fn = _free;
 }
 
@@ -474,7 +490,7 @@ _set_virtual_functions(LogQueueDiskReliable *self)
 
 LogQueue *
 log_queue_disk_reliable_new(DiskQueueOptions *options, const gchar *filename, const gchar *persist_name,
-                            gint stats_level, const StatsClusterKeyBuilder *driver_sck_builder,
+                            gint stats_level, StatsClusterKeyBuilder *driver_sck_builder,
                             StatsClusterKeyBuilder *queue_sck_builder)
 {
   g_assert(options->reliable == TRUE);

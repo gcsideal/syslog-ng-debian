@@ -34,6 +34,8 @@
 #include "logqueue.h"
 #include "seqnum.h"
 #include "mainloop-threaded-worker.h"
+#include "timeutils/misc.h"
+#include "template/templates.h"
 
 #include <iv.h>
 #include <iv_event.h>
@@ -92,9 +94,20 @@ struct _LogThreadedDestWorker
 
   struct
   {
+    GString *last_key;
+  } partitioning;
+
+  struct
+  {
     StatsClusterKey *output_event_bytes_sc_key;
+    StatsClusterKey *message_delay_sample_key;
+    StatsClusterKey *message_delay_sample_age_key;
 
     StatsByteCounter written_bytes;
+    StatsCounterItem *message_delay_sample;
+    StatsCounterItem *message_delay_sample_age;
+
+    gint64 last_delay_update;
   } metrics;
 
   gboolean (*init)(LogThreadedDestWorker *s);
@@ -111,7 +124,6 @@ const gchar *log_threaded_result_to_str(LogThreadedResult self);
 struct _LogThreadedDestDriver
 {
   LogDestDriver super;
-  GMutex lock;
 
   struct
   {
@@ -160,6 +172,8 @@ struct _LogThreadedDestDriver
   gint created_workers;
   guint last_worker;
 
+  gboolean flush_on_key_change;
+  LogTemplate *worker_partition_key;
   gint stats_source;
 
   /* this counter is not thread safe if there are multiple worker threads,
@@ -218,7 +232,26 @@ log_threaded_dest_worker_insert(LogThreadedDestWorker *self, LogMessage *msg)
     }
   else
     self->seq_num = 0;
-  return self->insert(self, msg);
+
+  LogThreadedResult result = self->insert(self, msg);
+
+  if (self->metrics.message_delay_sample
+      && (result == LTR_QUEUED || result == LTR_SUCCESS || result == LTR_EXPLICIT_ACK_MGMT))
+    {
+      UnixTime now;
+
+      unix_time_set_now(&now);
+      gint64 diff_msec = unix_time_diff_in_msec(&now, &msg->timestamps[LM_TS_RECVD]);
+
+      if (self->metrics.last_delay_update != now.ut_sec)
+        {
+          stats_counter_set_time(self->metrics.message_delay_sample, diff_msec);
+          stats_counter_set_time(self->metrics.message_delay_sample_age, now.ut_sec);
+          self->metrics.last_delay_update = now.ut_sec;
+        }
+    }
+
+  return result;
 }
 
 static inline LogThreadedResult
@@ -267,6 +300,8 @@ void log_threaded_dest_driver_free(LogPipe *s);
 
 void log_threaded_dest_driver_set_max_retries_on_error(LogDriver *s, gint max_retries);
 void log_threaded_dest_driver_set_num_workers(LogDriver *s, gint num_workers);
+void log_threaded_dest_driver_set_worker_partition_key_ref(LogDriver *s, LogTemplate *key);
+void log_threaded_dest_driver_set_flush_on_worker_key_change(LogDriver *s, gboolean f);
 void log_threaded_dest_driver_set_batch_lines(LogDriver *s, gint batch_lines);
 void log_threaded_dest_driver_set_batch_timeout(LogDriver *s, gint batch_timeout);
 void log_threaded_dest_driver_set_time_reopen(LogDriver *s, time_t time_reopen);

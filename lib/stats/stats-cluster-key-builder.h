@@ -30,7 +30,8 @@
 typedef struct _StatsClusterKeyBuilder StatsClusterKeyBuilder;
 
 StatsClusterKeyBuilder *stats_cluster_key_builder_new(void);
-StatsClusterKeyBuilder *stats_cluster_key_builder_clone(const StatsClusterKeyBuilder *self);
+void stats_cluster_key_builder_push(StatsClusterKeyBuilder *self);
+void stats_cluster_key_builder_pop(StatsClusterKeyBuilder *self);
 void stats_cluster_key_builder_free(StatsClusterKeyBuilder *self);
 
 void stats_cluster_key_builder_set_name(StatsClusterKeyBuilder *self, const gchar *name);
@@ -38,19 +39,18 @@ void stats_cluster_key_builder_set_name_prefix(StatsClusterKeyBuilder *self, con
 void stats_cluster_key_builder_set_name_suffix(StatsClusterKeyBuilder *self, const gchar *name_suffix);
 void stats_cluster_key_builder_add_label(StatsClusterKeyBuilder *self, const StatsClusterLabel label);
 void stats_cluster_key_builder_set_unit(StatsClusterKeyBuilder *self, StatsClusterUnit unit);
+void stats_cluster_key_builder_set_frame_of_reference(StatsClusterKeyBuilder *self,
+                                                      StatsClusterFrameOfReference frame_of_reference);
 void stats_cluster_key_builder_set_legacy_alias(StatsClusterKeyBuilder *self, guint16 component, const gchar *id,
                                                 const gchar *instance);
 void stats_cluster_key_builder_set_legacy_alias_name(StatsClusterKeyBuilder *self, const gchar *name);
-
-void stats_cluster_key_builder_reset(StatsClusterKeyBuilder *self);
 
 StatsClusterKey *stats_cluster_key_builder_build_single(const StatsClusterKeyBuilder *self);
 StatsClusterKey *stats_cluster_key_builder_build_logpipe(const StatsClusterKeyBuilder *self);
 
 /* Compatibility functions for reproducing stats_instance names based on unsorted labels */
 void stats_cluster_key_builder_add_legacy_label(StatsClusterKeyBuilder *self, const StatsClusterLabel label);
-void stats_cluster_key_builder_clear_legacy_labels(StatsClusterKeyBuilder *self);
-const gchar *stats_cluster_key_builder_format_legacy_stats_instance(StatsClusterKeyBuilder *self,
+const gchar *stats_cluster_key_builder_format_legacy_stats_instance(const StatsClusterKeyBuilder *self,
     gchar *buf, gsize buf_size);
 
 #endif
