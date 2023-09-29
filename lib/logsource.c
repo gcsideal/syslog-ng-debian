@@ -33,6 +33,7 @@
 #include "ack-tracker/ack_tracker.h"
 #include "ack-tracker/ack_tracker_factory.h"
 #include "timeutils/misc.h"
+#include "compat/time.h"
 #include "scratch-buffers.h"
 
 #include <string.h>
@@ -694,7 +695,7 @@ log_source_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options
   /* message setup finished, send it out */
 
   stats_counter_inc(self->metrics.recvd_messages);
-  stats_counter_set(self->metrics.last_message_seen, msg->timestamps[LM_TS_RECVD].ut_sec);
+  stats_counter_set_time(self->metrics.last_message_seen, msg->timestamps[LM_TS_RECVD].ut_sec);
   stats_byte_counter_add(&self->metrics.recvd_bytes, msg->recvd_rawmsg_size);
   log_pipe_forward_msg(s, msg, path_options);
 
@@ -744,26 +745,27 @@ _set_metric_options(LogSource *self, const gchar *stats_id, StatsClusterKeyBuild
 
   self->metrics.stats_kb = kb;
 
-  StatsClusterKeyBuilder *raw_bytes_stats_kb = stats_cluster_key_builder_clone(kb);
+  stats_cluster_key_builder_push(self->metrics.stats_kb);
+  {
+    gchar stats_instance[1024];
+    const gchar *instance_name = stats_cluster_key_builder_format_legacy_stats_instance(self->metrics.stats_kb,
+                                 stats_instance, sizeof(stats_instance));
+    stats_cluster_key_builder_set_name(self->metrics.stats_kb, "input_events_total");
+    stats_cluster_key_builder_set_legacy_alias(self->metrics.stats_kb, self->options->stats_source | SCS_SOURCE,
+                                               self->stats_id, instance_name);
+    stats_cluster_key_builder_set_legacy_alias_name(self->metrics.stats_kb, "processed");
+    stats_cluster_key_builder_add_label(self->metrics.stats_kb, stats_cluster_label("id", self->stats_id));
+    self->metrics.recvd_messages_key = stats_cluster_key_builder_build_single(self->metrics.stats_kb);
+  }
+  stats_cluster_key_builder_pop(self->metrics.stats_kb);
 
-  gchar stats_instance[1024];
-  const gchar *instance_name = stats_cluster_key_builder_format_legacy_stats_instance(self->metrics.stats_kb,
-                               stats_instance, sizeof(stats_instance));
-
-  stats_cluster_key_builder_set_name(self->metrics.stats_kb, "input_events_total");
-  stats_cluster_key_builder_set_legacy_alias(self->metrics.stats_kb, self->options->stats_source | SCS_SOURCE,
-                                             self->stats_id, instance_name);
-  stats_cluster_key_builder_set_legacy_alias_name(self->metrics.stats_kb, "processed");
-  stats_cluster_key_builder_add_label(self->metrics.stats_kb, stats_cluster_label("id", self->stats_id));
-
-  self->metrics.recvd_messages_key = stats_cluster_key_builder_build_single(self->metrics.stats_kb);
-
-
-  stats_cluster_key_builder_set_name(raw_bytes_stats_kb, "input_event_bytes_total");;
-  stats_cluster_key_builder_add_label(raw_bytes_stats_kb, stats_cluster_label("id", self->stats_id));
-
-  self->metrics.recvd_bytes_key = stats_cluster_key_builder_build_single(raw_bytes_stats_kb);
-  stats_cluster_key_builder_free(raw_bytes_stats_kb);
+  stats_cluster_key_builder_push(self->metrics.stats_kb);
+  {
+    stats_cluster_key_builder_set_name(self->metrics.stats_kb, "input_event_bytes_total");;
+    stats_cluster_key_builder_add_label(self->metrics.stats_kb, stats_cluster_label("id", self->stats_id));
+    self->metrics.recvd_bytes_key = stats_cluster_key_builder_build_single(self->metrics.stats_kb);
+  }
+  stats_cluster_key_builder_pop(self->metrics.stats_kb);
 }
 
 void

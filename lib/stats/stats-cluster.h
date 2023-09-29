@@ -60,8 +60,20 @@ typedef enum _StatsClusterUnit
   SCU_KIB,
   SCU_MIB,
   SCU_GIB,
-
 } StatsClusterUnit;
+
+typedef enum _StatsClusterFrameOfReference
+{
+  SCFOR_NONE = 0,
+  SCFOR_ABSOLUTE,
+
+  /*
+   * Only applicable for counters with seconds, minutes or hours unit.
+   * Has a 1 second precision.
+   * Results in a positive value for timestamps older than the time of query.
+   */
+  SCFOR_RELATIVE_TO_TIME_OF_QUERY,
+} StatsClusterFrameOfReference;
 
 typedef struct _StatsCounterGroup StatsCounterGroup;
 typedef struct _StatsCounterGroupInit StatsCounterGroupInit;
@@ -113,7 +125,11 @@ struct _StatsClusterKey
   StatsClusterLabel *labels;
   gsize labels_len;
 
-  StatsClusterUnit stored_unit;
+  struct
+  {
+    StatsClusterUnit stored_unit;
+    StatsClusterFrameOfReference frame_of_reference;
+  } formatting;
 
   struct
   {
@@ -121,7 +137,7 @@ struct _StatsClusterKey
     /* syslog-ng component/driver/subsystem that registered this cluster */
     guint16 component;
     const gchar *instance;
-    gboolean set:1;
+    guint set:1;
   } legacy;
   StatsCounterGroupInit counter_group_init;
 };

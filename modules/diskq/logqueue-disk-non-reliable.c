@@ -276,6 +276,33 @@ _push_tail_backlog(LogQueueDiskNonReliable *self, LogMessage *msg, LogPathOption
 }
 
 static LogMessage *
+_peek_head(LogQueue *s)
+{
+  LogQueueDiskNonReliable *self = (LogQueueDiskNonReliable *)s;
+  LogMessage *msg = NULL;
+
+  g_mutex_lock(&s->lock);
+
+  if (self->front_cache->length > 0)
+    {
+      msg = g_queue_peek_head(self->front_cache);
+      if (msg)
+        goto success;
+    }
+
+  msg = log_queue_disk_peek_message(&self->super);
+  if (msg)
+    goto success;
+
+  if (self->flow_control_window->length > 0 && qdisk_is_read_only(self->super.qdisk))
+    msg = g_queue_peek_head(self->flow_control_window);
+
+success:
+  g_mutex_unlock(&s->lock);
+  return msg;
+}
+
+static LogMessage *
 _pop_head(LogQueue *s, LogPathOptions *path_options)
 {
   LogQueueDiskNonReliable *self = (LogQueueDiskNonReliable *)s;
@@ -313,19 +340,12 @@ success:
   log_queue_disk_update_disk_related_counters(&self->super);
   g_mutex_unlock(&s->lock);
 
-  if (s->use_backlog)
-    _push_tail_backlog(self, msg, path_options);
+  _push_tail_backlog(self, msg, path_options);
 
   if (stats_update)
     log_queue_queued_messages_dec(s);
 
   return msg;
-}
-
-static void
-_push_head(LogQueue *s, LogMessage *msg, const LogPathOptions *path_options)
-{
-  g_assert_not_reached();
 }
 
 /* _is_msg_serialization_needed_hint() must be called without holding the queue's lock.
@@ -549,7 +569,7 @@ _set_logqueue_virtual_functions(LogQueue *s)
   s->rewind_backlog = _rewind_backlog;
   s->rewind_backlog_all = _rewind_backlog_all;
   s->pop_head = _pop_head;
-  s->push_head = _push_head;
+  s->peek_head = _peek_head;
   s->push_tail = _push_tail;
   s->free_fn = _free;
 }
@@ -571,7 +591,7 @@ _set_virtual_functions(LogQueueDiskNonReliable *self)
 
 LogQueue *
 log_queue_disk_non_reliable_new(DiskQueueOptions *options, const gchar *filename, const gchar *persist_name,
-                                gint stats_level, const StatsClusterKeyBuilder *driver_sck_builder,
+                                gint stats_level, StatsClusterKeyBuilder *driver_sck_builder,
                                 StatsClusterKeyBuilder *queue_sck_builder)
 {
   g_assert(options->reliable == FALSE);

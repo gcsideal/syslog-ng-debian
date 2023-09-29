@@ -30,3 +30,4 @@ from .message import LogMessage
 from .logger import Logger
 from .persist import Persist
 from .confgen import register_config_generator
+from .reloc import get_installation_path_for

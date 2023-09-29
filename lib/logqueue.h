@@ -61,7 +61,6 @@ struct _LogQueue
 {
   QueueType type;
   GAtomicCounter ref_cnt;
-  gboolean use_backlog;
 
   gint throttle;
   gint throttle_buckets;
@@ -81,8 +80,8 @@ struct _LogQueue
   gint64 (*get_length)(LogQueue *self);
   gboolean (*is_empty_racy)(LogQueue *self);
   void (*push_tail)(LogQueue *self, LogMessage *msg, const LogPathOptions *path_options);
-  void (*push_head)(LogQueue *self, LogMessage *msg, const LogPathOptions *path_options);
   LogMessage *(*pop_head)(LogQueue *self, LogPathOptions *path_options);
+  LogMessage *(*peek_head)(LogQueue *self);
   void (*ack_backlog)(LogQueue *self, gint n);
   void (*rewind_backlog)(LogQueue *self, guint rewind_count);
   void (*rewind_backlog_all)(LogQueue *self);
@@ -119,12 +118,6 @@ log_queue_push_tail(LogQueue *self, LogMessage *msg, const LogPathOptions *path_
   self->push_tail(self, msg, path_options);
 }
 
-static inline void
-log_queue_push_head(LogQueue *self, LogMessage *msg, const LogPathOptions *path_options)
-{
-  self->push_head(self, msg, path_options);
-}
-
 static inline LogMessage *
 log_queue_pop_head(LogQueue *self, LogPathOptions *path_options)
 {
@@ -142,6 +135,12 @@ log_queue_pop_head(LogQueue *self, LogPathOptions *path_options)
 }
 
 static inline LogMessage *
+log_queue_peek_head(LogQueue *self)
+{
+  return self->peek_head(self);
+}
+
+static inline LogMessage *
 log_queue_pop_head_ignore_throttle(LogQueue *self, LogPathOptions *path_options)
 {
   return self->pop_head(self, path_options);
@@ -150,27 +149,18 @@ log_queue_pop_head_ignore_throttle(LogQueue *self, LogPathOptions *path_options)
 static inline void
 log_queue_rewind_backlog(LogQueue *self, guint rewind_count)
 {
-  if (!self->use_backlog)
-    return;
-
   self->rewind_backlog(self, rewind_count);
 }
 
 static inline void
 log_queue_rewind_backlog_all(LogQueue *self)
 {
-  if (!self->use_backlog)
-    return;
-
   self->rewind_backlog_all(self);
 }
 
 static inline void
 log_queue_ack_backlog(LogQueue *self, guint rewind_count)
 {
-  if (!self->use_backlog)
-    return;
-
   self->ack_backlog(self, rewind_count);
 }
 
@@ -205,13 +195,6 @@ log_queue_set_throttle(LogQueue *self, gint throttle)
   self->throttle_buckets = throttle;
 }
 
-static inline void
-log_queue_set_use_backlog(LogQueue *self, gboolean use_backlog)
-{
-  if (self)
-    self->use_backlog = use_backlog;
-}
-
 static inline gboolean
 log_queue_has_type(LogQueue *self, QueueType type)
 {
@@ -236,7 +219,7 @@ void log_queue_set_parallel_push(LogQueue *self, LogQueuePushNotifyFunc parallel
 gboolean log_queue_check_items(LogQueue *self, gint *timeout, LogQueuePushNotifyFunc parallel_push_notify,
                                gpointer user_data, GDestroyNotify user_data_destroy);
 void log_queue_init_instance(LogQueue *self, const gchar *persist_name, gint stats_level,
-                             const StatsClusterKeyBuilder *driver_sck_builder,
+                             StatsClusterKeyBuilder *driver_sck_builder,
                              StatsClusterKeyBuilder *queue_sck_builder);
 
 void log_queue_free_method(LogQueue *self);

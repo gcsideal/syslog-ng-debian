@@ -18,7 +18,7 @@ applications or forwarded by systemd) and writes everything to a single
 file:
 
 ```
-@version: 4.3
+@version: 4.4
 @include "scl.conf"
 
 log {
@@ -30,7 +30,7 @@ log {
 This one additionally processes logs from the network (TCP/514 by default):
 
 ```
-@version: 4.3
+@version: 4.4
 @include "scl.conf"
 
 log {
@@ -44,7 +44,7 @@ log {
 This config is designed for structured/application logging, using local submission via JSON, and outputting in key=value format:
 
 ```
-@version: 4.3
+@version: 4.4
 @include "scl.conf"
 
 log {
@@ -174,7 +174,6 @@ syslog-ng packages are released for the following distribution versions (x86-64)
 | Ubuntu 23.04 | ubuntu-lunar |
 | Ubuntu 22.04 | ubuntu-jammy |
 | Ubuntu 20.04 | ubuntu-focal |
-| Ubuntu 18.04 | ubuntu-bionic |
 | Debian 12 | debian-bookworm |
 | Debian 11 | debian-bullseye |
 | Debian 10 | debian-buster |
