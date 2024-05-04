@@ -1,3 +1,16 @@
+syslog-ng (4.4.0-1) unstable; urgency=medium
+
+  [ Attila Szalay ]
+  * New upstream version 4.4.0
+
+  [ SZALAY Attila ]
+  * Make plugin dependencies binNMU safe.
+    Thanks to Steve Langasek <vorlon@debian.org> whose patch was the base
+    (Closes: #1063077)
+  * Fix install exclude list
+
+ -- SZALAY Attila <sasa@debian.org>  Sat, 04 May 2024 16:23:54 +0100
+
 syslog-ng (4.3.1-2) unstable; urgency=medium
 
   [ Attila Szalay ]
