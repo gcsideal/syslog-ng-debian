@@ -44,9 +44,6 @@ usr/share/syslog-ng/xsd/*
 [linux-any] usr/lib/syslog-ng/*/libsdjournal.so
 [linux-any] usr/lib/syslog-ng/*/libpacctformat.so
 
-#[!kfreebsd-any] lib/systemd/system/*
-[!kfreebsd-any] debian/syslog-ng.systemd =>  lib/systemd/system/syslog-ng.service
-
 debian/syslog-ng.conf                   /etc/syslog-ng/
 
 debian/tty10.plugin   => /usr/share/syslog-ng/include/scl/getvirtconsole/plugin.conf
