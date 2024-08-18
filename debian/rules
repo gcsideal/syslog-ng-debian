@@ -99,6 +99,7 @@ override_dh_auto_configure:
 		--enable-json \
 		--enable-riemann \
 		--disable-java \
+		--disable-smtp \
 		--enable-manpages \
 		--enable-amqp \
 		$(PACCT_CONFIGURE_OPTS) \
