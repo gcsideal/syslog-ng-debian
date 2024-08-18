@@ -1,3 +1,10 @@
+syslog-ng (4.4.0-3) UNRELEASED; urgency=medium
+
+  * Backport upstream fix for variable type for g_io_channel_write_chars()
+    (closes: #1077249).
+
+ -- Laszlo Boszormenyi (GCS) <gcs@debian.org>  Sun, 18 Aug 2024 09:01:57 +0200
+
 syslog-ng (4.4.0-2) unstable; urgency=medium
 
   [ Chris Hofstaedtler <zeha@debian.org> ]
