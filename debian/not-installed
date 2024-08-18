@@ -6,3 +6,4 @@ usr/lib/*/pkgconfig/syslog-ng-test.pc
 usr/bin/syslog-ng-update-virtualenv
 usr/lib/syslog-ng/*/libcorrelation.so
 usr/lib/syslog-ng/*/libmetrics-probe.so
+usr/share/syslog-ng/smart-multi-line.fsm

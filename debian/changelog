@@ -1,11 +1,3 @@
-syslog-ng (4.4.0-2~1.gbp215ba9) UNRELEASED; urgency=medium
-
-  ** SNAPSHOT build @215ba9bde63346bf8e43885eb8be4a51f0098bff **
-
-  * Install smart-multi-line.fsm to enable smart multi line support
-
- -- SZALAY Attila <sasa@debian.org>  Sun, 05 May 2024 15:00:39 +0100
-
 syslog-ng (4.4.0-1) unstable; urgency=medium
 
   [ Attila Szalay ]
