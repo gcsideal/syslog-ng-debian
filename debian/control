@@ -8,7 +8,7 @@ Build-Depends: debhelper (>= 10~),
                automake,
                autoconf-archive,
                tzdata,
-               pkg-config, flex, bison,
+               pkgconf, flex, bison,
                xsltproc, docbook-xsl,
                libesmtp-dev,
                libivykis-dev,
@@ -98,7 +98,7 @@ Section: libdevel
 Architecture: any
 Depends: syslog-ng-core (= ${binary:Version}),
  ${misc:Depends}, ${perl:Depends},
- pkg-config, perl, flex, bison, python3,
+ pkgconf, perl, flex, bison, python3,
  libglib2.0-dev, libivykis-dev
 Description: Enhanced system logging daemon (development files)
  syslog-ng is an enhanced log daemon, supporting a wide range of input

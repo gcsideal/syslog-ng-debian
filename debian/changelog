@@ -1,4 +1,4 @@
-syslog-ng (4.4.0-2) UNRELEASED; urgency=medium
+syslog-ng (4.4.0-2) unstable; urgency=medium
 
   [ Chris Hofstaedtler <zeha@debian.org> ]
   * Let configure autodetect systemdsystemunitdir, add systemd-dev for
