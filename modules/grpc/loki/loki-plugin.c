@@ -23,6 +23,7 @@
 #include "cfg-parser.h"
 #include "plugin.h"
 #include "plugin-types.h"
+#include "protos/apphook.h"
 
 extern CfgParser loki_parser;
 
@@ -39,6 +40,7 @@ gboolean
 loki_module_init(PluginContext *context, CfgArgs *args)
 {
   plugin_register(context, loki_plugins, G_N_ELEMENTS(loki_plugins));
+  grpc_register_global_initializers();
   return TRUE;
 }
 

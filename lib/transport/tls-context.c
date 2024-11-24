@@ -198,6 +198,16 @@ tls_context_setup_ocsp_stapling(TLSContext *self)
 }
 
 static void
+tls_context_setup_ssl_version(TLSContext *self)
+{
+  if (self->ssl_version == 0)
+    return;
+#if SYSLOG_NG_HAVE_DECL_SSL_CTX_SET_MIN_PROTO_VERSION
+  SSL_CTX_set_min_proto_version(self->ssl_ctx, self->ssl_version);
+#endif
+}
+
+static void
 tls_context_setup_ssl_options(TLSContext *self)
 {
   if (self->ssl_options != TSO_NONE)
@@ -317,6 +327,7 @@ tls_context_setup_sigalgs(TLSContext *self)
 static gboolean
 tls_context_setup_cmd_context(TLSContext *self)
 {
+#if SYSLOG_NG_HAVE_DECL_SSL_CONF_CTX_NEW
   SSL_CONF_CTX *ssl_conf_ctx = SSL_CONF_CTX_new();
   const int ctx_flags = SSL_CONF_FLAG_FILE | SSL_CONF_FLAG_CLIENT | SSL_CONF_FLAG_SERVER |
                         SSL_CONF_FLAG_CERTIFICATE | SSL_CONF_FLAG_SHOW_ERRORS;
@@ -346,6 +357,12 @@ tls_context_setup_cmd_context(TLSContext *self)
 
   SSL_CONF_CTX_free(ssl_conf_ctx);
   return result;
+#else
+  if (self->conf_cmds_list != NULL)
+    return FALSE;
+  else
+    return TRUE;
+#endif
 }
 
 static PKCS12 *
@@ -580,6 +597,7 @@ tls_context_setup_context(TLSContext *self)
   tls_context_setup_verify_mode(self);
   tls_context_setup_ocsp_stapling(self);
 
+  tls_context_setup_ssl_version(self);
   tls_context_setup_ssl_options(self);
   if (!tls_context_setup_ecdh(self))
     goto error_no_print;
@@ -661,6 +679,29 @@ tls_context_set_verify_mode_by_name(TLSContext *self, const gchar *mode_str)
 }
 
 gboolean
+tls_context_set_ssl_version_by_name(TLSContext *self, const gchar *value)
+{
+#if SYSLOG_NG_HAVE_DECL_SSL_CTX_SET_MIN_PROTO_VERSION
+  if (strcasecmp(value, "sslv3") == 0)
+    self->ssl_version = SSL3_VERSION;
+  else if (strcasecmp(value, "tlsv1") == 0 || strcasecmp(value, "tlsv1_0") == 0)
+    self->ssl_version = TLS1_VERSION;
+  else if (strcasecmp(value, "tlsv1_1") == 0)
+    self->ssl_version = TLS1_1_VERSION;
+  else if (strcasecmp(value, "tlsv1_2") == 0)
+    self->ssl_version = TLS1_2_VERSION;
+  else if (strcasecmp(value, "tlsv1_3") == 0)
+    self->ssl_version = TLS1_3_VERSION;
+  else
+    return FALSE;
+  return TRUE;
+#else
+  msg_error("This version of syslog-ng was compiled against OpenSSL older than 1.1.0 which does not support ssl-version()");
+  return FALSE;
+#endif
+}
+
+gboolean
 tls_context_set_ssl_options_by_name(TLSContext *self, GList *options)
 {
   self->ssl_options = TSO_NONE;
@@ -690,6 +731,8 @@ tls_context_set_ssl_options_by_name(TLSContext *self, GList *options)
 #endif
       else if (strcasecmp(l->data, "ignore-hostname-mismatch") == 0 || strcasecmp(l->data, "ignore_hostname_mismatch") == 0)
         self->ssl_options |= TSO_IGNORE_HOSTNAME_MISMATCH;
+      else if (strcasecmp(l->data, "ignore-validity-period") == 0 || strcasecmp(l->data, "ignore_validity_period") == 0)
+        self->ssl_options |= TSO_IGNORE_VALIDITY_PERIOD;
       else
         return FALSE;
     }
@@ -713,6 +756,12 @@ gboolean
 tls_context_ignore_hostname_mismatch(TLSContext *self)
 {
   return self->ssl_options & TSO_IGNORE_HOSTNAME_MISMATCH;
+}
+
+gboolean
+tls_context_ignore_validity_period(TLSContext *self)
+{
+  return self->ssl_options & TSO_IGNORE_VALIDITY_PERIOD;
 }
 
 static int
@@ -851,9 +900,15 @@ tls_context_set_client_sigalgs(TLSContext *self, const gchar *sigalgs, GError **
 gboolean
 tls_context_set_conf_cmds(TLSContext *self, GList *cmds, GError **error)
 {
+#if SYSLOG_NG_HAVE_DECL_SSL_CONF_CTX_NEW
   g_list_foreach(self->conf_cmds_list, (GFunc) g_free, NULL);
   self->conf_cmds_list = cmds;
   return TRUE;
+#else
+  g_set_error(error, TLSCONTEXT_ERROR, TLSCONTEXT_UNSUPPORTED,
+              "Setting SSL conf context is not supported with the OpenSSL version syslog-ng was compiled with");
+  return FALSE;
+#endif
 }
 
 void

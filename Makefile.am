@@ -33,7 +33,7 @@ endif
 
 ACLOCAL_AMFLAGS		= -I m4 --install
 
-EXTRA_DIST		= $(filter-out ${NODIST_BUILT_SOURCES},${BUILT_SOURCES}) VERSION NEWS.md autogen.sh \
+EXTRA_DIST		= $(filter-out ${NODIST_BUILT_SOURCES},${BUILT_SOURCES}) VERSION.txt NEWS.md autogen.sh \
 			  dist.conf dist.conf.in syslog-ng.pc.in \
 			  syslog-ng-config.h.in	\
 			  CONTRIBUTING.md	\
@@ -43,6 +43,7 @@ EXTRA_DIST		= $(filter-out ${NODIST_BUILT_SOURCES},${BUILT_SOURCES}) VERSION NEW
 			  syslog-ng-ctl/CMakeLists.txt	\
 			  requirements.txt	\
 			  dev-requirements.txt  \
+			  optional-dev-requirements.txt  \
 			  README.md	\
 			  .astylerc
 
@@ -51,6 +52,8 @@ pkgconfigdir		= $(libdir)/pkgconfig
 pkgconfig_DATA		= syslog-ng.pc
 
 AM_CPPFLAGS		= -I$(top_srcdir)/lib -I$(top_srcdir)/modules -I$(top_builddir)/lib -I$(top_builddir)/modules
+
+AM_OBJCFLAGS	= -fobjc-arc
 
 # configure script gives us -g and/or -O2, but all warning related settings
 # should be here
@@ -76,8 +79,9 @@ AM_CXXFLAGS += \
 if ENABLE_EXTRA_WARNINGS
 AM_CFLAGS += \
 	-Wimplicit-function-declaration \
+	$(CFLAGS_W_NO_INITIALIZER_OVERRIDES) \
+	$(CFLAGS_W_OLD_STYLE_DECLARATION) \
 	-Wnested-externs \
-	-Wold-style-declaration \
 	-Wstrict-prototypes \
 	-Wswitch-default \
 	-Wimplicit-int \
@@ -122,13 +126,13 @@ endif
 
 TEST_CFLAGS		= -DTOP_SRCDIR=\"$(abs_top_srcdir)\" $(AM_CFLAGS) $(CRITERION_CFLAGS)
 
-TEST_CXXFLAGS		= -DTOP_SRCDIR=\"$(abs_top_srcdir)\" $(AM_CXXFLAGS) $(CRITERION_CFLAGS) -lstdc++
+TEST_CXXFLAGS		= -DTOP_SRCDIR=\"$(abs_top_srcdir)\" $(AM_CXXFLAGS) $(CRITERION_CFLAGS)
 
 TEST_LDADD		= $(LIBTEST_LIBS) $(CRITERION_LIBS) \
 			  $(top_builddir)/lib/libsyslog-ng.la \
 			  $(TOOL_DEPS_LIBS)
 
-test_ldflags		= -no-install $(NO_PIE_LDFLAG)
+test_ldflags		= $(TEST_NO_INSTALL_FLAG) $(NO_PIE_LDFLAG)
 
 PREOPEN_SYSLOGFORMAT	= -dlpreopen ${top_builddir}/modules/syslogformat/libsyslogformat.la
 PREOPEN_BASICFUNCS	= -dlpreopen ${top_builddir}/modules/basicfuncs/libbasicfuncs.la

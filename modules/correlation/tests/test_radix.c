@@ -731,6 +731,21 @@ ParameterizedTestParameters(dbparser, test_radix_search_matches)
       .expected_pattern = {"qstring", "quoted string", NULL}
     },
     {
+      .node_to_insert = {"@QSTRING:qstring:()@", NULL},
+      .key = "(quoted string) hehehe",
+      .expected_pattern = {"qstring", "quoted string", NULL}
+    },
+    {
+      .node_to_insert = {"@QSTRING:qstring:()@", NULL},
+      .key = "(nested (quoted string())) hehehe",
+      .expected_pattern = {"qstring", "nested (quoted string())", NULL}
+    },
+    {
+      .node_to_insert = {"@QSTRING:qstring:()@", NULL},
+      .key = "(unbalanced (nested (quoted string())) hehehe",
+      .expected_pattern = {NULL}
+    },
+    {
       .node_to_insert = {"@QSTRING:qstring:'@", NULL},
       .key = "v12345",
       .expected_pattern = {NULL}
@@ -1046,24 +1061,39 @@ ParameterizedTestParameters(dbparser, test_radix_search_matches)
     },
     /* test_nlstring_matches */
     {
-      .node_to_insert = {"@NLSTRING:nlstring@\n", NULL},
+      .node_to_insert = {"@NLSTRING:nlstring@", NULL},
       .key = "foobar\r\nbaz",
       .expected_pattern = {"nlstring", "foobar", NULL},
     },
     {
-      .node_to_insert = {"@NLSTRING:nlstring@\n", NULL},
+      .node_to_insert = {"@NLSTRING:nlstring@", NULL},
       .key = "foobar\nbaz",
       .expected_pattern = {"nlstring", "foobar", NULL},
     },
     {
-      .node_to_insert = {"@NLSTRING:nlstring@\n", NULL},
+      .node_to_insert = {"@NLSTRING:nlstring@", NULL},
       .key = "\nbaz",
       .expected_pattern = {"nlstring", "", NULL},
     },
     {
-      .node_to_insert = {"@NLSTRING:nlstring@\n", NULL},
+      .node_to_insert = {"@NLSTRING:nlstring@", NULL},
       .key = "\r\nbaz",
       .expected_pattern = {"nlstring", "", NULL},
+    },
+    {
+      .node_to_insert = {"@NLSTRING:nlstring@", NULL},
+      .key = "foobar\r\n",
+      .expected_pattern = {"nlstring", "foobar", NULL},
+    },
+    {
+      .node_to_insert = {"@NLSTRING:nlstring@", NULL},
+      .key = "foobar\n",
+      .expected_pattern = {"nlstring", "foobar", NULL},
+    },
+    {
+      .node_to_insert = {"@NLSTRING:nlstring@", NULL},
+      .key = "foobar",
+      .expected_pattern = {"nlstring", "foobar", NULL},
     }
   };
   return cr_make_param_array(RadixTestParam, parser_params, G_N_ELEMENTS(parser_params));

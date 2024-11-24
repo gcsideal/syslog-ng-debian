@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2023 László Várady
+ * Copyright (c) 2024 Axoflow
+ * Copyright (c) 2023-2024 László Várady
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -23,7 +24,6 @@
 
 #include <criterion/criterion.h>
 
-#include "syslog-ng.h"
 #include "stats/stats.h"
 #include "stats/stats-cluster.h"
 #include "stats/stats-cluster-single.h"
@@ -32,6 +32,7 @@
 #include "timeutils/unixtime.h"
 #include "scratch-buffers.h"
 #include "mainloop.h"
+#include "apphook.h"
 #include "libtest/fake-time.h"
 
 #include <float.h>
@@ -40,20 +41,14 @@
 static void
 setup(void)
 {
-  main_loop_thread_resource_init();
-  stats_init();
-  scratch_buffers_global_init();
-  scratch_buffers_allocator_init();
+  app_startup();
 }
 
 static void
 teardown(void)
 {
   scratch_buffers_explicit_gc();
-  scratch_buffers_allocator_deinit();
-  scratch_buffers_global_deinit();
-  stats_destroy();
-  main_loop_thread_resource_deinit();
+  app_shutdown();
 }
 
 TestSuite(stats_prometheus, .init = setup, .fini = teardown);
@@ -170,6 +165,33 @@ Test(stats_prometheus, test_prometheus_format_sanitize)
   stats_cluster_free(cluster);
 }
 
+Test(stats_prometheus, test_prometheus_format_label_escaping)
+{
+  /* Exposition format:
+   *
+   * A label value can be any sequence of UTF-8 characters, but the
+   * backslash (\), double-quote ("), and line feed (\n) characters have to be
+   * escaped as \\, \", and \n, respectively.
+   */
+
+  StatsClusterLabel labels[] =
+  {
+    stats_cluster_label("control_chars", "a\a\tb\nc"),
+    stats_cluster_label("backslashes", "a\\a\\t\\nb"),
+    stats_cluster_label("quotes", "\"\"hello\""),
+    stats_cluster_label("invalid_utf8", "a\xfa"),
+  };
+  StatsCluster *cluster = test_single_cluster("test_name", labels, G_N_ELEMENTS(labels));
+
+  assert_prometheus_format(cluster, SC_TYPE_SINGLE_VALUE,
+                           "syslogng_test_name{control_chars=\"a\a\tb\\nc\","
+                           "backslashes=\"a\\\\a\\\\t\\\\nb\","
+                           "quotes=\"\\\"\\\"hello\\\"\","
+                           "invalid_utf8=\"a\\\\xfa\"} 0\n");
+
+  stats_cluster_free(cluster);
+}
+
 gchar *stats_format_prometheus_format_value(const StatsClusterKey *key, const StatsCounterItem *counter);
 
 Test(stats_prometheus, test_prometheus_format_value)
@@ -201,11 +223,11 @@ Test(stats_prometheus, test_prometheus_format_value)
 
   stats_cluster_single_key_add_unit(&key, SCU_MILLISECONDS);
   gdouble actual = g_ascii_strtod(stats_format_prometheus_format_value(&key, &counter), NULL);
-  cr_assert_float_eq(actual, 0.009L, DBL_EPSILON);
+  cr_assert_float_eq(actual, (gdouble) 0.009L, DBL_EPSILON);
 
   stats_cluster_single_key_add_unit(&key, SCU_NANOSECONDS);
   actual = g_ascii_strtod(stats_format_prometheus_format_value(&key, &counter), NULL);
-  cr_assert_float_eq(actual, 9e-9, DBL_EPSILON);
+  cr_assert_float_eq(actual, (gdouble) 9e-9, DBL_EPSILON);
 
   /* Relative to time of query */
   stats_cluster_single_key_add_frame_of_reference(&key, SCFOR_RELATIVE_TO_TIME_OF_QUERY);
@@ -228,11 +250,11 @@ Test(stats_prometheus, test_prometheus_format_value)
 
   stats_cluster_single_key_add_unit(&key, SCU_MILLISECONDS);
   actual = g_ascii_strtod(stats_format_prometheus_format_value(&key, &counter), NULL);
-  cr_assert_float_eq(actual, 0.009L, DBL_EPSILON);
+  cr_assert_float_eq(actual, (gdouble) 0.009L, DBL_EPSILON);
 
   stats_cluster_single_key_add_unit(&key, SCU_NANOSECONDS);
   actual = g_ascii_strtod(stats_format_prometheus_format_value(&key, &counter), NULL);
-  cr_assert_float_eq(actual, 9e-9, DBL_EPSILON);
+  cr_assert_float_eq(actual, (gdouble) 9e-9, DBL_EPSILON);
 
   /* Hours, minutes and seconds are affected */
   stats_cluster_single_key_add_unit(&key, SCU_HOURS);

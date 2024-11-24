@@ -40,6 +40,8 @@
 #include "host-id.h"
 #include "ack-tracker/ack_tracker.h"
 #include "apphook.h"
+#include "scratch-buffers.h"
+#include "str-format.h"
 
 #include <glib/gprintf.h>
 #include <sys/types.h>
@@ -585,11 +587,12 @@ log_msg_rename_value(LogMessage *self, NVHandle from, NVHandle to)
     return;
 
   gssize value_len = 0;
-  const gchar *value = log_msg_get_value_if_set(self, from, &value_len);
+  LogMessageValueType type;
+  const gchar *value = log_msg_get_value_if_set_with_type(self, from, &value_len, &type);
   if (!value)
     return;
 
-  log_msg_set_value(self, to, value, value_len);
+  log_msg_set_value_with_type(self, to, value, value_len, type);
   log_msg_unset_value(self, from);
 }
 
@@ -670,6 +673,13 @@ void
 log_msg_unset_value(LogMessage *self, NVHandle handle)
 {
   g_assert(!log_msg_is_write_protected(self));
+
+  if (_log_name_value_updates(self))
+    {
+      msg_trace("Unsetting value",
+                evt_tag_str("name", log_msg_get_value_name(handle, NULL)),
+                evt_tag_msg_reference(self));
+    }
 
   if (!log_msg_chk_flag(self, LF_STATE_OWN_PAYLOAD))
     {
@@ -970,7 +980,7 @@ log_msg_set_tag_by_id_onoff(LogMessage *self, LogTagId id, gboolean on)
             evt_tag_printf("msg", "%p", self));
   if (!log_msg_chk_flag(self, LF_STATE_OWN_TAGS) && self->num_tags)
     {
-      self->tags = g_memdup(self->tags, sizeof(self->tags[0]) * self->num_tags);
+      self->tags = g_memdup2(self->tags, sizeof(self->tags[0]) * self->num_tags);
     }
   log_msg_set_flag(self, LF_STATE_OWN_TAGS);
 
@@ -1206,11 +1216,11 @@ log_msg_append_format_sdata(const LogMessage *self, GString *result,  guint32 se
          if seq_num isn't 0 */
       if (!has_seq_num && seq_num!=0 && strncmp(sdata_elem, "meta.", 5) == 0)
         {
-          gchar sequence_id[16];
-          g_snprintf(sequence_id, sizeof(sequence_id), "%d", seq_num);
+          GString *sequence_id = scratch_buffers_alloc();
+          format_uint64_padded(sequence_id, 0, 0, 10, seq_num);
           g_string_append_c(result, ' ');
           g_string_append_len(result, "sequenceId=\"", 12);
-          g_string_append_len(result, sequence_id, strlen(sequence_id));
+          g_string_append_len(result, sequence_id->str, sequence_id->len);
           g_string_append_c(result, '"');
           has_seq_num = TRUE;
         }
@@ -1236,11 +1246,12 @@ log_msg_append_format_sdata(const LogMessage *self, GString *result,  guint32 se
   */
   if (!has_seq_num && seq_num!=0)
     {
-      gchar sequence_id[16];
-      g_snprintf(sequence_id, sizeof(sequence_id), "%d", seq_num);
+      GString *sequence_id = scratch_buffers_alloc();
+      format_uint64_padded(sequence_id, 0, 0, 10, seq_num);
+
       g_string_append_c(result, '[');
       g_string_append_len(result, "meta sequenceId=\"", 17);
-      g_string_append_len(result, sequence_id, strlen(sequence_id));
+      g_string_append_len(result, sequence_id->str, sequence_id->len);
       g_string_append_len(result, "\"]", 2);
     }
 }
@@ -1252,25 +1263,40 @@ log_msg_format_sdata(const LogMessage *self, GString *result,  guint32 seq_num)
   log_msg_append_format_sdata(self, result, seq_num);
 }
 
+void
+log_msg_clear_sdata(LogMessage *self)
+{
+  for (gint i = 0; i < self->num_sdata; i++)
+    log_msg_unset_value(self, self->sdata[i]);
+  if (!log_msg_chk_flag(self, LF_STATE_OWN_SDATA))
+    {
+      self->sdata = NULL;
+      self->alloc_sdata = 0;
+    }
+  self->num_sdata = 0;
+}
+
 gboolean
 log_msg_append_tags_callback(const LogMessage *self, LogTagId tag_id, const gchar *name, gpointer user_data)
 {
   GString *result = (GString *) ((gpointer *) user_data)[0];
   gint original_length = GPOINTER_TO_UINT(((gpointer *) user_data)[1]);
+  gboolean include_localtags = GPOINTER_TO_UINT(((gpointer *) user_data)[2]);
 
   g_assert(result);
 
   if (result->len > original_length)
     g_string_append_c(result, ',');
 
-  str_repr_encode_append(result, name, -1, ",");
+  if (include_localtags || name[0] != '.')
+    str_repr_encode_append(result, name, -1, ",");
   return TRUE;
 }
 
 void
-log_msg_format_tags(const LogMessage *self, GString *result)
+log_msg_format_tags(const LogMessage *self, GString *result, gboolean include_localtags)
 {
-  gpointer args[] = { result, GUINT_TO_POINTER(result->len) };
+  gpointer args[] = { result, GUINT_TO_POINTER(result->len), GUINT_TO_POINTER(include_localtags) };
 
   log_msg_tags_foreach(self, log_msg_append_tags_callback, args);
 }
@@ -1332,14 +1358,9 @@ log_msg_set_daddr_ref(LogMessage *self, GSockAddr *daddr)
 static void
 log_msg_init(LogMessage *self)
 {
-  GTimeVal tv;
-
   /* ref is set to 1, ack is set to 0 */
   self->ack_and_ref_and_abort_and_suspended = LOGMSG_REFCACHE_REF_TO_VALUE(1);
-  cached_g_current_time(&tv);
-  self->timestamps[LM_TS_RECVD].ut_sec = tv.tv_sec;
-  self->timestamps[LM_TS_RECVD].ut_usec = tv.tv_usec;
-  self->timestamps[LM_TS_RECVD].ut_gmtoff = get_local_timezone_ofs(self->timestamps[LM_TS_RECVD].ut_sec);
+  unix_time_set_now(&self->timestamps[LM_TS_RECVD]);
   self->timestamps[LM_TS_STAMP] = self->timestamps[LM_TS_RECVD];
   unix_time_unset(&self->timestamps[LM_TS_PROCESSED]);
 
@@ -1358,6 +1379,8 @@ log_msg_init(LogMessage *self)
 void
 log_msg_clear(LogMessage *self)
 {
+  g_assert(!log_msg_is_write_protected(self));
+
   if(log_msg_chk_flag(self, LF_STATE_OWN_PAYLOAD))
     nv_table_unref(self->payload);
   self->payload = nv_table_new(LM_V_MAX, 16, 256);
@@ -1378,12 +1401,7 @@ log_msg_clear(LogMessage *self)
     }
 
   log_msg_clear_matches(self);
-  if (!log_msg_chk_flag(self, LF_STATE_OWN_SDATA))
-    {
-      self->sdata = NULL;
-      self->alloc_sdata = 0;
-    }
-  self->num_sdata = 0;
+  log_msg_clear_sdata(self);
 
   if (log_msg_chk_flag(self, LF_STATE_OWN_SADDR))
     g_sockaddr_unref(self->saddr);
@@ -1434,7 +1452,7 @@ _merge_value(NVHandle handle,
 {
   LogMessage *msg = (LogMessage *) user_data;
 
-  if (!nv_table_is_value_set(msg->payload, handle))
+  if (!log_msg_is_value_set(msg, handle))
     log_msg_set_value_with_type(msg, handle, value, value_len, type);
   return FALSE;
 }
@@ -1800,7 +1818,7 @@ log_msg_ack(LogMessage *self, const LogPathOptions *path_options, AckType ack_ty
  * to send to further consuming pipes.
  */
 const LogPathOptions *
-log_msg_break_ack(LogMessage *msg, const LogPathOptions *path_options, LogPathOptions *local_options)
+log_msg_break_ack(LogMessage *msg, const LogPathOptions *path_options, LogPathOptions *local_path_options)
 {
   /* NOTE: in case the user requested flow control, we can't break the
    * ACK chain, as that would lead to early acks, that would cause
@@ -1810,10 +1828,10 @@ log_msg_break_ack(LogMessage *msg, const LogPathOptions *path_options, LogPathOp
 
   log_msg_ack(msg, path_options, AT_PROCESSED);
 
-  *local_options = *path_options;
-  local_options->ack_needed = FALSE;
+  log_path_options_chain(local_path_options, path_options);
+  local_path_options->ack_needed = FALSE;
 
-  return local_options;
+  return local_path_options;
 }
 
 
@@ -1990,6 +2008,27 @@ log_msg_refcache_stop(void)
 }
 
 void
+log_msg_tags_init(void)
+{
+  log_tags_register_predefined_tag("message.utf8_sanitized", LM_T_MSG_UTF8_SANITIZED);
+
+  log_tags_register_predefined_tag("syslog.invalid_pri", LM_T_SYSLOG_INVALID_PRI);
+  log_tags_register_predefined_tag("syslog.missing_pri", LM_T_SYSLOG_MISSING_PRI);
+  log_tags_register_predefined_tag("syslog.missing_timestamp", LM_T_SYSLOG_MISSING_TIMESTAMP);
+  log_tags_register_predefined_tag("syslog.invalid_hostname", LM_T_SYSLOG_INVALID_HOSTNAME);
+  log_tags_register_predefined_tag("syslog.unexpected_framing", LM_T_SYSLOG_UNEXPECTED_FRAMING);
+  log_tags_register_predefined_tag("syslog.rfc3164_missing_header", LM_T_SYSLOG_RFC3164_MISSING_HEADER);
+
+  log_tags_register_predefined_tag("syslog.rfc5424_missing_hostname", LM_T_SYSLOG_RFC5424_MISSING_HOSTNAME);
+  log_tags_register_predefined_tag("syslog.rfc5424_missing_app_name", LM_T_SYSLOG_RFC5424_MISSING_APP_NAME);
+  log_tags_register_predefined_tag("syslog.rfc5424_missing_procid", LM_T_SYSLOG_RFC5424_MISSING_PROCID);
+  log_tags_register_predefined_tag("syslog.rfc5424_missing_msgid", LM_T_SYSLOG_RFC5424_MISSING_MSGID);
+  log_tags_register_predefined_tag("syslog.rfc5424_missing_sdata", LM_T_SYSLOG_RFC5424_MISSING_SDATA);
+  log_tags_register_predefined_tag("syslog.rfc5424_invalid_sdata", LM_T_SYSLOG_RFC5424_INVALID_SDATA);
+  log_tags_register_predefined_tag("syslog.rfc5424_missing_message", LM_T_SYSLOG_RFC5424_MISSING_MESSAGE);
+}
+
+void
 log_msg_registry_init(void)
 {
   gint i;
@@ -1999,6 +2038,13 @@ log_msg_registry_init(void)
   nv_registry_add_alias(logmsg_registry, LM_V_MESSAGE, "MSGONLY");
   nv_registry_add_alias(logmsg_registry, LM_V_HOST, "FULLHOST");
   nv_registry_add_alias(logmsg_registry, LM_V_HOST_FROM, "FULLHOST_FROM");
+
+  nv_registry_add_predefined(logmsg_registry, LM_V_RAWMSG, "RAWMSG");
+  nv_registry_add_predefined(logmsg_registry, LM_V_TRANSPORT, "TRANSPORT");
+  nv_registry_add_predefined(logmsg_registry, LM_V_MSGFORMAT, "MSGFORMAT");
+  nv_registry_add_predefined(logmsg_registry, LM_V_FILE_NAME, "FILE_NAME");
+
+  nv_registry_assert_next_handle(logmsg_registry, LM_V_PREDEFINED_MAX);
 
   for (i = 0; macros[i].name; i++)
     {
@@ -2059,6 +2105,8 @@ void
 log_msg_global_init(void)
 {
   log_msg_registry_init();
+  log_tags_global_init();
+  log_msg_tags_init();
 
   /* NOTE: we always initialize counters as they are on stats-level(0),
    * however we need to defer that as the stats subsystem may not be
@@ -2076,6 +2124,7 @@ log_msg_get_handle_name(NVHandle handle, gssize *length)
 void
 log_msg_global_deinit(void)
 {
+  log_tags_global_deinit();
   log_msg_registry_deinit();
 }
 

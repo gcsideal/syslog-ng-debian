@@ -31,6 +31,7 @@
 
 #include "afsql.h"
 #include "cfg-grammar-internal.h"
+#include "cfg-helpers.h"
 #include "cfg-parser.h"
 #include "messages.h"
 #include "plugin.h"
@@ -100,12 +101,7 @@ dest_afsql_options
 dest_afsql_option
         : KW_TYPE '(' string ')'		{ afsql_dd_set_type(last_driver, $3); free($3); }
         | KW_HOST '(' string ')'		{ afsql_dd_set_host(last_driver, $3); free($3); }
-        | KW_PORT '(' string_or_number ')'
-          {
-            CHECK_ERROR(afsql_dd_check_port($3), @3, "Illegal sql port number: %s", $3);
-            afsql_dd_set_port(last_driver, $3);
-            free($3);
-          }
+        | KW_PORT '(' string_or_number ')' { CHECK_ERROR(cfg_check_port($3), @3, "Illegal port number: %s", $3); afsql_dd_set_port(last_driver, $3); free($3); }
         | KW_USERNAME '(' string ')'		{ afsql_dd_set_user(last_driver, $3); free($3); }
         | KW_DBD_OPTION '(' string LL_NUMBER ')' { afsql_dd_add_dbd_option_numeric(last_driver, $3, $4); free($3); }
         | KW_DBD_OPTION '(' string string ')'    { afsql_dd_add_dbd_option(last_driver, $3, $4); free($3); free($4); }
@@ -120,11 +116,11 @@ dest_afsql_option
         | KW_IGNORE_TNS_CONFIG '(' yesno ')'    { afsql_dd_set_ignore_tns_config(last_driver,$3); }
         | KW_NULL '(' string ')'                { afsql_dd_set_null_value(last_driver, $3); free($3); }
         | KW_SESSION_STATEMENTS '(' string_list ')' { afsql_dd_set_session_statements(last_driver, $3); }
-        | KW_FLAGS '(' dest_afsql_flags ')'     { afsql_dd_set_flags(last_driver, $3); }
+	| KW_FLAGS '(' dest_afsql_flags ')'
 	| KW_CREATE_STATEMENT_APPEND '(' string ')' { afsql_dd_set_create_statement_append(last_driver, $3); free($3); }
 
 	| { last_template_options = &((AFSqlDestDriver *) last_driver)->template_options; } template_option
-	| threaded_dest_driver_general_option
+	| threaded_dest_driver_general_option_noflags
         | threaded_dest_driver_batch_option
         ;
 
@@ -139,9 +135,10 @@ dest_afsql_values_build
         ;
 
 dest_afsql_flags
-        : normalized_flag dest_afsql_flags      { $$ = afsql_dd_lookup_flag($1) | $2; free($1); }
-        |                                       { $$ = 0; }
+        : string dest_afsql_flags     { CHECK_ERROR(afsql_dd_process_flag(last_driver, $1), @1, "Unknown flag \"%s\"", $1); free($1); }
+        |
         ;
+
 
 /* INCLUDE_RULES */
 

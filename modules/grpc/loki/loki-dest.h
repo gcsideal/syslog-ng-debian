@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) 2024 Axoflow
+ * Copyright (c) 2024 Attila Szakacs <attila.szakacs@axoflow.com>
  * Copyright (c) 2023 László Várady
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -23,9 +25,9 @@
 #ifndef LOKI_DEST_H
 #define LOKI_DEST_H
 
-#include "compat/cpp-start.h"
-
 #include "syslog-ng.h"
+
+#include "compat/cpp-start.h"
 #include "driver.h"
 #include "logmsg/logmsg.h"
 #include "template/templates.h"
@@ -38,13 +40,19 @@ LogDriver *loki_dd_new(GlobalConfig *cfg);
 void loki_dd_set_url(LogDriver *d, const gchar *url);
 void loki_dd_set_message_template_ref(LogDriver *d, LogTemplate *message);
 void loki_dd_add_label(LogDriver *d, const gchar *name, LogTemplate *value);
-void loki_dd_set_timestamp(LogDriver *d, LogMessageTimeStamp t);
+gboolean loki_dd_set_timestamp(LogDriver *d, const gchar *t);
+void loki_dd_set_tenant_id(LogDriver *d, const gchar *tid);
 
 GrpcClientCredentialsBuilderW *loki_dd_get_credentials_builder(LogDriver *s);
 
 void loki_dd_set_keepalive_time(LogDriver *d, gint t);
 void loki_dd_set_keepalive_timeout(LogDriver *d, gint t);
 void loki_dd_set_keepalive_max_pings(LogDriver *d, gint p);
+
+void loki_dd_add_int_channel_arg(LogDriver *s, const gchar *name, glong value);
+void loki_dd_add_string_channel_arg(LogDriver *s, const gchar *name, const gchar *value);
+
+void loki_dd_add_header(LogDriver *s, const gchar *name, const gchar *value);
 
 LogTemplateOptions *loki_dd_get_template_options(LogDriver *d);
 

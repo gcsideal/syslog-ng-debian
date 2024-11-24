@@ -34,6 +34,8 @@
 #include "str-utils.h"
 #include "syslog-names.h"
 
+#include "logproto/logproto.h"
+
 #include <regex.h>
 #include <ctype.h>
 #include <string.h>
@@ -47,7 +49,6 @@ static struct
   gboolean initialized;
   NVHandle is_synced;
   NVHandle cisco_seqid;
-  NVHandle raw_message;
 } handles;
 
 static inline gboolean
@@ -152,6 +153,7 @@ _syslog_format_parse_pri(LogMessage *msg, const guchar **data, gint *length, gui
   else
     {
       msg->pri = default_pri != 0xFFFF ? default_pri : (EVT_FAC_USER | EVT_PRI_NOTICE);
+      log_msg_set_tag_by_id(msg, LM_T_SYSLOG_MISSING_PRI);
     }
 
   *data = src;
@@ -195,7 +197,6 @@ _syslog_format_parse_cisco_sequence_id(LogMessage *msg, const guchar **data, gin
 {
   const guchar *src = *data;
   gint left = *length;
-
 
   while (left && *src != ':')
     {
@@ -247,8 +248,9 @@ _syslog_format_parse_cisco_timestamp_attributes(LogMessage *msg, const guchar **
 }
 
 static gboolean
-_syslog_format_parse_timestamp(UnixTime *stamp, const guchar **data, gint *length, guint parse_flags,
-                               glong recv_timezone_ofs)
+_syslog_format_parse_timestamp(LogMessage *msg, UnixTime *stamp,
+                               const guchar **data, gint *length,
+                               guint parse_flags, glong recv_timezone_ofs)
 {
   gboolean result;
   WallClockTime wct = WALL_CLOCK_TIME_INIT;
@@ -259,6 +261,7 @@ _syslog_format_parse_timestamp(UnixTime *stamp, const guchar **data, gint *lengt
     {
       if (G_UNLIKELY(*length >= 1 && (*data)[0] == '-'))
         {
+          log_msg_set_tag_by_id(msg, LM_T_SYSLOG_MISSING_TIMESTAMP);
           unix_time_set_now(stamp);
           (*data)++;
           (*length)--;
@@ -285,10 +288,11 @@ _syslog_format_parse_date(LogMessage *msg, const guchar **data, gint *length, gu
   UnixTime *stamp = &msg->timestamps[LM_TS_STAMP];
 
   unix_time_unset(stamp);
-  if (!_syslog_format_parse_timestamp(stamp, data, length, parse_flags, recv_timezone_ofs))
+  if (!_syslog_format_parse_timestamp(msg, stamp, data, length, parse_flags, recv_timezone_ofs))
     {
       *stamp = msg->timestamps[LM_TS_RECVD];
       unix_time_set_timezone(stamp, recv_timezone_ofs);
+      log_msg_set_tag_by_id(msg, LM_T_SYSLOG_MISSING_TIMESTAMP);
       return FALSE;
     }
 
@@ -501,6 +505,7 @@ _syslog_format_parse_hostname(LogMessage *msg, const guchar **data, gint *length
 
       src = oldsrc;
       left = oldleft;
+      log_msg_set_tag_by_id(msg, LM_T_SYSLOG_INVALID_HOSTNAME);
     }
 
   if (*hostname_len > 255)
@@ -785,21 +790,71 @@ _syslog_format_parse_sd_column(LogMessage *msg, const guchar **data, gint *lengt
   return TRUE;
 }
 
+gboolean
+_syslog_format_parse_message_column(LogMessage *msg,
+                                    const guchar **data, gint *length,
+                                    const MsgFormatOptions *parse_options)
+{
+  const guchar *src = (guchar *) *data;
+  gint left = *length;
+
+  /* checking if there are remaining data in log message */
+  if (left != 0)
+    {
+      /* optional part of the log message [SP MSG] */
+      if (!_skip_space(&src, &left))
+        {
+          return FALSE;
+        }
+
+      if (left >= 3 && memcmp(src, "\xEF\xBB\xBF", 3) == 0)
+        {
+          /* we have a BOM, this is UTF8 */
+          msg->flags |= LF_UTF8;
+          src += 3;
+          left -= 3;
+
+          log_msg_set_value(msg, LM_V_MESSAGE, (gchar *) src, left);
+          return TRUE;
+        }
+
+      if ((parse_options->flags & LP_SANITIZE_UTF8))
+        {
+          if (!g_utf8_validate((gchar *) src, left, NULL))
+            {
+              gchar buf[SANITIZE_UTF8_BUFFER_SIZE(left)];
+              gsize sanitized_length;
+              optimized_sanitize_utf8_to_escaped_binary(src, left, &sanitized_length, buf, sizeof(buf));
+              log_msg_set_value(msg, LM_V_MESSAGE, buf, sanitized_length);
+              log_msg_set_tag_by_id(msg, LM_T_MSG_UTF8_SANITIZED);
+              msg->flags |= LF_UTF8;
+              return TRUE;
+            }
+          else
+            msg->flags |= LF_UTF8;
+        }
+      else if ((parse_options->flags & LP_VALIDATE_UTF8) && g_utf8_validate((gchar *) src, left, NULL))
+        msg->flags |= LF_UTF8;
+    }
+  log_msg_set_value(msg, LM_V_MESSAGE, (gchar *) src, left);
+  return TRUE;
+}
+
 static gboolean
 _syslog_format_parse_legacy_header(LogMessage *msg, const guchar **data, gint *length,
                                    const MsgFormatOptions *parse_options)
 {
   const guchar *src = *data;
   gint left = *length;
-  GTimeVal now;
+  time_t now;
 
   _syslog_format_parse_cisco_sequence_id(msg, &src, &left);
   _skip_chars(&src, &left, " ", -1);
   _syslog_format_parse_cisco_timestamp_attributes(msg, &src, &left, parse_options->flags);
 
-  cached_g_current_time(&now);
+  now = get_cached_realtime_sec();
   if (_syslog_format_parse_date(msg, &src, &left, parse_options->flags & ~LP_SYSLOG_PROTOCOL,
-                                time_zone_info_get_offset(parse_options->recv_time_zone_info, (time_t)now.tv_sec)))
+                                time_zone_info_get_offset(parse_options->recv_time_zone_info, now)))
     {
       /* Expected format: hostname program[pid]: */
       /* Possibly: Message forwarded from hostname: ... */
@@ -861,6 +916,7 @@ _syslog_format_parse_legacy_header(LogMessage *msg, const guchar **data, gint *l
       /* No, not a kernel message. */
       else
         {
+          log_msg_set_tag_by_id(msg, LM_T_SYSLOG_RFC3164_MISSING_HEADER);
           /* Capture the program name */
           _syslog_format_parse_legacy_program_name(msg, &src, &left, parse_options->flags);
         }
@@ -868,6 +924,76 @@ _syslog_format_parse_legacy_header(LogMessage *msg, const guchar **data, gint *l
   *data = src;
   *length = left;
   return TRUE;
+}
+
+/* validate that we did not receive an RFC5425 style octet count, which
+ * should have already been processed by the time we got here, unless the
+ * transport is incorrectly configured */
+static void
+_syslog_format_check_framing(LogMessage *msg, const guchar **data, gint *length)
+{
+  const guchar *src = *data;
+  gint left = *length;
+  gint i = 0;
+
+  while (left > 0 && isdigit(*src))
+    {
+      if (!_skip_char(&src, &left))
+        return;
+
+      i++;
+
+      if (i > RFC6587_MAX_FRAME_LEN_DIGITS)
+        return;
+    }
+
+  if (i == 0 || *src != ' ')
+    return;
+
+  /* we did indeed find a series of digits that look like framing, that's
+   * probably not what was intended. */
+  msg_debug("RFC5425 style octet count was found at the start of the message, this is probably not what was intended",
+            evt_tag_mem("data", data, src - (*data)),
+            evt_tag_msg_reference(msg));
+  log_msg_set_tag_by_id(msg, LM_T_SYSLOG_UNEXPECTED_FRAMING);
+  *data = src;
+  *length = left;
+}
+
+static void
+_syslog_format_parse_legacy_message(LogMessage *msg,
+                                    const guchar **data, gint *length,
+                                    const MsgFormatOptions *parse_options)
+{
+  const guchar *src = (const guchar *) *data;
+  gint left = *length;
+
+  if (parse_options->flags & LP_SANITIZE_UTF8)
+    {
+      if (!g_utf8_validate((gchar *) src, left, NULL))
+        {
+          /* invalid utf8, sanitize it and then remember it is now utf8 clean */
+          gchar buf[SANITIZE_UTF8_BUFFER_SIZE(left)];
+          gsize sanitized_length;
+          optimized_sanitize_utf8_to_escaped_binary(src, left, &sanitized_length, buf, sizeof(buf));
+          log_msg_set_value(msg, LM_V_MESSAGE, buf, sanitized_length);
+          log_msg_set_tag_by_id(msg, LM_T_MSG_UTF8_SANITIZED);
+          msg->flags |= LF_UTF8;
+          return;
+        }
+      else
+        {
+          /* valid utf8, no need to sanitize, store it and mark it as utf8 clean */
+          msg->flags |= LF_UTF8;
+        }
+    }
+  else if ((parse_options->flags & LP_VALIDATE_UTF8) && g_utf8_validate((gchar *) src, left, NULL))
+    {
+      /* valid utf8, mark it as utf8 clean */
+      msg->flags |= LF_UTF8;
+    }
+
+  log_msg_set_value(msg, LM_V_MESSAGE, (gchar *) src, left);
 }
 
 /**
@@ -879,6 +1005,9 @@ _syslog_format_parse_legacy_header(LogMessage *msg, const guchar **data, gint *l
  *
  * Parse an RFC3164 formatted log message and store the parsed information
  * in @msg. Parsing is affected by the bits set @flags argument.
+ *
+ * This parser is _very_ forgiving, it basically accepts anything any device
+ * would barf on the line.
  **/
 static gboolean
 _syslog_format_parse_legacy(const MsgFormatOptions *parse_options,
@@ -891,46 +1020,30 @@ _syslog_format_parse_legacy(const MsgFormatOptions *parse_options,
   src = (const guchar *) data;
   left = length;
 
+  _syslog_format_check_framing(msg, &src, &left);
   if (!_syslog_format_parse_pri(msg, &src, &left, parse_options->flags, parse_options->default_pri))
     {
-      goto error;
-    }
+      /* invalid <pri> value, that's really difficult to do, as it needs to
+       * start with an opening bracket and then no number OR no closing bracket
+       * follows. A missing <pri> value would be accepted.
+       *
+       * This is a very rare case, but it's best handled like all the other
+       * formatting errors, accept it and shove the entire line into $MSG.
+       * This basically disables error piggybacking for RFC3164 inputs.  */
 
-  if ((parse_options->flags & LP_NO_HEADER) == 0)
-    _syslog_format_parse_legacy_header(msg, &src, &left, parse_options);
-
-  if (parse_options->flags & LP_SANITIZE_UTF8 && !g_utf8_validate((gchar *) src, left, NULL))
-    {
-      GString sanitized_message;
-      gchar buf[left * 6 + 1];
-
-      /* avoid GString allocation */
-      sanitized_message.str = buf;
-      sanitized_message.len = 0;
-      sanitized_message.allocated_len = sizeof(buf);
-
-      append_unsafe_utf8_as_escaped_binary(&sanitized_message, (const gchar *) src, left, NULL);
-
-      /* MUST NEVER BE REALLOCATED */
-      g_assert(sanitized_message.str == buf);
-      log_msg_set_value(msg, LM_V_MESSAGE, sanitized_message.str, sanitized_message.len);
-      msg->flags |= LF_UTF8;
+      log_msg_set_tag_by_id(msg, LM_T_SYSLOG_INVALID_PRI);
+      _syslog_format_parse_legacy_message(msg, &src, &left, parse_options);
     }
   else
     {
-      log_msg_set_value(msg, LM_V_MESSAGE, (gchar *) src, left);
+      if ((parse_options->flags & LP_NO_HEADER) == 0)
+        _syslog_format_parse_legacy_header(msg, &src, &left, parse_options);
 
-      /* we don't need revalidation if sanitize already said it was valid utf8 */
-      if ((parse_options->flags & LP_VALIDATE_UTF8) &&
-          ((parse_options->flags & LP_SANITIZE_UTF8) == 0) &&
-          g_utf8_validate((gchar *) src, left, NULL))
-        msg->flags |= LF_UTF8;
+      _syslog_format_parse_legacy_message(msg, &src, &left, parse_options);
     }
 
+  log_msg_set_value_to_string(msg, LM_V_MSGFORMAT, "rfc3164");
   return TRUE;
-error:
-  *position = src - data;
-  return FALSE;
 }
 
 /**
@@ -961,6 +1074,7 @@ _syslog_format_parse_syslog_proto(const MsgFormatOptions *parse_options, const g
   src = (guchar *) data;
   left = length;
 
+  _syslog_format_check_framing(msg, &src, &left);
 
   if (!_syslog_format_parse_pri(msg, &src, &left, parse_options->flags, parse_options->default_pri) ||
       !_syslog_format_parse_version(msg, &src, &left))
@@ -976,18 +1090,23 @@ _syslog_format_parse_syslog_proto(const MsgFormatOptions *parse_options, const g
     }
 
   /* ISO time format */
+  time_t now = get_cached_realtime_sec();
   if (!_syslog_format_parse_date(msg, &src, &left, parse_options->flags,
-                                 time_zone_info_get_offset(parse_options->recv_time_zone_info, time(NULL))))
+                                 time_zone_info_get_offset(parse_options->recv_time_zone_info, now)))
     goto error;
 
   if (!_skip_space(&src, &left))
-    goto error;
+    {
+      log_msg_set_tag_by_id(msg, LM_T_SYSLOG_RFC5424_MISSING_HOSTNAME);
+      goto error;
+    }
 
   /* hostname 255 ascii */
   _syslog_format_parse_hostname(msg, &src, &left, &hostname_start, &hostname_len, parse_options->flags, NULL);
   if (!_skip_space(&src, &left))
     {
       src++;
+      log_msg_set_tag_by_id(msg, LM_T_SYSLOG_RFC5424_MISSING_APP_NAME);
       goto error;
     }
   /* If we did manage to find a hostname, store it. */
@@ -1001,44 +1120,42 @@ _syslog_format_parse_syslog_proto(const MsgFormatOptions *parse_options, const g
   /* application name 48 ascii*/
   _syslog_format_parse_column(msg, LM_V_PROGRAM, &src, &left, 48);
   if (!_skip_space(&src, &left))
-    goto error;
+    {
+      log_msg_set_tag_by_id(msg, LM_T_SYSLOG_RFC5424_MISSING_PROCID);
+      goto error;
+    }
 
   /* process id 128 ascii */
   _syslog_format_parse_column(msg, LM_V_PID, &src, &left, 128);
   if (!_skip_space(&src, &left))
-    goto error;
+    {
+      log_msg_set_tag_by_id(msg, LM_T_SYSLOG_RFC5424_MISSING_MSGID);
+      goto error;
+    }
 
   /* message id 32 ascii */
   _syslog_format_parse_column(msg, LM_V_MSGID, &src, &left, 32);
   if (!_skip_space(&src, &left))
-    goto error;
+    {
+      log_msg_set_tag_by_id(msg, LM_T_SYSLOG_RFC5424_MISSING_SDATA);
+      goto error;
+    }
 
   /* structured data part */
   if (!_syslog_format_parse_sd_column(msg, &src, &left, parse_options))
-    goto error;
-
-  /* checking if there are remaining data in log message */
-  if (left != 0)
     {
-      /* optional part of the log message [SP MSG] */
-      if (!_skip_space(&src, &left))
-        {
-          goto error;
-        }
-
-      if (left >= 3 && memcmp(src, "\xEF\xBB\xBF", 3) == 0)
-        {
-          /* we have a BOM, this is UTF8 */
-          msg->flags |= LF_UTF8;
-          src += 3;
-          left -= 3;
-        }
-      else if ((parse_options->flags & LP_VALIDATE_UTF8) && g_utf8_validate((gchar *) src, left, NULL))
-        {
-          msg->flags |= LF_UTF8;
-        }
+      log_msg_set_tag_by_id(msg, LM_T_SYSLOG_RFC5424_INVALID_SDATA);
+      goto error;
     }
-  log_msg_set_value(msg, LM_V_MESSAGE, (gchar *) src, left);
+
+  if (!_syslog_format_parse_message_column(msg, &src, &left, parse_options))
+    {
+      log_msg_set_tag_by_id(msg, LM_T_SYSLOG_MISSING_MESSAGE);
+      goto error;
+    }
+
+  log_msg_set_value_to_string(msg, LM_V_MSGFORMAT, "rfc5424");
+
   return TRUE;
 error:
   *position = src - data;
@@ -1073,7 +1190,6 @@ syslog_format_init(void)
     {
       handles.is_synced = log_msg_get_value_handle(".SDATA.timeQuality.isSynced");
       handles.cisco_seqid = log_msg_get_value_handle(".SDATA.meta.sequenceId");
-      handles.raw_message = log_msg_get_value_handle("RAWMSG");
       handles.initialized = TRUE;
     }
 

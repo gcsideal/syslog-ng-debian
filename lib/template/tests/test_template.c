@@ -39,6 +39,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <iv.h>
+
 GCond thread_ping;
 GMutex thread_lock;
 gboolean thread_start;
@@ -53,6 +55,7 @@ format_template_thread(gpointer s)
   GString *result;
   gint i;
 
+  iv_init();
   scratch_buffers_allocator_init();
 
 
@@ -71,6 +74,7 @@ format_template_thread(gpointer s)
     }
   g_string_free(result, TRUE);
   scratch_buffers_allocator_deinit();
+  iv_deinit();
   return NULL;
 }
 
@@ -239,6 +243,7 @@ Test(template, test_macros_v3x)
   assert_template_format_value_and_type("$DESTIP", "127.0.0.5", LM_VT_STRING);
   assert_template_format_value_and_type("$DESTPORT", "6514", LM_VT_STRING);
   assert_template_format_value_and_type("$PROTO", "33", LM_VT_STRING);
+  assert_template_format_value_and_type("$IP_PROTO", "4", LM_VT_STRING);
 
   assert_template_format_value_and_type("$SEQNUM", "999", LM_VT_STRING);
   assert_template_format_value_and_type("$CONTEXT_ID", "test-context-id", LM_VT_STRING);
@@ -343,6 +348,7 @@ Test(template, test_macros_v40)
   assert_template_format_value_and_type("$DESTIP", "127.0.0.5", LM_VT_STRING);
   assert_template_format_value_and_type("$DESTPORT", "6514", LM_VT_INTEGER);
   assert_template_format_value_and_type("$PROTO", "33", LM_VT_INTEGER);
+  assert_template_format_value_and_type("$IP_PROTO", "4", LM_VT_INTEGER);
 
   assert_template_format_value_and_type("$SEQNUM", "999", LM_VT_STRING);
   assert_template_format_value_and_type("$CONTEXT_ID", "test-context-id", LM_VT_STRING);
@@ -414,12 +420,21 @@ Test(template, test_multi_thread)
 
 Test(template, test_escaping)
 {
+  assert_template_format_with_escaping("$(echo ${APP.QVALUE})", TRUE, "\\\"value\\\"");
+  assert_template_format_with_escaping("$(echo ${APP.QVALUE}) ${APP.QVALUE}", TRUE, "\\\"value\\\" \\\"value\\\"");
+  assert_template_format_with_escaping("$(echo $(echo $(echo ${APP.QVALUE})))", TRUE, "\\\"value\\\"");
+  assert_template_format_with_escaping("$(echo $(echo $(length ${APP.QVALUE})))", TRUE, "7");
+
   assert_template_format_with_escaping("${APP.QVALUE}", FALSE, "\"value\"");
   assert_template_format_with_escaping("${APP.QVALUE}", TRUE, "\\\"value\\\"");
   assert_template_format_with_escaping("$(if (\"${APP.VALUE}\" eq \"value\") \"${APP.QVALUE}\" \"${APP.QVALUE}\")",
                                        FALSE, "\"value\"");
   assert_template_format_with_escaping("$(if (\"${APP.VALUE}\" eq \"value\") \"${APP.QVALUE}\" \"${APP.QVALUE}\")",
                                        TRUE, "\\\"value\\\"");
+
+  /* literal parts of the template are not escaped */
+  assert_template_format_with_escaping("\"$(echo $(echo $(length ${APP.QVALUE})))\"", TRUE, "\"7\"");
+  assert_template_format_with_escaping("\"almafa\"", TRUE, "\"almafa\"");
 }
 
 Test(template, test_user_template_function)

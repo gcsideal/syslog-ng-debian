@@ -36,51 +36,9 @@ _construct_parser(gint max_columns, gint dialect, gchar *delimiters, gchar *quot
 {
   LogParser *p;
 
-  const gchar *column_array[] =
-  {
-    "C1",
-    "C2",
-    "C3",
-    "C4",
-    "C5",
-    "C6",
-    "C7",
-    "C8",
-    "C9",
-    "C10",
-    "C11",
-    "C12",
-    "C13",
-    "C14",
-    "C15",
-    "C16",
-    "C17",
-    "C18",
-    "C19",
-    "C20",
-    "C21",
-    "C22",
-    "C23",
-    "C24",
-    "C25",
-    "C26",
-    "C27",
-    "C28",
-    "C29",
-    "C30",
-    NULL
-  };
-
-  if (max_columns != -1)
-    {
-      g_assert(max_columns < (sizeof(column_array) / sizeof(column_array[0])));
-
-      column_array[max_columns] = NULL;
-    }
-
   p = csv_parser_new(NULL);
   csv_scanner_options_set_dialect(csv_parser_get_scanner_options(p), dialect);
-  csv_scanner_options_set_columns(csv_parser_get_scanner_options(p), string_array_to_list(column_array));
+  csv_scanner_options_set_expected_columns(csv_parser_get_scanner_options(p), max_columns < 0 ? 30 : max_columns);
   if (delimiters)
     csv_scanner_options_set_delimiters(csv_parser_get_scanner_options(p), delimiters);
   if (quotes)
@@ -109,19 +67,19 @@ static void
 iterate_pattern(LogParser *p, const gchar *input)
 {
   LogMessage *msg;
-  GTimeVal start, end;
+  struct timespec start, end;
   gint i;
 
   msg = _construct_msg(input);
-  g_get_current_time(&start);
+  clock_gettime(CLOCK_MONOTONIC, &start);
   for (i = 0; i < 100000; i++)
     {
       log_parser_process(p, &msg, NULL, log_msg_get_value(msg, LM_V_MESSAGE, NULL), -1);
     }
   log_msg_unref(msg);
 
-  g_get_current_time(&end);
-  printf("      %-90.*s speed: %12.3f msg/sec\n", (int) strlen(input), input, i * 1e6 / g_time_val_diff(&end, &start));
+  clock_gettime(CLOCK_MONOTONIC, &end);
+  printf("      %-90.*s speed: %12.3f msg/sec\n", (int) strlen(input), input, i * 1e6 / timespec_diff_usec(&end, &start));
 
 }
 

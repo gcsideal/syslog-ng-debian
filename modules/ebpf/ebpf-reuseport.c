@@ -76,10 +76,22 @@ _attach(LogDriverPlugin *s, LogDriver *driver)
     }
   self->random->bss->number_of_sockets = self->number_of_sockets;
 
-  SignalSlotConnector *ssc = driver->super.signal_slot_connector;
-  CONNECT(ssc, signal_afsocket_setup_socket, _slot_setup_socket, self);
+  g_assert(s->signal_connector == NULL);
+  s->signal_connector = signal_slot_connector_ref(driver->super.signal_slot_connector);
+
+  CONNECT(s->signal_connector, signal_afsocket_setup_socket, _slot_setup_socket, self);
 
   return TRUE;
+}
+
+static void
+_detach(LogDriverPlugin *s, LogDriver *driver)
+{
+  EBPFReusePort *self = (EBPFReusePort *)s;
+
+  DISCONNECT(s->signal_connector, signal_afsocket_setup_socket, _slot_setup_socket, self);
+  signal_slot_connector_unref(s->signal_connector);
+  s->signal_connector = NULL;
 }
 
 static void
@@ -99,6 +111,7 @@ ebpf_reuseport_new(void)
   log_driver_plugin_init_instance(&self->super, "ebpf-reuseport");
 
   self->super.attach = _attach;
+  self->super.detach = _detach;
   self->super.free_fn = _free;
   self->number_of_sockets = 0;
 

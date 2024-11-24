@@ -5,7 +5,10 @@ modules_xml_libxml_la_SOURCES = \
   modules/xml/xml-parser.h        \
   modules/xml/xml-plugin.c        \
   modules/xml/xml.h               \
-  modules/xml/xml.c
+  modules/xml/xml.c               \
+  modules/xml/xml-private.h       \
+  modules/xml/windows-eventlog-xml-parser.h \
+  modules/xml/windows-eventlog-xml-parser.c
 
 
 BUILT_SOURCES       +=      \
@@ -23,7 +26,7 @@ modules_xml_libxml_la_CPPFLAGS  =     \
   -I$(top_builddir)/modules/xml
 modules_xml_libxml_la_LIBADD  = $(MODULE_DEPS_LIBS)
 modules_xml_libxml_la_LDFLAGS = $(MODULE_LDFLAGS)
-modules_xml_libxml_la_DEPENDENCIES= $(MODULE_DEPS_LIBS)
+EXTRA_modules_xml_libxml_la_DEPENDENCIES= $(MODULE_DEPS_LIBS)
 
 modules/xml modules/xml/ mod-xml: modules/xml/libxml.la
 .PHONY: modules/xml/ mod-xml

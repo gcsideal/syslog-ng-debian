@@ -28,6 +28,8 @@
 #include "plugin-types.h"
 #include "find-crlf.h"
 #include "scratch-buffers.h"
+#include "utf8utils.h"
+#include "hostname.h"
 
 static gsize
 _rstripped_message_length(const guchar *data, gsize length)
@@ -38,14 +40,22 @@ _rstripped_message_length(const guchar *data, gsize length)
 }
 
 static void
-msg_format_inject_parse_error(LogMessage *msg, const guchar *data, gsize length, gint problem_position)
+msg_format_inject_parse_error(MsgFormatOptions *options, LogMessage *msg, const guchar *data, gsize length,
+                              gint problem_position)
 {
   GString *buf = scratch_buffers_alloc();
 
+
+  /* overwrite the message as if it was coming from syslog-ng */
   log_msg_clear(msg);
 
   msg->timestamps[LM_TS_STAMP] = msg->timestamps[LM_TS_RECVD];
-  log_msg_set_value(msg, LM_V_HOST, "", 0);
+
+  const gchar *hname = options->use_fqdn
+                       ? get_local_hostname_fqdn()
+                       : get_local_hostname_short();
+
+  log_msg_set_value(msg, LM_V_HOST, hname, -1);
 
   if (problem_position > 0)
     g_string_printf(buf, "Error processing log message: %.*s>@<%.*s", (gint) problem_position-1,
@@ -68,7 +78,7 @@ msg_format_preprocess_message(MsgFormatOptions *options, LogMessage *msg,
 {
   if (options->flags & LP_STORE_RAW_MESSAGE)
     {
-      log_msg_set_value(msg, LOG_MSG_GET_VALUE_HANDLE_STATIC("RAWMSG"),
+      log_msg_set_value(msg, LM_V_RAWMSG,
                         (gchar *) data, _rstripped_message_length(data, length));
     }
 }
@@ -114,8 +124,28 @@ msg_format_process_message(MsgFormatOptions *options, LogMessage *msg,
     }
   else
     {
-      log_msg_set_value(msg, LM_V_MESSAGE, (gchar *) data, _rstripped_message_length(data, length));
       msg->pri = options->default_pri;
+
+      log_msg_set_value_to_string(msg, LM_V_MSGFORMAT, "raw");
+      if (options->flags & LP_SANITIZE_UTF8)
+        {
+          if (!g_utf8_validate((gchar *) data, length, NULL))
+            {
+              gchar buf[SANITIZE_UTF8_BUFFER_SIZE(length)];
+              gsize sanitized_length;
+              optimized_sanitize_utf8_to_escaped_binary(data, length, &sanitized_length, buf, sizeof(buf));
+              log_msg_set_value(msg, LM_V_MESSAGE, buf, _rstripped_message_length((guchar *) buf, sanitized_length));
+              log_msg_set_tag_by_id(msg, LM_T_MSG_UTF8_SANITIZED);
+              msg->flags |= LF_UTF8;
+              return TRUE;
+            }
+          else
+            msg->flags |= LF_UTF8;
+        }
+      else if ((options->flags & LP_VALIDATE_UTF8) && g_utf8_validate((gchar *) data, length, NULL))
+        msg->flags |= LF_UTF8;
+
+      log_msg_set_value(msg, LM_V_MESSAGE, (gchar *) data, _rstripped_message_length(data, length));
       return TRUE;
     }
 }
@@ -151,10 +181,17 @@ msg_format_parse_into(MsgFormatOptions *options, LogMessage *msg,
 
   if (!msg_format_try_parse_into(options, msg, data, length, &problem_position))
     {
-      msg_format_inject_parse_error(msg, data, _rstripped_message_length(data, length), problem_position);
+      if (options->flags & LP_PIGGYBACK_ERRORS)
+        msg_format_inject_parse_error(options, msg, data, _rstripped_message_length(data, length), problem_position);
+      else
+        log_msg_set_value(msg, LM_V_MESSAGE, (gchar *) data, length);
 
       /* the injected error message needs to be postprocessed too */
       msg_format_postprocess_message(options, msg, data, length);
+
+      gchar buf[256];
+      gsize len = g_snprintf(buf, sizeof(buf), "%s-error", options->format);
+      log_msg_set_value(msg, LM_V_MSGFORMAT, buf, len);
     }
 }
 
@@ -202,7 +239,7 @@ msg_format_options_set_sdata_prefix(MsgFormatOptions *options, const gchar *pref
 void
 msg_format_options_defaults(MsgFormatOptions *options)
 {
-  options->flags = LP_EXPECT_HOSTNAME | LP_STORE_LEGACY_MSGHDR;
+  options->flags = LP_EXPECT_HOSTNAME | LP_STORE_LEGACY_MSGHDR | LP_PIGGYBACK_ERRORS;
   options->recv_time_zone = NULL;
   options->recv_time_zone_info = NULL;
   options->bad_hostname = NULL;
@@ -238,6 +275,7 @@ msg_format_options_init(MsgFormatOptions *options, GlobalConfig *cfg)
   if (!options->sdata_prefix)
     options->sdata_prefix = g_strdup(logmsg_sd_prefix);
   options->sdata_prefix_len = strlen(options->sdata_prefix);
+  options->use_fqdn = cfg->host_resolve_options.use_fqdn;
   options->initialized = TRUE;
 }
 
@@ -293,6 +331,8 @@ CfgFlagHandler msg_format_flag_handlers[] =
   { "guess-timezone",             CFH_SET, offsetof(MsgFormatOptions, flags), LP_GUESS_TIMEZONE },
   { "no-header",                  CFH_SET, offsetof(MsgFormatOptions, flags), LP_NO_HEADER },
   { "no-rfc3164-fallback",        CFH_SET, offsetof(MsgFormatOptions, flags), LP_NO_RFC3164_FALLBACK },
+  { "piggyback-errors",           CFH_SET, offsetof(MsgFormatOptions, flags), LP_PIGGYBACK_ERRORS },
+  { "no-piggyback-errors",      CFH_CLEAR, offsetof(MsgFormatOptions, flags), LP_PIGGYBACK_ERRORS },
   { NULL },
 };
 

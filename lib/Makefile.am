@@ -8,9 +8,11 @@ include lib/logproto/Makefile.am
 include lib/rewrite/Makefile.am
 include lib/parser/Makefile.am
 include lib/filter/Makefile.am
+include lib/filterx/Makefile.am
 include lib/template/Makefile.am
 include lib/value-pairs/Makefile.am
 include lib/stats/Makefile.am
+include lib/metrics/Makefile.am
 include lib/control/Makefile.am
 include lib/healthcheck/Makefile.am
 include lib/debugger/Makefile.am
@@ -53,12 +55,12 @@ lib_libsyslog_ng_la_LIBADD		= @CORE_DEPS_LIBS@ $(libsystemd_LIBS) $(top_builddir
 lib_libsyslog_ng_la_LDFLAGS		= -no-undefined -release ${LSNG_RELEASE} \
 					  -version-info ${LSNG_CURRENT}:${LSNG_REVISION}:${LSNG_AGE}
 
-lib_test_subdirs			= lib_filter lib_logproto lib_parser lib_rewrite lib_template lib_stats lib_control
+lib_test_subdirs			= lib_filter lib_filterx lib_logproto lib_parser lib_rewrite lib_template lib_stats lib_control
 
-lib_libsyslog_ng_la_DEPENDENCIES       = lib/eventlog/src/libevtlog.la lib/secret-storage/libsecret-storage.la
+EXTRA_lib_libsyslog_ng_la_DEPENDENCIES       = lib/eventlog/src/libevtlog.la lib/secret-storage/libsecret-storage.la
 
 if IVYKIS_INTERNAL
-lib_libsyslog_ng_la_DEPENDENCIES	+= lib/ivykis/src/libivykis.la
+EXTRA_lib_libsyslog_ng_la_DEPENDENCIES	+= lib/ivykis/src/libivykis.la
 
 lib/ivykis/src/libivykis.la:
 	${MAKE} CFLAGS="${CFLAGS} -Wno-error" -C lib/ivykis
@@ -98,6 +100,7 @@ pkginclude_HEADERS			+= \
 	lib/cfg.h			\
 	lib/cfg-grammar.h		\
 	lib/cfg-grammar-internal.h	\
+	lib/cfg-helpers.h		\
 	lib/cfg-lexer.h			\
 	lib/cfg-lexer-subst.h		\
 	lib/cfg-args.h			\
@@ -105,6 +108,7 @@ pkginclude_HEADERS			+= \
 	lib/cfg-block-generator.h	\
 	lib/cfg-parser.h		\
 	lib/cfg-path.h			\
+	lib/cfg-source.h		\
 	lib/cfg-tree.h			\
 	lib/cfg-walker.h		\
 	lib/cfg-persist.h		\
@@ -148,6 +152,7 @@ pkginclude_HEADERS			+= \
 	lib/ml-batched-timer.h		\
 	lib/msg-format.h		\
 	lib/msg-stats.h			\
+	lib/on-error.h			\
 	lib/parse-number.h		\
 	lib/pathutils.h         \
 	lib/persist-state.h		\
@@ -198,8 +203,10 @@ lib_libsyslog_ng_la_SOURCES		= \
 	lib/cfg-block-generator.c	\
 	lib/cfg-lexer.c			\
 	lib/cfg-lexer-subst.c		\
+	lib/cfg-helpers.c		\
 	lib/cfg-parser.c		\
 	lib/cfg-path.c			\
+	lib/cfg-source.c		\
 	lib/cfg-tree.c			\
 	lib/cfg-walker.c		\
 	lib/cfg-persist.c		\
@@ -243,6 +250,7 @@ lib_libsyslog_ng_la_SOURCES		= \
 	lib/ml-batched-timer.c		\
 	lib/msg-format.c		\
 	lib/msg-stats.c			\
+	lib/on-error.c			\
 	lib/parse-number.c		\
 	lib/pathutils.c         \
 	lib/persist-state.c		\
@@ -283,11 +291,13 @@ lib_libsyslog_ng_la_SOURCES		= \
 	$(transport_sources)		\
 	$(logproto_sources)		\
 	$(filter_sources)		\
+	$(filterx_sources)		\
 	$(parser_sources)		\
 	$(rewrite_sources)		\
 	$(template_sources)		\
 	$(value_pairs_sources)		\
 	$(stats_sources)		\
+	$(metrics_sources)		\
 	$(control_sources)		\
 	$(healthcheck_sources) \
 	$(debugger_sources)		\
@@ -309,15 +319,21 @@ lib_libsyslog_ng_la_LIBADD		+= @OPENSSL_LIBS@
 BUILT_SOURCES += lib/cfg-lex.c lib/cfg-lex.h						\
 	lib/cfg-grammar.c lib/cfg-grammar.h						\
 	lib/block-ref-grammar.y lib/block-ref-grammar.c lib/block-ref-grammar.h		\
-	lib/pragma-grammar.y lib/pragma-grammar.h lib/pragma-grammar.c
+	lib/pragma-grammar.y lib/pragma-grammar.h lib/pragma-grammar.c			\
+	lib/severity-aliases.h
 
 EXTRA_DIST += \
 	lib/block-ref-grammar.ym	\
 	lib/pragma-grammar.ym		\
 	lib/merge-grammar.py		\
+	lib/severity-aliases.table	\
+	lib/severity-aliases.h		\
 	lib/hostname-unix.c
 
 lib/plugin-types.h: lib/cfg-grammar.h
+
+%.h: %.table
+	$(GPERF) $< --output $@
 
 lib/ libsyslog-ng: lib/libsyslog-ng.la
 if IVYKIS_INTERNAL

@@ -49,9 +49,10 @@
  *     and plugin.c.  This minimizes the chance of including an incompatible
  *     C header.
  *   - Build/link the C++ code as C++ separately and link to that from your
- *     C lib.  Adding -lstdc++ to LIBADD is neccessary in this case as it is
- *     automatically added while linking the C++ object itself, but not when
- *     linking to the C++ object from a C lib.
+ *     C lib. In case your C++ library is static, add the following to the
+ *     the C lib to force linking against the appropriate C++ standard
+ *     library (libc++, libstdc++):
+ *       nodist_EXTRA_*_SOURCES = force-cpp-linker-with-default-stdlib.cpp
  *   - In your C++ code it is not possible to derive from a C class in the
  *     usual C way by adding a super field and filling its free_fn, because
  *     we do our own reference counting and freeing logic and we cannot rely
@@ -61,6 +62,28 @@
  *     super, so you can access its fields. You can set the necessary virtual
  *     functions with wrapper functions of your real C++ functions in the
  *     ctor of the C style "class" == struct.
+ *
+ * Header ordering:
+ *   - syslog-ng.h needs to come first even in cpp/hpp files.  You don't
+ *     need cpp-start/end wrapper around syslog-ng.h.  This include can
+ *     happen indirectly, e.g.  if you include any other header that should
+ *     take care of syslog-ng.h
+ *
+ *   - syslog-ng.h will include glib too, which is also C++ safe.  This is
+ *     needed as some constructs in glib only work if it is outside of an
+ *     extern "C" block.
+ *
+ *   - Use the usual header ordering conventions, e.g.  include the closest
+ *     header first (e.g.  the one associated with your module) and then
+ *     iterate to furthest.  This ensures that each header is actually
+ *     standalone and includes all its dependencies.
+ *
+ *   - If you use a .hpp file, include .h from it and make sure the .h
+ *     includes syslog-ng.h and includes all other .h files by wrapping them
+ *     using cpp-start/end.h as needed. This takes care of the first rule.
+ *
+ *   - In your .cpp files, include the .hpp file but not the .h file which is
+ *     already included.
  *
  * You can see an example usage of the C++ plugin support at:
  *      modules/examples/sources/random-choice-generator

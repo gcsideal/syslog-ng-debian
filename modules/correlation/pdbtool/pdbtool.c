@@ -371,7 +371,7 @@ pdbtool_pdb_emit(LogMessage *msg, gpointer user_data)
 
           nv_table_foreach(msg->payload, logmsg_registry, pdbtool_match_values, ret);
           g_string_truncate(output, 0);
-          log_msg_format_tags(msg, output);
+          log_msg_format_tags(msg, output, TRUE);
           printf("TAGS=%s\n", output->str);
           printf("\n");
         }
@@ -513,7 +513,7 @@ pdbtool_match(int argc, char *argv[])
   ret = 0;
   while (!eof && (buf || match_message))
     {
-      invalidate_cached_time();
+      invalidate_cached_realtime();
       if (G_LIKELY(proto))
         {
           log_msg_unref(msg);
@@ -787,16 +787,16 @@ pdbtool_test_value_type_callback(NVHandle handle, const gchar *name,
       valid = TRUE;
       break;
     case LM_VT_DATETIME:
-      valid = type_cast_to_datetime_unixtime(value, &ut, &error);
+      valid = type_cast_to_datetime_unixtime(value, length, &ut, &error);
       break;
     case LM_VT_INTEGER:
-      valid = type_cast_to_int64(value, &i64, &error);
+      valid = type_cast_to_int64(value, length, &i64, &error);
       break;
     case LM_VT_DOUBLE:
-      valid = type_cast_to_double(value, &d, &error);
+      valid = type_cast_to_double(value, length, &d, &error);
       break;
     case LM_VT_BOOLEAN:
-      valid = type_cast_to_boolean(value, &b, &error);
+      valid = type_cast_to_boolean(value, length, &b, &error);
       break;
     }
   if (!valid)

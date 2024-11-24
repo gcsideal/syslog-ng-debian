@@ -29,7 +29,6 @@
 #include "stats/stats-cluster-logpipe.h"
 #include "stats/stats-cluster-single.h"
 #include "msg-stats.h"
-#include "logmsg/tags.h"
 #include "ack-tracker/ack_tracker.h"
 #include "ack-tracker/ack_tracker_factory.h"
 #include "timeutils/misc.h"
@@ -539,8 +538,6 @@ _unregister_counters(LogSource *self)
                                        instance_name);
   stats_unregister_counter(&sc_key, SC_TYPE_STAMP, &self->metrics.last_message_seen);
 
-  _unregister_window_stats(self);
-
   stats_unlock();
 }
 
@@ -755,6 +752,8 @@ _set_metric_options(LogSource *self, const gchar *stats_id, StatsClusterKeyBuild
                                                self->stats_id, instance_name);
     stats_cluster_key_builder_set_legacy_alias_name(self->metrics.stats_kb, "processed");
     stats_cluster_key_builder_add_label(self->metrics.stats_kb, stats_cluster_label("id", self->stats_id));
+    if (self->metrics.recvd_messages_key)
+      stats_cluster_key_free(self->metrics.recvd_messages_key);
     self->metrics.recvd_messages_key = stats_cluster_key_builder_build_single(self->metrics.stats_kb);
   }
   stats_cluster_key_builder_pop(self->metrics.stats_kb);
@@ -763,6 +762,8 @@ _set_metric_options(LogSource *self, const gchar *stats_id, StatsClusterKeyBuild
   {
     stats_cluster_key_builder_set_name(self->metrics.stats_kb, "input_event_bytes_total");;
     stats_cluster_key_builder_add_label(self->metrics.stats_kb, stats_cluster_label("id", self->stats_id));
+    if (self->metrics.recvd_bytes_key)
+      stats_cluster_key_free(self->metrics.recvd_bytes_key);
     self->metrics.recvd_bytes_key = stats_cluster_key_builder_build_single(self->metrics.stats_kb);
   }
   stats_cluster_key_builder_pop(self->metrics.stats_kb);
@@ -825,6 +826,10 @@ log_source_free(LogPipe *s)
 
   g_free(self->name);
   g_free(self->stats_id);
+
+  stats_lock();
+  _unregister_window_stats(self);
+  stats_unlock();
 
   if (self->metrics.stats_kb)
     stats_cluster_key_builder_free(self->metrics.stats_kb);

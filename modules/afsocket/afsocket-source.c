@@ -37,7 +37,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#if SYSLOG_NG_HAVE_LINUX_SOCK_DIAG_H
+#ifdef SYSLOG_NG_HAVE_LINUX_SOCK_DIAG_H
 #include <linux/sock_diag.h>
 #endif
 
@@ -217,7 +217,7 @@ afsocket_sc_deinit(LogPipe *s)
   return TRUE;
 }
 
-static void
+static gint
 afsocket_sc_notify(LogPipe *s, gint notify_code, gpointer user_data)
 {
   AFSocketSourceConnection *self = (AFSocketSourceConnection *) s;
@@ -234,6 +234,7 @@ afsocket_sc_notify(LogPipe *s, gint notify_code, gpointer user_data)
     default:
       break;
     }
+  return NR_OK;
 }
 
 static void
@@ -939,7 +940,7 @@ afsocket_sd_setup_reader_options(AFSocketSourceDriver *self)
       if (self->reader_options.super.init_window_size < min_iw_size_per_reader)
         {
           msg_warning("WARNING: window sizing for tcp sources were changed in " VERSION_3_3
-                      ", the configuration value was divided by the value of max-connections(). The result was too small, clamping to value of min_iw_size_per_reader. Ensure you have a proper log_fifo_size setting to avoid message loss.",
+                      ", the configuration value was divided by the value of max-connections(). The result was too small, increasing to a reasonable minimum value",
                       evt_tag_int("orig_log_iw_size", self->reader_options.super.init_window_size),
                       evt_tag_int("new_log_iw_size", min_iw_size_per_reader),
                       evt_tag_int("min_iw_size_per_reader", min_iw_size_per_reader),
@@ -1147,6 +1148,16 @@ _sd_open_dgram(AFSocketSourceDriver *self)
 static gboolean
 afsocket_sd_open_listener(AFSocketSourceDriver *self)
 {
+  if (!self->activate_listener)
+    {
+      gchar buf[256];
+
+      msg_debug("Not opening socket, listener activation disabled",
+                evt_tag_str("addr", g_sockaddr_format(self->bind_addr, buf, sizeof(buf), GSA_FULL)),
+                log_pipe_location_tag(&self->super.super.super));
+      return TRUE;
+    }
+
   if (self->transport_mapper->sock_type == SOCK_STREAM)
     {
       return _sd_open_stream(self);
@@ -1340,6 +1351,21 @@ afsocket_sd_deinit_method(LogPipe *s)
 }
 
 static void
+afsocket_sd_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
+{
+  AFSocketSourceDriver *self = (AFSocketSourceDriver *) s;
+  const gchar *transport_name;
+  gsize len;
+
+  transport_name = transport_mapper_get_transport_name(self->transport_mapper, &len);
+  if (transport_name)
+    {
+      log_msg_set_value(msg, LM_V_TRANSPORT, transport_name, len);
+    }
+  log_src_driver_queue_method(s, msg, path_options);
+}
+
+static gint
 afsocket_sd_notify(LogPipe *s, gint notify_code, gpointer user_data)
 {
   switch (notify_code)
@@ -1353,6 +1379,7 @@ afsocket_sd_notify(LogPipe *s, gint notify_code, gpointer user_data)
     default:
       break;
     }
+  return NR_OK;
 }
 
 void
@@ -1376,6 +1403,7 @@ afsocket_sd_init_instance(AFSocketSourceDriver *self,
 {
   log_src_driver_init_instance(&self->super, cfg);
 
+  self->super.super.super.queue = afsocket_sd_queue;
   self->super.super.super.init = afsocket_sd_init_method;
   self->super.super.super.deinit = afsocket_sd_deinit_method;
   self->super.super.super.free_fn = afsocket_sd_free_method;
@@ -1392,6 +1420,7 @@ afsocket_sd_init_instance(AFSocketSourceDriver *self,
   log_reader_options_defaults(&self->reader_options);
   self->reader_options.super.stats_level = STATS_LEVEL1;
   self->reader_options.super.stats_source = transport_mapper->stats_source;
+  self->activate_listener = TRUE;
 
   afsocket_sd_init_watches(self);
 }

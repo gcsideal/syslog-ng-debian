@@ -258,6 +258,13 @@ afprogram_sd_exit(pid_t pid, int status, gpointer s)
     }
 }
 
+static void
+afprogram_sd_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
+{
+  log_msg_set_value_to_string(msg, LM_V_TRANSPORT, "local+program");
+  log_src_driver_queue_method(s, msg, path_options);
+}
+
 static gboolean
 afprogram_sd_init(LogPipe *s)
 {
@@ -345,7 +352,7 @@ afprogram_sd_free(LogPipe *s)
   log_src_driver_free(s);
 }
 
-static void
+static gint
 afprogram_sd_notify(LogPipe *s, gint notify_code, gpointer user_data)
 {
   switch (notify_code)
@@ -358,6 +365,7 @@ afprogram_sd_notify(LogPipe *s, gint notify_code, gpointer user_data)
     default:
       break;
     }
+  return NR_OK;
 }
 
 LogDriver *
@@ -370,6 +378,7 @@ afprogram_sd_new(gchar *cmdline, GlobalConfig *cfg)
   self->super.super.super.deinit = afprogram_sd_deinit;
   self->super.super.super.free_fn = afprogram_sd_free;
   self->super.super.super.notify = afprogram_sd_notify;
+  self->super.super.super.queue = afprogram_sd_queue;
   self->process_info.cmdline = g_string_new(cmdline);
   afprogram_set_inherit_environment(&self->process_info, TRUE);
   log_reader_options_defaults(&self->reader_options);
@@ -445,11 +454,12 @@ afprogram_dd_open_program(AFProgramDestDriver *self, int *fd)
 static gboolean
 afprogram_dd_reopen(AFProgramDestDriver *self)
 {
-  int fd;
+  int fd = -1;
 
   afprogram_dd_kill_child(self);
 
-  if (!afprogram_dd_open_program(self, &fd))
+  if (!afprogram_dd_open_program(self, &fd) ||
+      fd < 0)
     return FALSE;
 
   log_writer_reopen(self->writer, log_proto_text_client_new(log_transport_pipe_new(fd),
@@ -659,7 +669,7 @@ afprogram_dd_free(LogPipe *s)
   log_dest_driver_free(s);
 }
 
-static void
+static gint
 afprogram_dd_notify(LogPipe *s, gint notify_code, gpointer user_data)
 {
   AFProgramDestDriver *self = (AFProgramDestDriver *) s;
@@ -677,6 +687,7 @@ afprogram_dd_notify(LogPipe *s, gint notify_code, gpointer user_data)
     default:
       break;
     }
+  return NR_OK;
 }
 
 LogDriver *

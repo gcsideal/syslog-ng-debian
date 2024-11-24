@@ -20,23 +20,27 @@ EXTRA_DIST += \
 	dbld/pip_packages.manifest \
 	dbld/images/entrypoint.sh \
 	dbld/images/fake-sudo.sh \
-	dbld/images/gosu.pubkey \
 	dbld/images/yum-builddep.sha1 \
+	dbld/images/almalinux.prepare.sh \
 	dbld/images/debian.prepare.sh \
 	dbld/images/ubuntu.prepare.sh \
 	dbld/images/centos.prepare.sh \
 	dbld/images/fedora.prepare.sh \
+	dbld/images/almalinux-8.dockerfile \
+	dbld/images/almalinux-9.dockerfile \
+	dbld/images/centos-stream9.dockerfile \
 	dbld/images/devshell.dockerfile \
-	dbld/images/centos-7.dockerfile \
-	dbld/images/fedora-37.dockerfile \
-	dbld/images/debian-buster.dockerfile \
+	dbld/images/fedora-latest.dockerfile \
+	dbld/images/fedora-rawhide.dockerfile \
 	dbld/images/debian-bullseye.dockerfile \
 	dbld/images/debian-bookworm.dockerfile \
 	dbld/images/debian-sid.dockerfile \
 	dbld/images/debian-testing.dockerfile \
 	dbld/images/ubuntu-focal.dockerfile \
 	dbld/images/ubuntu-jammy.dockerfile \
+	dbld/images/ubuntu-noble.dockerfile \
 	dbld/images/ubuntu-lunar.dockerfile \
+	dbld/images/ubuntu-mantic.dockerfile \
 	dbld/images/kira.dockerfile \
 	dbld/images/tarball.dockerfile \
 	dbld/images/hooks/build \

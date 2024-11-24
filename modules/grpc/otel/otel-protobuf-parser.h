@@ -23,6 +23,8 @@
 #ifndef OTEL_PROTOBUF_PARSER_H
 #define OTEL_PROTOBUF_PARSER_H
 
+#include "syslog-ng.h"
+
 #include "compat/cpp-start.h"
 
 #include "parser/parser-expr.h"
@@ -30,6 +32,7 @@
 typedef struct OtelProtobufParser_ OtelProtobufParser;
 
 LogParser *otel_protobuf_parser_new(GlobalConfig *cfg);
+void otel_protobuf_parser_set_hostname(LogParser *s, gboolean set_hostname);
 
 #include "compat/cpp-end.h"
 

@@ -39,6 +39,7 @@
 #include "syslog-names.h"
 #include "plugin.h"
 #include "cfg-grammar-internal.h"
+#include "cfg-helpers.h"
 #include "socket-options-inet.h"
 #include "socket-options-unix.h"
 #include "transport-mapper-inet.h"
@@ -193,6 +194,7 @@ systemd_syslog_grammar_set_source_driver(SystemDSyslogSourceDriver *sd)
 %token KW_CLIENT_SIGALGS
 %token KW_ECDH_CURVE_LIST
 %token KW_SSL_OPTIONS
+%token KW_SSL_VERSION
 %token KW_SNI
 %token KW_ALLOW_COMPRESS
 %token KW_KEYLOG_FILE
@@ -351,8 +353,8 @@ source_afinet_udp_option
 source_afinet_option
 	: KW_LOCALIP '(' string ')'		{ afinet_sd_set_localip(last_driver, $3); free($3); }
 	| KW_IP '(' string ')'			{ afinet_sd_set_localip(last_driver, $3); free($3); }
-	| KW_LOCALPORT '(' string_or_number ')'	{ afinet_sd_set_localport(last_driver, $3); free($3); }
-	| KW_PORT '(' string_or_number ')'	{ afinet_sd_set_localport(last_driver, $3); free($3); }
+	| KW_LOCALPORT '(' string_or_number ')' { CHECK_ERROR(cfg_check_port($3), @3, "Illegal port number: %s", $3); afinet_sd_set_localport(last_driver, $3); free($3); }
+	| KW_PORT '(' string_or_number ')' { CHECK_ERROR(cfg_check_port($3), @3, "Illegal port number: %s", $3); afinet_sd_set_localport(last_driver, $3); free($3); }
 	| source_reader_option
 	| source_driver_option
 	| inet_socket_option
@@ -594,9 +596,9 @@ dest_afinet_udp_options
 
 dest_afinet_option
 	: KW_LOCALIP '(' string ')'		{ afinet_dd_set_localip(last_driver, $3); free($3); }
-	| KW_LOCALPORT '(' string_or_number ')'	{ afinet_dd_set_localport(last_driver, $3); free($3); }
-	| KW_PORT '(' string_or_number ')'	{ afinet_dd_set_destport(last_driver, $3); free($3); }
-	| KW_DESTPORT '(' string_or_number ')'	{ afinet_dd_set_destport(last_driver, $3); free($3); }
+	| KW_LOCALPORT '(' string_or_number ')' { CHECK_ERROR(cfg_check_port($3), @3, "Illegal port number: %s", $3); afinet_dd_set_localport(last_driver, $3); free($3); }
+	| KW_PORT '(' string_or_number ')' { CHECK_ERROR(cfg_check_port($3), @3, "Illegal port number: %s", $3); afinet_dd_set_destport(last_driver, $3); free($3); }
+	| KW_DESTPORT '(' string_or_number ')' { CHECK_ERROR(cfg_check_port($3), @3, "Illegal port number: %s", $3); afinet_dd_set_destport(last_driver, $3); free($3); }
 	| KW_FAILOVER_SERVERS { afinet_dd_enable_failover(last_driver); } '(' string_list ')'	{ afinet_dd_add_failovers(last_driver, $4); }
 	| KW_FAILOVER { afinet_dd_enable_failover(last_driver); } '(' dest_failover_options ')'	{ $$ = $4; }
 	| inet_socket_option
@@ -890,15 +892,21 @@ tls_option
             CHECK_ERROR(tls_context_set_ssl_options_by_name(last_tls_context, $3), @3,
                         "unknown ssl-options() argument");
 	  }
+	| KW_SSL_VERSION '(' string ')'
+	  {
+            CHECK_ERROR(tls_context_set_ssl_version_by_name(last_tls_context, $3), @3,
+                        "unknown ssl-version() argument");
+	    free($3);
+          }
         | KW_ALLOW_COMPRESS '(' yesno ')'
           {
-             transport_mapper_inet_set_allow_compress(last_transport_mapper, $3);
+            transport_mapper_inet_set_allow_compress(last_transport_mapper, $3);
           }
 	| KW_CONF_CMDS '(' tls_conf_cmds ')'
-		{
-			GError *error = NULL;
-			CHECK_ERROR_GERROR(tls_context_set_conf_cmds(last_tls_context, $3, &error), @3, error, "Error setting conf-cmds()");
-		}
+	  {
+	    GError *error = NULL;
+	    CHECK_ERROR_GERROR(tls_context_set_conf_cmds(last_tls_context, $3, &error), @3, error, "Error setting conf-cmds()");
+	  }
         | KW_ENDIF {
 }
         ;

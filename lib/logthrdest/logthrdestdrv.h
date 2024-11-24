@@ -64,6 +64,13 @@ typedef enum
   LTR_MAX
 } LogThreadedResult;
 
+enum
+{
+  LTDF_SEQNUM_ALL = 0x0001,
+  LTDF_SEQNUM = 0x0002,
+  /* NOTE: everything >= 0x1000 is driver specific */
+};
+
 typedef struct _LogThreadedDestDriver LogThreadedDestDriver;
 typedef struct _LogThreadedDestWorker LogThreadedDestWorker;
 
@@ -100,10 +107,12 @@ struct _LogThreadedDestWorker
   struct
   {
     StatsClusterKey *output_event_bytes_sc_key;
+    StatsClusterKey *output_unreachable_key;
     StatsClusterKey *message_delay_sample_key;
     StatsClusterKey *message_delay_sample_age_key;
 
     StatsByteCounter written_bytes;
+    StatsCounterItem *output_unreachable;
     StatsCounterItem *message_delay_sample;
     StatsCounterItem *message_delay_sample_age;
 
@@ -129,10 +138,12 @@ struct _LogThreadedDestDriver
   {
     StatsClusterKey *output_events_sc_key;
     StatsClusterKey *processed_sc_key;
+    StatsClusterKey *output_event_retries_sc_key;
 
     StatsCounterItem *dropped_messages;
     StatsCounterItem *processed_messages;
     StatsCounterItem *written_messages;
+    StatsCounterItem *output_event_retries;
 
     gboolean raw_bytes_enabled;
 
@@ -182,6 +193,7 @@ struct _LogThreadedDestDriver
    * increased in parallel by the multiple threads. */
 
   gint32 shared_seq_num;
+  guint32 flags;
 
   const gchar *(*format_stats_key)(LogThreadedDestDriver *s, StatsClusterKeyBuilder *kb);
 };
@@ -209,6 +221,8 @@ log_threaded_dest_worker_connect(LogThreadedDestWorker *self)
   else
     self->connected = TRUE;
 
+
+  stats_counter_set(self->metrics.output_unreachable, !self->connected);
   return self->connected;
 }
 
@@ -218,12 +232,14 @@ log_threaded_dest_worker_disconnect(LogThreadedDestWorker *self)
   if (self->disconnect)
     self->disconnect(self);
   self->connected = FALSE;
+  stats_counter_set(self->metrics.output_unreachable, !self->connected);
 }
 
 static inline LogThreadedResult
 log_threaded_dest_worker_insert(LogThreadedDestWorker *self, LogMessage *msg)
 {
-  if (msg->flags & LF_LOCAL)
+  if ((self->owner->flags & LTDF_SEQNUM) &&
+      ((self->owner->flags & LTDF_SEQNUM_ALL) || (msg->flags & LF_LOCAL)))
     {
       if (self->owner->num_workers > 1)
         self->seq_num = step_sequence_number_atomic(&self->owner->shared_seq_num);
@@ -305,5 +321,6 @@ void log_threaded_dest_driver_set_flush_on_worker_key_change(LogDriver *s, gbool
 void log_threaded_dest_driver_set_batch_lines(LogDriver *s, gint batch_lines);
 void log_threaded_dest_driver_set_batch_timeout(LogDriver *s, gint batch_timeout);
 void log_threaded_dest_driver_set_time_reopen(LogDriver *s, time_t time_reopen);
+gboolean log_threaded_dest_driver_process_flag(LogDriver *driver, const gchar *flag);
 
 #endif

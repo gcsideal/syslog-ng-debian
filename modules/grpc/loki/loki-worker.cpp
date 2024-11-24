@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) 2024 Axoflow
+ * Copyright (c) 2024 Attila Szakacs <attila.szakacs@axoflow.com>
  * Copyright (c) 2023 László Várady
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -77,17 +79,26 @@ DestinationWorker::init()
 
   args.SetInt(GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS, 1);
 
+  for (auto nv : owner->int_extra_channel_args)
+    args.SetInt(nv.first, nv.second);
+  for (auto nv : owner->string_extra_channel_args)
+    args.SetString(nv.first, nv.second);
+
   auto credentials = owner->credentials_builder.build();
   if (!credentials)
     {
-      msg_error("Error querying Loki credentials", log_pipe_location_tag((LogPipe *) this->super->super.owner));
+      msg_error("Error querying Loki credentials",
+                evt_tag_str("url", owner->get_url().c_str()),
+                log_pipe_location_tag((LogPipe *) this->super->super.owner));
       return false;
     }
 
   this->channel = ::grpc::CreateCustomChannel(owner->get_url(), credentials, args);
   if (!this->channel)
     {
-      msg_error("Error creating Loki gRPC channel", log_pipe_location_tag((LogPipe *) this->super->super.owner));
+      msg_error("Error creating Loki gRPC channel",
+                evt_tag_str("url", owner->get_url().c_str()),
+                log_pipe_location_tag((LogPipe *) this->super->super.owner));
       return false;
     }
 
@@ -105,6 +116,8 @@ DestinationWorker::deinit()
 bool
 DestinationWorker::connect()
 {
+  DestinationDriver *owner = this->get_owner();
+
   this->prepare_batch();
 
   msg_debug("Connecting to Loki", log_pipe_location_tag((LogPipe *) this->super->super.owner));
@@ -113,7 +126,12 @@ DestinationWorker::connect()
     std::chrono::system_clock::now() + std::chrono::seconds(10);
 
   if (!this->channel->WaitForConnected(connect_timeout))
-    return false;
+    {
+      msg_error("Time out connecting to Loki",
+                evt_tag_str("url", owner->get_url().c_str()),
+                log_pipe_location_tag((LogPipe *) this->super->super.owner));
+      return false;
+    }
 
   this->connected = true;
   return true;
@@ -156,7 +174,10 @@ DestinationWorker::set_labels(LogMessage *msg)
         formatted_labels << ", ";
 
       log_template_format(label.value, msg, &options, buf);
+
+      g_string_truncate(sanitized_value, 0);
       append_unsafe_utf8_as_escaped_binary(sanitized_value, buf->str, -1, "\"");
+
       formatted_labels << label.name << "=\"" << sanitized_value->str << "\"";
 
       comma_needed = true;
@@ -179,7 +200,7 @@ DestinationWorker::set_timestamp(logproto::EntryAdapter *entry, LogMessage *msg)
     }
 
   UnixTime *time = &msg->timestamps[owner->timestamp];
-  timeval tv{time->ut_sec, time->ut_usec};
+  struct timeval tv = timeval_from_unix_time(time);
   *entry->mutable_timestamp() = google::protobuf::util::TimeUtil::TimevalToTimestamp(tv);
 }
 
@@ -213,6 +234,8 @@ DestinationWorker::insert(LogMessage *msg)
 LogThreadedResult
 DestinationWorker::flush(LogThreadedFlushMode mode)
 {
+  DestinationDriver *owner = this->get_owner();
+
   if (this->super->super.batch_size == 0)
     return LTR_SUCCESS;
 
@@ -220,11 +243,19 @@ DestinationWorker::flush(LogThreadedFlushMode mode)
   logproto::PushResponse response{};
 
   ::grpc::ClientContext ctx;
+  for (auto nv : owner->headers)
+    ctx.AddMetadata(nv.first, nv.second);
+
+  if (!owner->tenant_id.empty())
+    ctx.AddMetadata("x-scope-orgid", owner->tenant_id);
+
   ::grpc::Status status = this->stub->Push(&ctx, this->current_batch, &response);
+  this->get_owner()->metrics.insert_grpc_request_stats(status);
 
   if (!status.ok())
     {
       msg_error("Error sending Loki batch", evt_tag_str("error", status.error_message().c_str()),
+                evt_tag_str("url", owner->get_url().c_str()),
                 evt_tag_str("details", status.error_details().c_str()),
                 log_pipe_location_tag((LogPipe *) this->super->super.owner));
       result = LTR_ERROR;

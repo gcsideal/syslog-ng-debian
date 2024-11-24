@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2024 Gergo Ferenc Kovacs
  * Copyright (c) 2019 Airbus Commercial Aircraft
  *
  * This library is free software; you can redistribute it and/or
@@ -33,7 +34,7 @@
 #include "apphook.h"
 #include "cfg.h"
 #include "logmatcher.h"
-#include "timeutils/misc.h"
+#include "timeutils/cache.h"
 
 #include <errno.h>
 #include <string.h>
@@ -373,7 +374,7 @@ void corruptKey(TestData *testData)
 
   cr_assert(status == G_IO_STATUS_NORMAL, " Unable to set encoding for key file %s", testData->keyFile->str);
 
-  guint64 outlen = 0;
+  gsize outlen = 0;
 
   int buflen = KEY_LENGTH + CMAC_LENGTH + sizeof(guint64);
 

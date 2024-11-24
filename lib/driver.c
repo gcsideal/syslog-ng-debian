@@ -41,6 +41,7 @@ log_driver_plugin_free_method(LogDriverPlugin *self)
 void
 log_driver_plugin_init_instance(LogDriverPlugin *self, const gchar *name)
 {
+  self->signal_connector = NULL;
   self->name = name;
   self->free_fn = log_driver_plugin_free_method;
 }
@@ -142,7 +143,7 @@ static void
 log_driver_init_instance(LogDriver *self, GlobalConfig *cfg)
 {
   log_pipe_init_instance(&self->super, cfg);
-  self->super.flags |= PIF_CONFIG_RELATED;
+  self->super.flags |= PIF_CONFIG_RELATED + PIF_SYNC_FILTERX;
   self->super.free_fn = log_driver_free;
   self->super.pre_init = log_driver_pre_init_method;
   self->super.init = log_driver_init_method;
@@ -265,17 +266,6 @@ _create_memory_queue(LogDestDriver *self, const gchar *persist_name, gint stats_
 
   gint log_fifo_size = self->log_fifo_size < 0 ? cfg->log_fifo_size : self->log_fifo_size;
 
-  if (cfg_is_config_version_older(cfg, VERSION_VALUE_3_22))
-    {
-      msg_warning_once("WARNING: log-fifo-size() works differently starting with " VERSION_3_22 " to avoid dropping "
-                       "flow-controlled messages when log-fifo-size() is misconfigured. From now on, log-fifo-size() "
-                       "only affects messages that are not flow-controlled. (Flow-controlled log paths have the "
-                       "flags(flow-control) option set.) To enable the new behaviour, update the @version string in "
-                       "your configuration and consider lowering the value of log-fifo-size().");
-
-      return log_queue_fifo_legacy_new(log_fifo_size, persist_name, stats_level, driver_sck_builder, queue_sck_builder);
-    }
-
   return log_queue_fifo_new(log_fifo_size, persist_name, stats_level, driver_sck_builder, queue_sck_builder);
 }
 
@@ -387,10 +377,9 @@ _log_dest_driver_unregister_counters(LogDestDriver *self)
   stats_unlock();
 }
 
-gboolean
-log_dest_driver_deinit_method(LogPipe *s)
+static inline void
+_log_dest_driver_release_queues(LogDestDriver *self)
 {
-  LogDestDriver *self = (LogDestDriver *) s;
   GList *l, *l_next;
 
   for (l = self->queues; l; l = l_next)
@@ -404,7 +393,16 @@ log_dest_driver_deinit_method(LogPipe *s)
        * which automatically frees the ref on the list too */
       log_dest_driver_release_queue(self, log_queue_ref(q));
     }
+
   g_assert(self->queues == NULL);
+}
+
+gboolean
+log_dest_driver_deinit_method(LogPipe *s)
+{
+  LogDestDriver *self = (LogDestDriver *) s;
+
+  _log_dest_driver_release_queues(self);
 
   _log_dest_driver_unregister_counters(self);
 
@@ -431,12 +429,9 @@ void
 log_dest_driver_free(LogPipe *s)
 {
   LogDestDriver *self = (LogDestDriver *) s;
-  GList *l;
 
-  for (l = self->queues; l; l = l->next)
-    {
-      log_queue_unref((LogQueue *) l->data);
-    }
-  g_list_free(self->queues);
+  /* half-initialized pipes can't release their queue in deinit() */
+  _log_dest_driver_release_queues(self);
+
   log_driver_free(s);
 }

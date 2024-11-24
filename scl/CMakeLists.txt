@@ -1,19 +1,23 @@
 set(SCL_DIRS
     apache
+    arr
     cee
     cim
     checkpoint
     cisco
     collectd
     default-network-drivers
+    darwinosl
     discord
     elasticsearch
     ewmm
     fortigate
+    google
     graphite
     graylog2
     hdfs
     iptables
+    jellyfin
     junos
     kafka
     linux-audit
@@ -25,11 +29,15 @@ set(SCL_DIRS
     mbox
     netskope
     nodejs
+    openobserve
     opensearch
     osquery
     pacct
     paloalto
+    pihole
+    pgsql
     python
+    qbittorrent
     rewrite
     slack
     snmptrap

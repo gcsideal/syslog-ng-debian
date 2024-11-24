@@ -10,7 +10,12 @@ modules_kvformat_libkvformat_la_SOURCES=	\
 	modules/kvformat/kv-parser-grammar.y	\
 	modules/kvformat/kv-parser-parser.c		\
 	modules/kvformat/kv-parser-parser.h		\
-	modules/kvformat/kvformat-plugin.c
+	modules/kvformat/kvformat-plugin.c		\
+	modules/kvformat/filterx-func-parse-kv.h	\
+	modules/kvformat/filterx-func-parse-kv.c	\
+	modules/kvformat/filterx-func-format-kv.h	\
+	modules/kvformat/filterx-func-format-kv.c
+
 
 modules_kvformat_libkvformat_la_CPPFLAGS	=	\
 	$(AM_CPPFLAGS)					\
@@ -22,7 +27,7 @@ modules_kvformat_libkvformat_la_LIBADD = \
 
 modules_kvformat_libkvformat_la_LDFLAGS	=	\
 	$(MODULE_LDFLAGS)
-modules_kvformat_libkvformat_la_DEPENDENCIES	=	\
+EXTRA_modules_kvformat_libkvformat_la_DEPENDENCIES	=	\
 	$(MODULE_DEPS_LIBS)
 
 modules/kvformat modules/kvformat/ mod-kvformat:	\

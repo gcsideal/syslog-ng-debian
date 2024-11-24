@@ -23,6 +23,7 @@
  */
 #include <criterion/criterion.h>
 #include "libtest/stopwatch.h"
+#include "libtest/fake-time.h"
 
 #include "timeutils/scan-timestamp.h"
 #include "timeutils/cache.h"
@@ -30,24 +31,6 @@
 #include "timeutils/conv.h"
 #include "apphook.h"
 
-
-static void
-fake_time(time_t now)
-{
-  GTimeVal tv = { now, 123 * 1000 };
-
-  set_cached_time(&tv);
-}
-
-static void
-fake_time_add(time_t diff)
-{
-  GTimeVal tv;
-
-  cached_g_current_time(&tv);
-  tv.tv_sec += diff;
-  set_cached_time(&tv);
-}
 
 static gboolean
 _parse_rfc3164(const gchar *ts, gint len, gchar isotimestamp[32])
@@ -171,6 +154,13 @@ Test(parse_timestamp, bsd_extensions)
   /* year after the mon/day (cisco) */
   _expect_rfc3164_timestamp_eq("Dec  3 2019 09:10:12:", "2019-12-03T09:10:12.000+01:00");
   _expect_rfc3164_timestamp_eq("Dec  3 2019 09:10:12 ", "2019-12-03T09:10:12.000+01:00");
+}
+
+Test(parse_timestamp, bsd_invalid)
+{
+  /* single space between month and mday */
+  _expect_rfc3164_timestamp_eq("Dec 3 09:10:12", "2017-12-03T09:10:12.000+01:00");
+  _expect_rfc3164_timestamp_eq("Dec 3 09:10:12.987", "2017-12-03T09:10:12.987+01:00");
 }
 
 Test(parse_timestamp, accept_iso_timestamps_with_space)

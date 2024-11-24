@@ -16,6 +16,9 @@ set(COMPAT_HEADERS
     compat/un.h
     compat/cpp-start.h
     compat/cpp-end.h
+    compat/curl.h
+    compat/json.h
+    compat/inttypes.h
     PARENT_SCOPE)
 
 set(COMPAT_SOURCES

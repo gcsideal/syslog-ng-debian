@@ -83,6 +83,7 @@ _start_watches(DirectoryMonitor *s)
   self->watcher.mask = IN_CREATE | IN_DELETE | IN_MOVE | IN_DELETE_SELF | IN_MOVE_SELF;
   self->watcher.cookie = self;
   self->watcher.handler = _handle_event;
+  msg_trace("Starting to watch directory changes", evt_tag_str("dir", self->super.dir));
   iv_inotify_watch_register(&self->watcher);
 }
 
@@ -104,12 +105,13 @@ DirectoryMonitor *
 directory_monitor_inotify_new(const gchar *dir, guint recheck_time)
 {
   DirectoryMonitorInotify *self = g_new0(DirectoryMonitorInotify, 1);
-  directory_monitor_init_instance(&self->super, dir, recheck_time);
+  directory_monitor_init_instance(&self->super, dir, recheck_time, "inotify");
 
   IV_INOTIFY_INIT(&self->inotify);
   if (iv_inotify_register(&self->inotify))
     {
-      msg_error("directory-monitor-inotify: could not create inotify object", evt_tag_error("errno"));
+      msg_error("directory-monitor-inotify: could not create inotify object, you may need to increase /proc/sys/fs/inotify/max_user_instances",
+                evt_tag_error("errno"));
       directory_monitor_free(&self->super);
       return NULL;
     }

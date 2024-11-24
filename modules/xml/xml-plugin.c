@@ -33,6 +33,11 @@ static Plugin xml_plugins[] =
     .name = "xml",
     .parser = &xml_parser,
   },
+  {
+    .type = LL_CONTEXT_PARSER,
+    .name = "windows-eventlog-xml-parser",
+    .parser = &xml_parser,
+  },
 };
 
 gboolean

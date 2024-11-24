@@ -90,7 +90,6 @@ log_parser_queue_method(LogPipe *s, LogMessage *msg, const LogPathOptions *path_
 {
   LogParser *self = (LogParser *) s;
   gboolean success;
-  gchar *parser_result;
 
   msg_trace(">>>>>> parser rule evaluation begin",
             evt_tag_str("rule", self->name),
@@ -99,23 +98,22 @@ log_parser_queue_method(LogPipe *s, LogMessage *msg, const LogPathOptions *path_
 
   success = log_parser_process_message(self, &msg, path_options);
 
+  msg_trace("<<<<<< parser rule evaluation result",
+            evt_tag_str("result", success ? "accepted" : "rejected"),
+            evt_tag_str("rule", self->name),
+            log_pipe_location_tag(s),
+            evt_tag_msg_reference(msg));
+
   if (success)
     {
-      parser_result = "Forwarding message to the next LogPipe";
       log_pipe_forward_msg(s, msg, path_options);
     }
   else
     {
-      parser_result = "Dropping message from LogPipe";
       if (path_options->matched)
         (*path_options->matched) = FALSE;
       log_msg_drop(msg, path_options, AT_PROCESSED);
     }
-  msg_trace("<<<<<< parser rule evaluation result",
-            evt_tag_str("result", parser_result),
-            evt_tag_str("rule", self->name),
-            log_pipe_location_tag(s),
-            evt_tag_msg_reference(msg));
 }
 
 static void
@@ -184,7 +182,7 @@ void
 log_parser_init_instance(LogParser *self, GlobalConfig *cfg)
 {
   log_pipe_init_instance(&self->super, cfg);
-  self->super.flags |= PIF_CONFIG_RELATED;
+  self->super.flags |= PIF_CONFIG_RELATED + PIF_SYNC_FILTERX;
   self->super.init = log_parser_init_method;
   self->super.deinit = log_parser_deinit_method;
   self->super.free_fn = log_parser_free_method;

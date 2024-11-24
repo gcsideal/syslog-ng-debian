@@ -30,7 +30,7 @@
 
 /* functions that should be implemented by GLib but they aren't */
 GString *g_string_assign_len(GString *s, const gchar *val, gint len);
-void g_string_steal(GString *s);
+gchar *g_string_steal(GString *s);
 
 static inline GString *
 g_string_append_unichar_optimized(GString *string, gunichar wc)
@@ -98,11 +98,11 @@ gchar *normalize_flag(const gchar *buffer);
  *
  * NOTE: don't use this unless strchr() really shows up in your profile.
  */
-static inline char *
+static inline const char *
 _strchr_optimized_for_single_char_haystack(const char *str, int c)
 {
   if (str[0] == c)
-    return (char *) str;
+    return str;
   else if (str[0] == '\0')
     return NULL;
   if (str[1] == '\0')
@@ -110,7 +110,7 @@ _strchr_optimized_for_single_char_haystack(const char *str, int c)
       if (c != '\0')
         return NULL;
       else
-        return (char *) &str[1];
+        return &str[1];
     }
   return strchr(str + 1, c);
 }

@@ -1,10 +1,18 @@
+if(NOT ENABLE_GRPC)
+  return()
+endif()
+
 set(OTEL_CPP_SOURCES
   ${GRPC_CREDENTIALS_SOURCES}
+  ${GRPC_METRICS_SOURCES}
   otel-source.cpp
   otel-source.hpp
   otel-source.h
   otel-source-services.hpp
   otel-servicecall.hpp
+  otel-logmsg-handles.cpp
+  otel-logmsg-handles.hpp
+  otel-logmsg-handles.h
   otel-protobuf-parser.hpp
   otel-protobuf-parser.cpp
   otel-protobuf-parser.h
@@ -42,5 +50,12 @@ add_module(
   INCLUDES ${PROJECT_SOURCE_DIR}/modules/grpc
   SOURCES ${OTEL_SOURCES}
 )
+
+set_target_properties(otel PROPERTIES INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib;${CMAKE_INSTALL_PREFIX}/lib/syslog-ng")
+
+target_compile_options (otel-cpp PRIVATE -Wno-double-promotion -Wno-deprecated -DPROTOBUF_ENABLE_DEBUG_LOGGING_MAY_LEAK_PII=0)
+
+add_subdirectory(filterx)
+target_link_libraries(otel PRIVATE otel_filterx_logrecord_cpp)
 
 add_test_subdirectory(tests)

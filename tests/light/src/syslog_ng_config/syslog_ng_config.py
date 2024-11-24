@@ -24,8 +24,10 @@ import logging
 
 from src.common.file import File
 from src.common.operations import cast_to_list
+from src.syslog_ng_config import stringify
 from src.syslog_ng_config.renderer import ConfigRenderer
 from src.syslog_ng_config.statement_group import StatementGroup
+from src.syslog_ng_config.statements import ArrowedOptions
 from src.syslog_ng_config.statements.destinations.example_destination import ExampleDestination
 from src.syslog_ng_config.statements.destinations.file_destination import FileDestination
 from src.syslog_ng_config.statements.destinations.network_destination import NetworkDestination
@@ -39,12 +41,17 @@ from src.syslog_ng_config.statements.parsers.db_parser import DBParser
 from src.syslog_ng_config.statements.parsers.parser import Parser
 from src.syslog_ng_config.statements.rewrite.rewrite import CreditCardHash
 from src.syslog_ng_config.statements.rewrite.rewrite import CreditCardMask
+from src.syslog_ng_config.statements.rewrite.rewrite import Set
 from src.syslog_ng_config.statements.rewrite.rewrite import SetPri
 from src.syslog_ng_config.statements.rewrite.rewrite import SetTag
 from src.syslog_ng_config.statements.sources.example_msg_generator_source import ExampleMsgGeneratorSource
 from src.syslog_ng_config.statements.sources.file_source import FileSource
 from src.syslog_ng_config.statements.sources.internal_source import InternalSource
 from src.syslog_ng_config.statements.sources.network_source import NetworkSource
+from src.syslog_ng_config.statements.sources.syslog_source import SyslogSource
+from src.syslog_ng_config.statements.template.template import Template
+from src.syslog_ng_config.statements.template.template import TemplateFunction
+from src.syslog_ng_ctl.prometheus_stats_handler import PrometheusStatsHandler
 
 
 logger = logging.getLogger(__name__)
@@ -57,14 +64,17 @@ class SyslogNgConfig(object):
             "version": version,
             "includes": [],
             "global_options": {},
+            "preamble": "",
+            "templates": [],
             "statement_groups": [],
             "logpath_groups": [],
         }
         self.teardown = teardown
 
-    @staticmethod
-    def stringify(s):
-        return '"' + s.replace('\\', "\\\\").replace('"', '\\"').replace('\n', '\\n') + '"'
+    stringify = staticmethod(stringify)
+
+    def arrowed_options(self, *args, **kwargs):
+        return ArrowedOptions(*args, **kwargs)
 
     def set_raw_config(self, raw_config):
         self.__raw_config = raw_config
@@ -91,6 +101,12 @@ class SyslogNgConfig(object):
     def update_global_options(self, **options):
         self.__syslog_ng_config["global_options"].update(options)
 
+    def add_preamble(self, preamble):
+        self.__syslog_ng_config["preamble"] += "\n" + preamble
+
+    def add_template(self, template):
+        self.__syslog_ng_config["templates"].append(template)
+
     def create_file_source(self, **options):
         file_source = FileSource(**options)
         self.teardown.register(file_source.close_file)
@@ -105,11 +121,23 @@ class SyslogNgConfig(object):
     def create_network_source(self, **options):
         return NetworkSource(**options)
 
+    def create_syslog_source(self, **options):
+        return SyslogSource(**options)
+
+    def create_rewrite_set(self, template, **options):
+        return Set(template, **options)
+
     def create_rewrite_set_tag(self, tag, **options):
         return SetTag(tag, **options)
 
     def create_rewrite_set_pri(self, pri, **options):
         return SetPri(pri, **options)
+
+    def create_template(self, template, **options):
+        return Template(template, **options)
+
+    def create_template_function(self, template, **options):
+        return TemplateFunction(template, **options)
 
     def create_filter(self, expr=None, **options):
         return Filter("", [expr] if expr else [], **options)
@@ -132,6 +160,9 @@ class SyslogNgConfig(object):
     def create_csv_parser(self, **options):
         return Parser("csv-parser", **options)
 
+    def create_metrics_probe(self, **options):
+        return Parser("metrics_probe", **options)
+
     def create_syslog_parser(self, **options):
         return Parser("syslog-parser", **options)
 
@@ -146,6 +177,9 @@ class SyslogNgConfig(object):
 
     def create_mariadb_audit_parser(self, **options):
         return Parser("mariadb-audit-parser", **options)
+
+    def create_postgresql_csvlog_parser(self, **options):
+        return Parser("postgresql-csvlog-parser", **options)
 
     def create_file_destination(self, **options):
         file_destination = FileDestination(**options)
@@ -219,3 +253,6 @@ class SyslogNgConfig(object):
         if flags:
             logpath.add_flags(cast_to_list(flags))
         return logpath
+
+    def get_prometheus_samples(self, metric_filter):
+        return PrometheusStatsHandler(metric_filter).get_samples()

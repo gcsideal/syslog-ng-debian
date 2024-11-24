@@ -369,32 +369,6 @@ fail:
   return FALSE;
 }
 
-static void
-_connect_http_header_request_slot(LogDriverPlugin *s, SignalSlotConnector *ssc)
-{
-  PythonHttpHeaderPlugin *self = (PythonHttpHeaderPlugin *) s;
-  CONNECT(ssc, signal_http_header_request, _append_headers, self);
-
-  msg_debug("SignalSlotConnector slot registered",
-            evt_tag_printf("connector", "%p", ssc),
-            evt_tag_printf("signal", "%s", signal_http_header_request),
-            evt_tag_printf("plugin_name", "%s", PYTHON_HTTP_HEADER_PLUGIN),
-            evt_tag_printf("plugin_instance", "%p", s));
-}
-
-static void
-_connect_http_response_received_slot(LogDriverPlugin *s, SignalSlotConnector *ssc)
-{
-  PythonHttpHeaderPlugin *self = (PythonHttpHeaderPlugin *) s;
-  CONNECT(ssc, signal_http_response_received, _on_http_response_received, self);
-
-  msg_debug("SignalSlotConnector slot registered",
-            evt_tag_printf("connector", "%p", ssc),
-            evt_tag_printf("signal", "%s", signal_http_response_received),
-            evt_tag_printf("plugin_name", "%s", PYTHON_HTTP_HEADER_PLUGIN),
-            evt_tag_printf("plugin_instance", "%p", s));
-}
-
 static gboolean
 _attach(LogDriverPlugin *s, LogDriver *driver)
 {
@@ -408,9 +382,11 @@ _attach(LogDriverPlugin *s, LogDriver *driver)
       return FALSE;
     }
 
-  SignalSlotConnector *ssc = driver->super.signal_slot_connector;
-  _connect_http_header_request_slot(s, ssc);
-  _connect_http_response_received_slot(s, ssc);
+  g_assert(s->signal_connector == NULL);
+  s->signal_connector = signal_slot_connector_ref(driver->super.signal_slot_connector);
+
+  CONNECT(s->signal_connector, signal_http_header_request, _append_headers, self);
+  CONNECT(s->signal_connector, signal_http_response_received, _on_http_response_received, self);
 
   return TRUE;
 }
@@ -419,6 +395,13 @@ static void
 _detach(LogDriverPlugin *s, LogDriver *driver)
 {
   PythonHttpHeaderPlugin *self = (PythonHttpHeaderPlugin *) s;
+
+  DISCONNECT(s->signal_connector, signal_http_header_request, _append_headers, self);
+  DISCONNECT(s->signal_connector, signal_http_response_received, _on_http_response_received, self);
+
+  signal_slot_connector_unref(s->signal_connector);
+  s->signal_connector = NULL;
+
   python_binding_deinit(&self->binding);
 }
 

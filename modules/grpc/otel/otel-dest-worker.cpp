@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2023 Attila Szakacs
+ * Copyright (c) 2024 Axoflow
+ * Copyright (c) 2023-2024 Attila Szakacs <attila.szakacs@axoflow.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published
@@ -43,9 +44,24 @@ using namespace opentelemetry::proto::trace::v1;
 DestWorker::DestWorker(OtelDestWorker *s)
   : super(s),
     owner(*((OtelDestDriver *) s->super.owner)->cpp),
+    logs_current_batch_bytes(0),
+    metrics_current_batch_bytes(0),
+    spans_current_batch_bytes(0),
     formatter(s->super.owner->super.super.super.cfg)
 {
-  channel = ::grpc::CreateChannel(owner.get_url(), owner.credentials_builder.build());
+  ::grpc::ChannelArguments args;
+
+  if (owner.get_compression())
+    {
+      args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
+    }
+
+  for (auto nv : owner.int_extra_channel_args)
+    args.SetInt(nv.first, nv.second);
+  for (auto nv : owner.string_extra_channel_args)
+    args.SetString(nv.first, nv.second);
+
+  channel = ::grpc::CreateCustomChannel(owner.get_url(), owner.credentials_builder.build(), args);
   logs_service_stub = LogsService::NewStub(channel);
   metrics_service_stub = MetricsService::NewStub(channel);
   trace_service_stub = TraceService::NewStub(channel);
@@ -136,6 +152,38 @@ DestWorker::lookup_scope_logs(LogMessage *msg)
     }
 
   return scope_logs;
+}
+
+ScopeLogs *
+DestWorker::lookup_fallback_scope_logs(LogMessage *msg)
+{
+  /*
+   * For fallback logs, most likely the resource and scope related fields are also empty.
+   * We can skip some LogMessage::get()s and NVTable iterations and Protobuf::Message comparisons.
+   */
+
+  if (fallback_msg_scope_logs)
+    return fallback_msg_scope_logs;
+
+  ResourceLogs *resource_logs = nullptr;
+  for (int i = 0; i < logs_service_request.resource_logs_size(); i++)
+    {
+      ResourceLogs *possible_resource_logs = logs_service_request.mutable_resource_logs(i);
+      if (MessageDifferencer::Equals(possible_resource_logs->resource(), current_msg_metadata.resource) &&
+          possible_resource_logs->schema_url() == current_msg_metadata.resource_schema_url)
+        {
+          resource_logs = possible_resource_logs;
+          break;
+        }
+    }
+  if (!resource_logs)
+    {
+      resource_logs = logs_service_request.add_resource_logs();
+    }
+
+  fallback_msg_scope_logs = resource_logs->add_scope_logs();
+
+  return fallback_msg_scope_logs;
 }
 
 ScopeMetrics *
@@ -231,15 +279,28 @@ DestWorker::insert_log_record_from_log_msg(LogMessage *msg)
 {
   ScopeLogs *scope_logs = lookup_scope_logs(msg);
   LogRecord *log_record = scope_logs->add_log_records();
-  return formatter.format(msg, *log_record);
+  bool result = formatter.format(msg, *log_record);
+
+  if (result)
+    {
+      size_t log_record_bytes = log_record->ByteSizeLong();
+      logs_current_batch_bytes += log_record_bytes;
+      log_threaded_dest_driver_insert_msg_length_stats(super->super.owner, log_record_bytes);
+    }
+
+  return result;
 }
 
 void
 DestWorker::insert_fallback_log_record_from_log_msg(LogMessage *msg)
 {
-  ScopeLogs *scope_logs = lookup_scope_logs(msg);
+  ScopeLogs *scope_logs = lookup_fallback_scope_logs(msg);
   LogRecord *log_record = scope_logs->add_log_records();
   formatter.format_fallback(msg, *log_record);
+
+  size_t log_record_bytes = log_record->ByteSizeLong();
+  logs_current_batch_bytes += log_record_bytes;
+  log_threaded_dest_driver_insert_msg_length_stats(super->super.owner, log_record_bytes);
 }
 
 bool
@@ -247,7 +308,16 @@ DestWorker::insert_metric_from_log_msg(LogMessage *msg)
 {
   ScopeMetrics *scope_metrics = lookup_scope_metrics(msg);
   Metric *metric = scope_metrics->add_metrics();
-  return formatter.format(msg, *metric);
+  bool result = formatter.format(msg, *metric);
+
+  if (result)
+    {
+      size_t metric_bytes = metric->ByteSizeLong();
+      metrics_current_batch_bytes += metric_bytes;
+      log_threaded_dest_driver_insert_msg_length_stats(super->super.owner, metric_bytes);
+    }
+
+  return result;
 }
 
 bool
@@ -255,7 +325,25 @@ DestWorker::insert_span_from_log_msg(LogMessage *msg)
 {
   ScopeSpans *scope_spans = lookup_scope_spans(msg);
   Span *span = scope_spans->add_spans();
-  return formatter.format(msg, *span);
+  bool result = formatter.format(msg, *span);
+
+  if (result)
+    {
+      size_t span_bytes = span->ByteSizeLong();
+      spans_current_batch_bytes += span_bytes;
+      log_threaded_dest_driver_insert_msg_length_stats(super->super.owner, span_bytes);
+    }
+
+  return result;
+}
+
+bool
+DestWorker::should_initiate_flush()
+{
+  size_t batch_bytes = owner.get_batch_bytes();
+  return logs_current_batch_bytes >= batch_bytes ||
+         metrics_current_batch_bytes >= batch_bytes ||
+         spans_current_batch_bytes >= batch_bytes;
 }
 
 LogThreadedResult
@@ -283,6 +371,9 @@ DestWorker::insert(LogMessage *msg)
       g_assert_not_reached();
     }
 
+  if (should_initiate_flush())
+    return log_threaded_dest_worker_flush(&super->super, LTF_FLUSH_NORMAL);
+
   return LTR_QUEUED;
 
 drop:
@@ -307,7 +398,7 @@ _map_grpc_status_to_log_threaded_result(const ::grpc::Status &status)
     case ::grpc::StatusCode::ABORTED:
     case ::grpc::StatusCode::OUT_OF_RANGE:
     case ::grpc::StatusCode::DATA_LOSS:
-      return LTR_NOT_CONNECTED;
+      goto temporary_error;
     case ::grpc::StatusCode::UNKNOWN:
     case ::grpc::StatusCode::INVALID_ARGUMENT:
     case ::grpc::StatusCode::NOT_FOUND:
@@ -317,45 +408,98 @@ _map_grpc_status_to_log_threaded_result(const ::grpc::Status &status)
     case ::grpc::StatusCode::FAILED_PRECONDITION:
     case ::grpc::StatusCode::UNIMPLEMENTED:
     case ::grpc::StatusCode::INTERNAL:
-      return LTR_DROP;
+      goto permanent_error;
     case ::grpc::StatusCode::RESOURCE_EXHAUSTED:
       if (status.error_details().length() > 0)
-        return LTR_NOT_CONNECTED;
-      return LTR_DROP;
+        goto temporary_error;
+      goto permanent_error;
     default:
       g_assert_not_reached();
     }
-  g_assert_not_reached();
+
+temporary_error:
+  msg_debug("OpenTelemetry server responded with a temporary error status code, retrying after time-reopen() seconds",
+            evt_tag_int("error_code", status.error_code()),
+            evt_tag_str("error_message", status.error_message().c_str()),
+            evt_tag_str("error_details", status.error_details().c_str()));
+  return LTR_NOT_CONNECTED;
+
+permanent_error:
+  msg_error("OpenTelemetry server responded with a permanent error status code, dropping batch",
+            evt_tag_int("error_code", status.error_code()),
+            evt_tag_str("error_message", status.error_message().c_str()),
+            evt_tag_str("error_details", status.error_details().c_str()));
+  return LTR_DROP;
+}
+
+void
+DestWorker::prepare_context(::grpc::ClientContext &context)
+{
+  for (auto nv : owner.headers)
+    context.AddMetadata(nv.first, nv.second);
 }
 
 LogThreadedResult
 DestWorker::flush_log_records()
 {
   ::grpc::ClientContext client_context;
+  prepare_context(client_context);
+
   logs_service_response.Clear();
   ::grpc::Status status = logs_service_stub->Export(&client_context, logs_service_request,
                                                     &logs_service_response);
-  return _map_grpc_status_to_log_threaded_result(status);
+  owner.metrics.insert_grpc_request_stats(status);
+  LogThreadedResult result = _map_grpc_status_to_log_threaded_result(status);
+
+  if (result == LTR_SUCCESS)
+    {
+      log_threaded_dest_worker_written_bytes_add(&super->super, logs_current_batch_bytes);
+      log_threaded_dest_driver_insert_batch_length_stats(super->super.owner, logs_current_batch_bytes);
+    }
+
+  return result;
 }
 
 LogThreadedResult
 DestWorker::flush_metrics()
 {
   ::grpc::ClientContext client_context;
+  prepare_context(client_context);
+
   metrics_service_response.Clear();
   ::grpc::Status status = metrics_service_stub->Export(&client_context, metrics_service_request,
                                                        &metrics_service_response);
-  return _map_grpc_status_to_log_threaded_result(status);
+  owner.metrics.insert_grpc_request_stats(status);
+  LogThreadedResult result = _map_grpc_status_to_log_threaded_result(status);
+
+  if (result == LTR_SUCCESS)
+    {
+      log_threaded_dest_worker_written_bytes_add(&super->super, metrics_current_batch_bytes);
+      log_threaded_dest_driver_insert_batch_length_stats(super->super.owner, metrics_current_batch_bytes);
+    }
+
+  return result;
 }
 
 LogThreadedResult
 DestWorker::flush_spans()
 {
   ::grpc::ClientContext client_context;
+  prepare_context(client_context);
+
   trace_service_response.Clear();
   ::grpc::Status status = trace_service_stub->Export(&client_context, trace_service_request,
                                                      &trace_service_response);
-  return _map_grpc_status_to_log_threaded_result(status);
+  owner.metrics.insert_grpc_request_stats(status);
+  LogThreadedResult result = _map_grpc_status_to_log_threaded_result(status);
+
+  if (result == LTR_SUCCESS)
+    {
+      log_threaded_dest_worker_written_bytes_add(&super->super, spans_current_batch_bytes);
+      log_threaded_dest_driver_insert_batch_length_stats(super->super.owner, spans_current_batch_bytes);
+    }
+
+  return result;
 }
 
 LogThreadedResult
@@ -391,6 +535,9 @@ exit:
   logs_service_request.Clear();
   metrics_service_request.Clear();
   trace_service_request.Clear();
+  fallback_msg_scope_logs = nullptr;
+
+  logs_current_batch_bytes = metrics_current_batch_bytes = spans_current_batch_bytes = 0;
 
   return result;
 }

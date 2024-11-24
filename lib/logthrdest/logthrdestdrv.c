@@ -54,7 +54,6 @@ log_threaded_result_to_str(LogThreadedResult self)
   return as_str[self];
 }
 
-/* LogThreadedDestWorker */
 
 void
 log_threaded_dest_driver_set_batch_lines(LogDriver *s, gint batch_lines)
@@ -79,6 +78,25 @@ log_threaded_dest_driver_set_time_reopen(LogDriver *s, time_t time_reopen)
 
   self->time_reopen = time_reopen;
 }
+
+CfgFlagHandler log_threaded_dest_driver_flag_handlers[] =
+{
+  /* seqnum-all turns on seqnums */
+  { "seqnum-all",      CFH_SET, offsetof(LogThreadedDestDriver, flags), LTDF_SEQNUM_ALL + LTDF_SEQNUM },
+  { "no-seqnum-all",   CFH_CLEAR, offsetof(LogThreadedDestDriver, flags), LTDF_SEQNUM_ALL },
+  { "seqnum",          CFH_SET, offsetof(LogThreadedDestDriver, flags), LTDF_SEQNUM },
+  { "no-seqnum",       CFH_CLEAR, offsetof(LogThreadedDestDriver, flags), LTDF_SEQNUM },
+  { NULL },
+};
+
+gboolean
+log_threaded_dest_driver_process_flag(LogDriver *s, const gchar *flag)
+{
+  LogThreadedDestDriver *self = (LogThreadedDestDriver *) s;
+  return cfg_process_flag(log_threaded_dest_driver_flag_handlers, self, flag);
+}
+
+/* LogThreadedDestWorker */
 
 /* this should be used in combination with LTR_EXPLICIT_ACK_MGMT to actually confirm message delivery. */
 void
@@ -250,6 +268,7 @@ _drop_batch(LogThreadedDestWorker *self)
 static void
 _rewind_batch(LogThreadedDestWorker *self)
 {
+  stats_counter_inc(self->owner->metrics.output_event_retries);
   log_threaded_dest_worker_rewind_messages(self, self->batch_size);
 }
 
@@ -867,6 +886,11 @@ _register_worker_stats(LogThreadedDestWorker *self)
 
     stats_lock();
     {
+      stats_cluster_key_builder_set_name(kb, "output_unreachable");
+      self->metrics.output_unreachable_key = stats_cluster_key_builder_build_single(kb);
+      stats_register_counter(level, self->metrics.output_unreachable_key, SC_TYPE_SINGLE_VALUE,
+                             &self->metrics.output_unreachable);
+
       /* Up to 49 days and 17 hours on 32 bit machines. */
       stats_cluster_key_builder_set_name(kb, "output_event_delay_sample_seconds");
       stats_cluster_key_builder_set_unit(kb, SCU_MILLISECONDS);
@@ -905,6 +929,14 @@ _unregister_worker_stats(LogThreadedDestWorker *self)
 
   stats_lock();
   {
+    if (self->metrics.output_unreachable_key)
+      {
+        stats_unregister_counter(self->metrics.output_unreachable_key, SC_TYPE_SINGLE_VALUE,
+                                 &self->metrics.output_unreachable);
+        stats_cluster_key_free(self->metrics.output_unreachable_key);
+        self->metrics.output_unreachable_key = NULL;
+      }
+
     if (self->metrics.message_delay_sample_key)
       {
         stats_unregister_counter(self->metrics.message_delay_sample_key, SC_TYPE_SINGLE_VALUE,
@@ -1130,10 +1162,10 @@ log_threaded_dest_driver_queue(LogPipe *s, LogMessage *msg,
 {
   LogThreadedDestDriver *self = (LogThreadedDestDriver *)s;
   LogThreadedDestWorker *dw = _lookup_worker(self, msg);
-  LogPathOptions local_options;
+  LogPathOptions local_path_options;
 
   if (!path_options->flow_control_requested)
-    path_options = log_msg_break_ack(msg, path_options, &local_options);
+    path_options = log_msg_break_ack(msg, path_options, &local_path_options);
 
   log_msg_add_ack(msg, path_options);
   log_queue_push_tail(dw->queue, log_msg_ref(msg), path_options);
@@ -1232,6 +1264,15 @@ _register_driver_stats(LogThreadedDestDriver *self, StatsClusterKeyBuilder *driv
 
   stats_cluster_key_builder_push(driver_sck_builder);
   {
+    stats_cluster_key_builder_set_name(driver_sck_builder, "output_event_retries_total");
+    stats_cluster_key_builder_set_legacy_alias(driver_sck_builder, -1, "", "");
+    stats_cluster_key_builder_set_legacy_alias_name(driver_sck_builder, "");
+    self->metrics.output_event_retries_sc_key = stats_cluster_key_builder_build_single(driver_sck_builder);
+  }
+  stats_cluster_key_builder_pop(driver_sck_builder);
+
+  stats_cluster_key_builder_push(driver_sck_builder);
+  {
     stats_cluster_key_builder_set_legacy_alias(driver_sck_builder, self->stats_source | SCS_DESTINATION,
                                                self->super.super.id,
                                                _format_legacy_stats_instance(self, driver_sck_builder));
@@ -1246,6 +1287,8 @@ _register_driver_stats(LogThreadedDestDriver *self, StatsClusterKeyBuilder *driv
     stats_register_counter(level, self->metrics.output_events_sc_key, SC_TYPE_WRITTEN, &self->metrics.written_messages);
     stats_register_counter(level, self->metrics.processed_sc_key, SC_TYPE_SINGLE_VALUE,
                            &self->metrics.processed_messages);
+    stats_register_counter(level, self->metrics.output_event_retries_sc_key, SC_TYPE_SINGLE_VALUE,
+                           &self->metrics.output_event_retries);
   }
   stats_unlock();
 }
@@ -1281,6 +1324,15 @@ _unregister_driver_stats(LogThreadedDestDriver *self)
         stats_cluster_key_free(self->metrics.processed_sc_key);
         self->metrics.processed_sc_key = NULL;
       }
+
+    if (self->metrics.output_event_retries_sc_key)
+      {
+        stats_unregister_counter(self->metrics.output_event_retries_sc_key, SC_TYPE_SINGLE_VALUE,
+                                 &self->metrics.output_event_retries);
+
+        stats_cluster_key_free(self->metrics.output_event_retries_sc_key);
+        self->metrics.output_event_retries_sc_key = NULL;
+      }
   }
   stats_unlock();
 }
@@ -1309,7 +1361,11 @@ _create_workers(LogThreadedDestDriver *self, gint stats_level, StatsClusterKeyBu
 
       self->workers[self->created_workers] = dw;
       if (!_acquire_worker_queue(dw, stats_level, driver_sck_builder))
-        return FALSE;
+        {
+          /* failed worker needs to be destroyed */
+          self->created_workers++;
+          return FALSE;
+        }
     }
 
   return TRUE;
@@ -1445,6 +1501,7 @@ log_threaded_dest_driver_init_instance(LogThreadedDestDriver *self, GlobalConfig
   self->batch_timeout = -1;
   self->num_workers = 1;
   self->last_worker = 0;
+  self->flags = LTDF_SEQNUM;
 
   self->retries_on_error_max = MAX_RETRIES_ON_ERROR_DEFAULT;
   self->retries_max = MAX_RETRIES_BEFORE_SUSPEND_DEFAULT;

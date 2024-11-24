@@ -26,6 +26,7 @@
 #define UNIXTIME_H_INCLUDED
 
 #include "timeutils/zoneinfo.h"
+#include <stdint.h>
 
 /*
  * This class represents a UNIX timestamp (as measured in time_t), the
@@ -68,7 +69,6 @@ unix_time_is_timezone_set(const UnixTime *self)
   return self->ut_gmtoff != -1;
 }
 
-
 void unix_time_unset(UnixTime *ut);
 void unix_time_set_now(UnixTime *self);
 
@@ -81,5 +81,9 @@ gboolean unix_time_fix_timezone_assuming_the_time_matches_real_time(UnixTime *se
 gboolean unix_time_eq(const UnixTime *a, const UnixTime *b);
 gint64 unix_time_diff_in_seconds(const UnixTime *a, const UnixTime *b);
 gint64 unix_time_diff_in_msec(const UnixTime *a, const UnixTime *b);
+
+struct timeval timeval_from_unix_time(UnixTime *ut);
+UnixTime unix_time_from_unix_epoch(guint64 unix_epoch);
+guint64 unix_time_to_unix_epoch(const UnixTime ut);
 
 #endif

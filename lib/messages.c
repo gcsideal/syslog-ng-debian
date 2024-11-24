@@ -25,6 +25,7 @@
 #include "messages.h"
 #include "timeutils/cache.h"
 #include "logmsg/logmsg.h"
+#include "thread-utils.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -34,6 +35,10 @@
 #include <stdlib.h>
 
 #include <evtlog.h>
+
+#if !defined(ADD_THREADID_TAG_TO_EVT_MSGS)
+# define ADD_THREADID_TAG_TO_EVT_MSGS 0
+#endif
 
 enum
 {
@@ -127,17 +132,17 @@ msg_limit_internal_message(const gchar *msg)
 static gchar *
 msg_format_timestamp(gchar *buf, gsize buflen)
 {
-  struct tm tm;
-  GTimeVal now;
+  UnixTime now;
+  WallClockTime wct_now;
   gint len;
   time_t now_sec;
 
-  g_get_current_time(&now);
-  now_sec = now.tv_sec;
-  cached_localtime(&now_sec, &tm);
-  len = strftime(buf, buflen, "%Y-%m-%dT%H:%M:%S", &tm);
+  unix_time_set_now(&now);
+  now_sec = now.ut_sec;
+  cached_localtime_wct(&now_sec, &wct_now);
+  len = strftime(buf, buflen, "%Y-%m-%dT%H:%M:%S", &wct_now.tm);
   if (len < buflen)
-    g_snprintf(buf + len, buflen - len, ".%06ld", now.tv_usec);
+    g_snprintf(buf + len, buflen - len, ".%06u", now.ut_usec);
   return buf;
 }
 
@@ -233,6 +238,16 @@ msg_event_create(gint prio, const gchar *desc, EVTTAG *tag1, ...)
 
   g_mutex_lock(&evtlog_lock);
   e = evt_rec_init(evt_context, prio, desc);
+
+  /* NOTE: Use ADD_THREADID_TAG_TO_EVT_MSGS during configure to turn on thread_id logging
+   *       Using CMake, it seems to be the only working solution to set it in the env (-D, -e ENv, stc. does not work yet)
+   *       Example:
+   *          CFLAGS="${CFLAGS} -DADD_THREADID_TAG_TO_EVT_MSGS=1" cmake --build build/. --target install -j24 -v
+   */
+#if ADD_THREADID_TAG_TO_EVT_MSGS && SYSLOG_NG_ENABLE_DEBUG
+  evt_rec_add_tag(e, evt_tag_long("thread_id", (long) (void *) get_thread_id()));
+#endif
+
   if (tag1)
     {
       evt_rec_add_tag(e, tag1);

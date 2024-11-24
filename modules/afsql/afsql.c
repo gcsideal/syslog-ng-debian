@@ -101,17 +101,6 @@ afsql_dd_set_host(LogDriver *s, const gchar *host)
   self->host = g_strdup(host);
 }
 
-gboolean
-afsql_dd_check_port(const gchar *port)
-{
-  /* only digits (->numbers) are allowed */
-  int len = strlen(port);
-  for (int i = 0; i < len; ++i)
-    if (port[i] < '0' || port[i] > '9')
-      return FALSE;
-  return TRUE;
-}
-
 void
 afsql_dd_set_port(LogDriver *s, const gchar *port)
 {
@@ -208,14 +197,6 @@ afsql_dd_set_session_statements(LogDriver *s, GList *session_statements)
   AFSqlDestDriver *self = (AFSqlDestDriver *) s;
 
   self->session_statements = session_statements;
-}
-
-void
-afsql_dd_set_flags(LogDriver *s, gint flags)
-{
-  AFSqlDestDriver *self = (AFSqlDestDriver *) s;
-
-  self->flags = flags;
 }
 
 void
@@ -624,7 +605,7 @@ afsql_dd_ensure_table_is_syslogng_conform(AFSqlDestDriver *self, GString *table)
   dbi_result db_res = NULL;
   gboolean success = FALSE;
 
-  if (self->flags & AFSQL_DDF_DONT_CREATE_TABLES)
+  if (self->super.flags & AFSQL_DDF_DONT_CREATE_TABLES)
     return TRUE;
 
   _sanitize_sql_identifier(table->str);
@@ -724,7 +705,7 @@ afsql_dd_connect(LogThreadedDestDriver *s)
   dbi_conn_set_option(self->dbi_ctx, "password", self->password);
   dbi_conn_set_option(self->dbi_ctx, "dbname", self->database);
   dbi_conn_set_option(self->dbi_ctx, "encoding", self->encoding);
-  dbi_conn_set_option(self->dbi_ctx, "auto-commit", self->flags & AFSQL_DDF_EXPLICIT_COMMITS ? "false" : "true");
+  dbi_conn_set_option(self->dbi_ctx, "auto-commit", self->super.flags & AFSQL_DDF_EXPLICIT_COMMITS ? "false" : "true");
 
   _enable_database_specific_hacks(self);
 
@@ -840,14 +821,14 @@ afsql_dd_append_value_to_be_inserted(AFSqlDestDriver *self,
     case LM_VT_INTEGER:
     {
       gint64 k;
-      if (type_cast_to_int64(value->str, &k, NULL))
+      if (type_cast_to_int64(value->str, -1, &k, NULL))
         {
           g_string_append_len(insert_command, value->str, value->len);
         }
       else
         {
           need_drop = type_cast_drop_helper(self->template_options.on_error,
-                                            value->str, "int");
+                                            value->str, -1, "int");
           if (fallback)
             afsql_dd_append_quoted_value(self, value, insert_command);
         }
@@ -856,14 +837,14 @@ afsql_dd_append_value_to_be_inserted(AFSqlDestDriver *self,
     case LM_VT_DOUBLE:
     {
       gdouble d;
-      if (type_cast_to_double(value->str, &d, NULL))
+      if (type_cast_to_double(value->str, -1, &d, NULL))
         {
           g_string_append_len(insert_command, value->str, value->len);
         }
       else
         {
           need_drop = type_cast_drop_helper(self->template_options.on_error,
-                                            value->str, "double");
+                                            value->str, -1, "double");
           if (fallback)
             afsql_dd_append_quoted_value(self, value, insert_command);
         }
@@ -872,7 +853,7 @@ afsql_dd_append_value_to_be_inserted(AFSqlDestDriver *self,
     case LM_VT_BOOLEAN:
     {
       gboolean b;
-      if (type_cast_to_boolean(value->str, &b, NULL))
+      if (type_cast_to_boolean(value->str, -1, &b, NULL))
         {
           if (b)
             g_string_append(insert_command, "TRUE");
@@ -882,7 +863,7 @@ afsql_dd_append_value_to_be_inserted(AFSqlDestDriver *self,
       else
         {
           need_drop = type_cast_drop_helper(self->template_options.on_error,
-                                            value->str, "boolean");
+                                            value->str, -1, "boolean");
           if (fallback)
             afsql_dd_append_quoted_value(self, value, insert_command);
         }
@@ -965,7 +946,7 @@ drop:
 static inline gboolean
 afsql_dd_is_transaction_handling_enabled(const AFSqlDestDriver *self)
 {
-  return !!(self->flags & AFSQL_DDF_EXPLICIT_COMMITS);
+  return !!(self->super.flags & AFSQL_DDF_EXPLICIT_COMMITS);
 }
 
 static inline gboolean
@@ -1365,15 +1346,17 @@ afsql_dd_new(GlobalConfig *cfg)
   return &self->super.super.super;
 }
 
-gint
-afsql_dd_lookup_flag(const gchar *flag)
+CfgFlagHandler afsql_dd_flag_handlers[] =
 {
-  if (strcmp(flag, "explicit-commits") == 0)
-    return AFSQL_DDF_EXPLICIT_COMMITS;
-  else if (strcmp(flag, "dont-create-tables") == 0)
-    return AFSQL_DDF_DONT_CREATE_TABLES;
-  else
-    msg_warning("Unknown SQL flag",
-                evt_tag_str("flag", flag));
-  return 0;
+  { "explicit-commits",   CFH_SET, offsetof(LogThreadedDestDriver, flags), AFSQL_DDF_EXPLICIT_COMMITS },
+  { "dont-create-tables", CFH_SET, offsetof(LogThreadedDestDriver, flags), AFSQL_DDF_DONT_CREATE_TABLES },
+  { NULL },
+};
+
+gboolean
+afsql_dd_process_flag(LogDriver *driver, const gchar *flag)
+{
+  if (!log_threaded_dest_driver_process_flag(driver, flag))
+    return cfg_process_flag(afsql_dd_flag_handlers, driver, flag);
+  return TRUE;
 }

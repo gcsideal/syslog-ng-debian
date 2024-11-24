@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) 2024 Axoflow
+ * Copyright (c) 2024 Attila Szakacs <attila.szakacs@axoflow.com>
  * Copyright (c) 2023 László Várady
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -34,9 +36,6 @@ static CfgLexerKeyword loki_keywords[] =
   { "url", KW_URL },
   { "labels", KW_LABELS },
   { "timestamp", KW_TIMESTAMP },
-  { "current", KW_CURRENT },
-  { "received", KW_RECEIVED },
-  { "msg", KW_MSG },
   { "keep_alive", KW_KEEP_ALIVE },
   { "time", KW_TIME },
   { "timeout", KW_TIMEOUT },
@@ -50,6 +49,9 @@ static CfgLexerKeyword loki_keywords[] =
   { "alts", KW_ALTS },
   { "target_service_accounts", KW_TARGET_SERVICE_ACCOUNTS },
   { "adc", KW_ADC },
+  { "tenant_id", KW_TENANT_ID },
+  { "channel_args", KW_CHANNEL_ARGS },
+  { "headers", KW_HEADERS },
   { NULL }
 };
 

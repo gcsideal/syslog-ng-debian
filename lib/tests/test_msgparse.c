@@ -31,6 +31,7 @@
 #include "gsockaddr.h"
 #include "timeutils/cache.h"
 #include "timeutils/misc.h"
+#include "scratch-buffers.h"
 #include "cfg.h"
 #include "plugin.h"
 
@@ -138,6 +139,7 @@ setup(void)
 void
 teardown(void)
 {
+  scratch_buffers_explicit_gc();
   deinit_syslogformat_module();
   app_shutdown();
 }
@@ -159,7 +161,7 @@ test_log_messages_can_be_parsed(struct msgparse_params *param)
     {
       if (param->expected_stamp_sec != 1)
         cr_assert_eq(parsed_timestamp->ut_sec, param->expected_stamp_sec,
-                     "Unexpected timestamp, value=%ld, expected=%ld, msg=%s",
+                     "Unexpected timestamp, value=%"G_GINT64_FORMAT", expected=%lu, msg=%s",
                      parsed_timestamp->ut_sec, param->expected_stamp_sec, param->msg);
 
       cr_assert_eq(parsed_timestamp->ut_usec, param->expected_stamp_usec, "Unexpected microseconds");
@@ -167,7 +169,7 @@ test_log_messages_can_be_parsed(struct msgparse_params *param)
     }
   else
     {
-      now = cached_g_current_time_sec();
+      now = get_cached_realtime_sec();
       cr_assert(_absolute_value(parsed_timestamp->ut_sec - now) <= 5,
                 "Expected parsed message timestamp to be set to now; now='%d', timestamp->tv_sec='%d'",
                 (gint)now, (gint)parsed_timestamp->ut_sec);
@@ -175,7 +177,8 @@ test_log_messages_can_be_parsed(struct msgparse_params *param)
 
   cr_assert_eq(parsed_message->pri, param->expected_pri, "Unexpected message priority %d != %d",
                parsed_message->pri, param->expected_pri);
-  assert_log_message_value(parsed_message, LM_V_HOST, param->expected_host);
+  if (param->expected_host)
+    assert_log_message_value(parsed_message, LM_V_HOST, param->expected_host);
   assert_log_message_value(parsed_message, LM_V_PROGRAM, param->expected_program);
   assert_log_message_value(parsed_message, LM_V_MESSAGE, param->expected_msg);
   if (param->expected_pid)
@@ -241,10 +244,10 @@ Test(msgparse, test_bad_sd_data_unescaped)
   {
     {
       "<132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [a i=\"\"ok\"] An application event log entry...",
-      LP_SYSLOG_PROTOCOL, NULL,
+      LP_SYSLOG_PROTOCOL | LP_PIGGYBACK_ERRORS, NULL,
       43,             // pri
       0, 0, 0,    // timestamp (sec/usec/zone)
-      "",        // host
+      NULL,        // host
       "syslog-ng", //app
       "Error processing log message: <132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [a i=\">@<\"ok\"] An application event log entry...", // msg
       "", //sd_str
@@ -691,10 +694,11 @@ Test(msgparse, test_expected_sd_pairs_1)
       expected_sd_pairs_test_1
     },
     {
-      "<7>1 2006-10-29T01:59:59.156Z mymachine.example.com evntslog - ID47 [ exampleSDID@0 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"][examplePriority@0 class=\"high\"] \xEF\xBB\xBF" "An application event log entry...",  LP_SYSLOG_PROTOCOL, NULL,
+      "<7>1 2006-10-29T01:59:59.156Z mymachine.example.com evntslog - ID47 [ exampleSDID@0 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"][examplePriority@0 class=\"high\"] \xEF\xBB\xBF" "An application event log entry...",
+      LP_PIGGYBACK_ERRORS | LP_SYSLOG_PROTOCOL, NULL,
       43,             // pri
       0, 0, 0,    // timestamp (sec/usec/zone)
-      "",        // host
+      NULL,        // host
       "syslog-ng", //app
       "Error processing log message: <7>1 2006-10-29T01:59:59.156Z mymachine.example.com evntslog - ID47 >@<[ exampleSDID@0 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"][examplePriority@0 class=\"high\"] \xEF\xBB\xBF" "An application event log entry...", // msg
       "",
@@ -879,10 +883,11 @@ Test(msgparse, test_expected_sd_pairs_long)
 
     // parse longer than 255 sd id
     {
-      "<132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa i=\"long\"] An application event log entry...",  LP_SYSLOG_PROTOCOL, NULL,
+      "<132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa i=\"long\"] An application event log entry...",
+      LP_PIGGYBACK_ERRORS | LP_SYSLOG_PROTOCOL, NULL,
       43,                         // pri
       0, 0, 0,    // timestamp (sec/usec/zone)
-      "",         // host
+      NULL,         // host
       "syslog-ng", //app
       "Error processing log message: <132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa>@<aaaaaaaa i=\"long\"] An application event log entry...", // msg
       "", //sd_str      0,//processid
@@ -923,10 +928,11 @@ Test(msgparse, test_unescaped_too_long_message_parts)
   {
     // too long hostname
     {
-      "<132>1 2006-10-29T01:59:59.156+01:00 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa evntslog - - [a i=\"ok\"] An application event log entry...",  LP_SYSLOG_PROTOCOL, NULL,
+      "<132>1 2006-10-29T01:59:59.156+01:00 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa evntslog - - [a i=\"ok\"] An application event log entry...",
+      LP_PIGGYBACK_ERRORS | LP_SYSLOG_PROTOCOL, NULL,
       43,        // pri
       0, 0, 0,    // timestamp (sec/usec/zone)
-      "", //host
+      NULL, //host
       "syslog-ng", //app
       "Error processing log message: <132>1 2006-10-29T01:59:59.156+01:00 >@<aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa evntslog - - [a i=\"ok\"] An application event log entry...",        // msg
       "", //sd_str
@@ -979,10 +985,11 @@ Test(msgparse, test_unescaped_too_long_message_parts)
 
     // unescaped ]
     {
-      "<132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [a i=\"]ok\"] An application event log entry...",  LP_SYSLOG_PROTOCOL, NULL,
+      "<132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [a i=\"]ok\"] An application event log entry...",
+      LP_PIGGYBACK_ERRORS | LP_SYSLOG_PROTOCOL, NULL,
       43,             // pri
       0, 0, 0,    // timestamp (sec/usec/zone)
-      "",        // host
+      NULL,        // host
       "syslog-ng", //app
       "Error processing log message: <132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [a i=\">@<]ok\"] An application event log entry...", // msg
       "", //sd_str
@@ -994,10 +1001,11 @@ Test(msgparse, test_unescaped_too_long_message_parts)
 
     // bad sd data unescaped "
     {
-      "<132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [a i=\"\"ok\"] An application event log entry...",  LP_SYSLOG_PROTOCOL, NULL,
+      "<132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [a i=\"\"ok\"] An application event log entry...",
+      LP_PIGGYBACK_ERRORS | LP_SYSLOG_PROTOCOL, NULL,
       43,      // pri
       0, 0, 0, // timestamp (sec/usec/zone)
-      "",    // host
+      NULL,    // host
       "syslog-ng", //app
       "Error processing log message: <132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [a i=\">@<\"ok\"] An application event log entry...", // msg
       "", //sd_str
@@ -1218,11 +1226,42 @@ Test(msgparse, test_no_rfc3164_fallback_flag)
   {
     {
       .msg = "<189>some message",
-      .parse_flags = LP_SYSLOG_PROTOCOL | LP_NO_RFC3164_FALLBACK,
+      .parse_flags = LP_SYSLOG_PROTOCOL | LP_NO_RFC3164_FALLBACK | LP_PIGGYBACK_ERRORS,
       .expected_pri = 43,
       .expected_program = "syslog-ng",
-      .expected_host = "",
+      .expected_host = NULL,
       .expected_msg = "Error processing log message: <189>some message",
+    },
+    {NULL}
+  };
+  run_parameterized_test(params);
+}
+
+Test(msgparse, test_sanitize_utf8)
+{
+  struct msgparse_params params[] =
+  {
+    {
+      .msg = "<189>program hello\xf0\x28\x8c\xbcrena",
+      .parse_flags = LP_SANITIZE_UTF8,
+      .expected_pri = 189,
+      .expected_program = "program",
+      .expected_host = "",
+      .expected_msg = "hello\\xf0(\\x8c\\xbcrena",
+    },
+    {
+      .msg = "<7>1 - bzorp openvpn 2499 - - PTHREAD \xf0\x28\x8c\x28 initialized",
+      .parse_flags = LP_SYSLOG_PROTOCOL | LP_SANITIZE_UTF8,
+      .expected_pri = 7,
+      .expected_program = "openvpn",
+      .expected_host = "bzorp",
+      .expected_msg = "PTHREAD \\xf0(\\x8c( initialized",
+    },
+    {
+      .msg = "rena\xa0\xa1",
+      .parse_flags = LP_NOPARSE | LP_SANITIZE_UTF8,
+      .expected_pri = 65535,
+      .expected_msg = "rena\\xa0\\xa1",
     },
     {NULL}
   };
