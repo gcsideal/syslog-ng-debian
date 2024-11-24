@@ -107,6 +107,7 @@ override_dh_auto_configure:
 		--with-python=3 \
 		--enable-http \
 		--enable-kafka \
+		--disable-cloud-auth \
 		\
 		--with-mongoc=system \
 		--with-ivykis=system \
