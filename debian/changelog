@@ -1,3 +1,11 @@
+syslog-ng (4.8.1-1~1.gbp043538) UNRELEASED; urgency=medium
+
+  ** SNAPSHOT build @043538f3c13131f10a5c5a78c20fd3d4a3514fa4 **
+
+  * New upstream version 4.8.1
+
+ -- SZALAY Attila <sasa@debian.org>  Sun, 24 Nov 2024 12:01:08 +0000
+
 syslog-ng (4.4.0-3) unstable; urgency=medium
 
   * Backport upstream fix for variable type for g_io_channel_write_chars()
