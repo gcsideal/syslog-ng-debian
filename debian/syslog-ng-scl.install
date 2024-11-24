@@ -49,3 +49,11 @@ scl/logscale/logscale.conf usr/share/syslog-ng/include/scl/logscale/
 scl/opensearch/opensearch.conf usr/share/syslog-ng/include/scl/opensearch/
 scl/python/python-modules.conf usr/share/syslog-ng/include/scl/python/
 scl/splunk/splunk.conf usr/share/syslog-ng/include/scl/splunk/
+
+usr/share/syslog-ng/include/scl/arr/arr.conf
+usr/share/syslog-ng/include/scl/elasticsearch/elastic-datastream.conf
+usr/share/syslog-ng/include/scl/jellyfin/jellyfin.conf
+usr/share/syslog-ng/include/scl/openobserve/openobserve.conf
+usr/share/syslog-ng/include/scl/pgsql/pgsql.conf
+usr/share/syslog-ng/include/scl/pihole/pihole.conf
+usr/share/syslog-ng/include/scl/qbittorrent/qbittorrent.conf
