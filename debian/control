@@ -37,6 +37,7 @@ Build-Depends: debhelper (>= 10~),
                librdkafka-dev (>= 1.0.0),
                pylint (>= 2.4.0) | pylint3,
                python3-pip,
+               gperf
 Build-Conflicts: autoconf2.13
 Standards-Version: 4.5.0
 Homepage: https://www.syslog-ng.com/
