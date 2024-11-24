@@ -39,8 +39,8 @@ typedef struct
   HTTPLoadBalancer *load_balancer;
 
   /* this is the first URL in load-balanced configurations and serves as the
-   * identifier in persist/stats */
-  gchar *url;
+   * identifier in persist/stats. TODO: Templated URLs should have dynamic counters. */
+  const gchar *url;
   gchar *user;
   gchar *password;
   GList *headers;
@@ -57,7 +57,7 @@ typedef struct
   GString *delimiter;
   int ssl_version;
   GString *accept_encoding;
-  gint8 message_compression;
+  gint8 content_compression;
   gboolean peer_verify;
   gboolean ocsp_stapling_verify;
   gboolean accept_redirects;
@@ -73,7 +73,7 @@ gboolean http_dd_init(LogPipe *s);
 gboolean http_dd_deinit(LogPipe *s);
 LogDriver *http_dd_new(GlobalConfig *cfg);
 
-void http_dd_set_urls(LogDriver *d, GList *urls);
+gboolean http_dd_set_urls(LogDriver *d, GList *urls, GError **error);
 void http_dd_set_user(LogDriver *d, const gchar *user);
 void http_dd_set_password(LogDriver *d, const gchar *password);
 void http_dd_set_method(LogDriver *d, const gchar *method);
@@ -99,6 +99,6 @@ void http_dd_set_delimiter(LogDriver *d, const gchar *delimiter);
 void http_dd_insert_response_handler(LogDriver *d, HttpResponseHandler *response_handler);
 LogTemplateOptions *http_dd_get_template_options(LogDriver *d);
 void http_dd_set_accept_encoding(LogDriver *d, const gchar *encoding);
-void http_dd_set_message_compression(LogDriver *d, const gchar *encoding);
+gboolean http_dd_set_content_compression(LogDriver *d, const gchar *encoding);
 
 #endif

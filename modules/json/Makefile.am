@@ -11,6 +11,10 @@ modules_json_libjson_plugin_la_SOURCES	=	\
 	modules/json/json-parser-parser.h	\
 	modules/json/dot-notation.c		\
 	modules/json/dot-notation.h		\
+	modules/json/filterx-format-json.c	\
+	modules/json/filterx-format-json.h	\
+	modules/json/filterx-cache-json-file.c	\
+	modules/json/filterx-cache-json-file.h	\
 	modules/json/json-plugin.c
 
 modules_json_libjson_plugin_la_CPPFLAGS	=	\
@@ -25,7 +29,7 @@ modules_json_libjson_plugin_la_LIBADD	= 	\
 
 modules_json_libjson_plugin_la_LDFLAGS	=	\
 	$(MODULE_LDFLAGS)
-modules_json_libjson_plugin_la_DEPENDENCIES =	\
+EXTRA_modules_json_libjson_plugin_la_DEPENDENCIES =	\
 	$(MODULE_DEPS_LIBS) $(JSON_DEPENDENCY)
 
 modules/json modules/json/ mod-json: modules/json/libjson-plugin.la

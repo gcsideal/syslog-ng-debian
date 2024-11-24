@@ -132,6 +132,7 @@ tls_session_verify_fingerprint(X509_STORE_CTX *ctx)
           if (strcmp((const gchar *)(current_fingerprint->data), hash->str) == 0)
             {
               match = TRUE;
+              g_strlcpy(self->peer_info.fingerprint, hash->str, sizeof(self->peer_info.fingerprint));
               break;
             }
         }
@@ -230,6 +231,14 @@ tls_session_verify(TLSSession *self, int ok, X509_STORE_CTX *ctx)
     {
       msg_warning("Certificate valid, but purpose is invalid",
                   tls_context_format_location_tag(self->ctx));
+      return 1;
+    }
+  if (!ok && tls_context_ignore_validity_period(self->ctx) &&
+      (X509_STORE_CTX_get_error(ctx) == X509_V_ERR_CERT_NOT_YET_VALID ||
+       X509_STORE_CTX_get_error(ctx) == X509_V_ERR_CERT_HAS_EXPIRED))
+    {
+      msg_notice("Ignoring not yet valid / expired certificate error due to ssl_options(ignore-validity-period)",
+                 tls_context_format_location_tag(self->ctx));
       return 1;
     }
   return ok;
@@ -515,7 +524,7 @@ void
 tls_session_info_callback(const SSL *ssl, int where, int ret)
 {
   TLSSession *self = (TLSSession *)SSL_get_app_data(ssl);
-  if( !self->peer_info.found && where == (SSL_ST_ACCEPT|SSL_CB_LOOP) )
+  if (!self->peer_info.found && where == (SSL_ST_ACCEPT|SSL_CB_LOOP))
     {
       X509 *cert = SSL_get_peer_certificate(ssl);
 
@@ -524,9 +533,9 @@ tls_session_info_callback(const SSL *ssl, int where, int ret)
           self->peer_info.found = 1; /* mark this found so we don't keep checking on every callback */
           X509_NAME *name = X509_get_subject_name(cert);
 
-          X509_NAME_get_text_by_NID( name, NID_commonName, self->peer_info.cn, X509_MAX_CN_LEN );
-          X509_NAME_get_text_by_NID( name, NID_organizationName, self->peer_info.o, X509_MAX_O_LEN );
-          X509_NAME_get_text_by_NID( name, NID_organizationalUnitName, self->peer_info.ou, X509_MAX_OU_LEN );
+          X509_NAME_get_text_by_NID(name, NID_commonName, self->peer_info.cn, X509_MAX_CN_LEN);
+          X509_NAME_get_text_by_NID(name, NID_organizationName, self->peer_info.o, X509_MAX_O_LEN);
+          X509_NAME_get_text_by_NID(name, NID_organizationalUnitName, self->peer_info.ou, X509_MAX_OU_LEN);
 
           X509_free(cert);
         }

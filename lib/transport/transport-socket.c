@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2023 One Identity LLC.
  * Copyright (c) 2002-2013 Balabit
  * Copyright (c) 1998-2013 Balázs Scheidler
  *
@@ -22,6 +23,7 @@
  */
 
 #include "transport-socket.h"
+#include "messages.h"
 
 #include <errno.h>
 #include <string.h>
@@ -128,6 +130,13 @@ _parse_cmsg_to_aux(LogTransportSocket *self, struct msghdr *msg, LogTransportAux
 {
   struct cmsghdr *cmsg;
 
+  if (G_UNLIKELY(msg->msg_flags & MSG_CTRUNC))
+    {
+      msg_warning_once("WARNING: recvmsg() returned truncated control data, the size of the control data buffer needs to be increased",
+                       evt_tag_int("control_len", msg->msg_controllen));
+      return;
+    }
+
   if (!self->parse_cmsg || !aux)
     return;
 
@@ -160,7 +169,7 @@ log_transport_socket_read_method(LogTransport *s, gpointer buf, gsize buflen, Lo
   struct iovec iov[1];
   struct sockaddr_storage ss;
 #if defined(SYSLOG_NG_HAVE_CTRLBUF_IN_MSGHDR)
-  gchar ctlbuf[64];
+  gchar ctlbuf[256];
   msg.msg_control = ctlbuf;
   msg.msg_controllen = sizeof(ctlbuf);
 #endif
@@ -211,6 +220,20 @@ log_transport_socket_init_instance(LogTransportSocket *self, gint fd)
   _setup_fd(self, fd);
 }
 
+static void
+log_transport_socket_free_method(LogTransport *s)
+{
+  LogTransportSocket *self = (LogTransportSocket *) s;
+
+  if (self->proxy)
+    {
+      log_transport_socket_proxy_free(self->proxy);
+      self->proxy = NULL;
+    }
+
+  log_transport_free_method(s);
+}
+
 static gssize
 log_transport_dgram_socket_read_method(LogTransport *s, gpointer buf, gsize buflen, LogTransportAuxData *aux)
 {
@@ -246,6 +269,15 @@ log_transport_dgram_socket_write_method(LogTransport *s, const gpointer buf, gsi
 }
 
 void
+log_transport_socket_set_proxied(LogTransportSocket *self, LogTransportSocketProxy *proxy)
+{
+  g_assert(self->proto == IPPROTO_TCP);
+  g_assert(self->proxy == NULL && "Transport socket already proxied");
+
+  self->proxy = proxy;
+}
+
+void
 log_transport_dgram_socket_init_instance(LogTransportSocket *self, gint fd)
 {
   log_transport_socket_init_instance(self, fd);
@@ -267,12 +299,15 @@ log_transport_stream_socket_free_method(LogTransport *s)
 {
   if (s->fd != -1)
     shutdown(s->fd, SHUT_RDWR);
-  log_transport_free_method(s);
+  log_transport_socket_free_method(s);
 }
 
 void
 log_transport_stream_socket_init_instance(LogTransportSocket *self, gint fd)
 {
+  g_assert(self->proxy == NULL
+           && "log_transport_stream_socket_init_instance must be called before log_transport_socket_set_proxied ");
+
   log_transport_socket_init_instance(self, fd);
   self->super.free_fn = log_transport_stream_socket_free_method;
 }

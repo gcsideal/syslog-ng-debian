@@ -41,22 +41,23 @@ typedef enum
 
 typedef struct _CSVScannerOptions
 {
-  GList *columns;
   gchar *delimiters;
   gchar *quotes_start;
   gchar *quotes_end;
   gchar *null_value;
   GList *string_delimiters;
   CSVScannerDialect dialect;
+  gint expected_columns;
   guint32 flags;
 } CSVScannerOptions;
 
 void csv_scanner_options_clean(CSVScannerOptions *options);
 void csv_scanner_options_copy(CSVScannerOptions *dst, CSVScannerOptions *src);
+gboolean csv_scanner_options_validate(CSVScannerOptions *options);
 
 void csv_scanner_options_set_dialect(CSVScannerOptions *options, CSVScannerDialect dialect);
 void csv_scanner_options_set_flags(CSVScannerOptions *options, guint32 flags);
-void csv_scanner_options_set_columns(CSVScannerOptions *options, GList *columns);
+void csv_scanner_options_set_expected_columns(CSVScannerOptions *options, gint expected_columns);
 void csv_scanner_options_set_delimiters(CSVScannerOptions *options, const gchar *delimiters);
 void csv_scanner_options_set_string_delimiters(CSVScannerOptions *options, GList *string_delimiters);
 void csv_scanner_options_set_quotes_start_and_end(CSVScannerOptions *options, const gchar *quotes_start,
@@ -76,13 +77,13 @@ typedef struct
     CSV_STATE_PARTIAL_INPUT,
     CSV_STATE_FINISH,
   } state;
-  GList *current_column;
   const gchar *src;
+  gint current_column;
   GString *current_value;
   gchar current_quote;
 } CSVScanner;
 
-const gchar *csv_scanner_get_current_name(CSVScanner *pstate);
+gint csv_scanner_get_current_column(CSVScanner *self);
 const gchar *csv_scanner_get_current_value(CSVScanner *pstate);
 gint csv_scanner_get_current_value_len(CSVScanner *self);
 gboolean csv_scanner_scan_next(CSVScanner *pstate);

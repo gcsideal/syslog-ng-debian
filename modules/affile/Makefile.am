@@ -22,6 +22,8 @@ modules_affile_libaffile_la_SOURCES	=			\
 	modules/affile/directory-monitor-factory.c			\
 	modules/affile/collection-comparator.h		\
 	modules/affile/collection-comparator.c		\
+	modules/affile/directory-monitor-content-comparator.h \
+	modules/affile/directory-monitor-content-comparator.c \
 	modules/affile/directory-monitor-poll.h   \
 	modules/affile/directory-monitor-poll.c   \
 	modules/affile/file-opener.c				\
@@ -57,6 +59,16 @@ else
   modules/affile/directory-monitor-inotify.c
 endif
 
+if HAVE_KQUEUE
+  modules_affile_libaffile_la_SOURCES +=      \
+  modules/affile/directory-monitor-kqueue.h  \
+  modules/affile/directory-monitor-kqueue.c
+else
+  EXTRA_DIST +=                               \
+  modules/affile/directory-monitor-kqueue.h  \
+  modules/affile/directory-monitor-kqueue.c
+endif
+
 BUILT_SOURCES				+= 			\
 	modules/affile/affile-grammar.y				\
 	modules/affile/affile-grammar.c				\
@@ -71,7 +83,7 @@ modules_affile_libaffile_la_CPPFLAGS	=			\
 	-I$(top_builddir)/modules/affile
 modules_affile_libaffile_la_LIBADD	= $(MODULE_DEPS_LIBS) $(IVYKIS_LIBS)
 modules_affile_libaffile_la_LDFLAGS	= $(MODULE_LDFLAGS)
-modules_affile_libaffile_la_DEPENDENCIES= $(MODULE_DEPS_LIBS)
+EXTRA_modules_affile_libaffile_la_DEPENDENCIES= $(MODULE_DEPS_LIBS)
 
 modules/affile modules/affile/ mod-affile mod-file: modules/affile/libaffile.la
 .PHONY: modules/affile/ mod-affile mod-file

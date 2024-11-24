@@ -92,6 +92,49 @@ enum
    */
 
   LM_V_MAX,
+
+  /* these are dynamic values but with a predefined handle */
+  LM_V_RAWMSG,
+  LM_V_TRANSPORT,
+  LM_V_MSGFORMAT,
+  LM_V_FILE_NAME,
+
+  LM_V_PREDEFINED_MAX,
+};
+
+enum
+{
+  /* means that the message is not valid utf8 */
+  LM_T_MSG_UTF8_SANITIZED,
+  /* missing <pri> value */
+  LM_T_SYSLOG_MISSING_PRI,
+  /* invalid <pri> value */
+  LM_T_SYSLOG_INVALID_PRI,
+  /* no timestamp present in the original message */
+  LM_T_SYSLOG_MISSING_TIMESTAMP,
+  /* hostname field does not seem valid, check-hostname(yes) failed */
+  LM_T_SYSLOG_INVALID_HOSTNAME,
+  /* we seem to have found an octet count in front of the message */
+  LM_T_SYSLOG_UNEXPECTED_FRAMING,
+  /* no date & host information in the syslog message */
+  LM_T_SYSLOG_RFC3164_MISSING_HEADER,
+  /* hostname field missing */
+  LM_T_SYSLOG_RFC5424_MISSING_HOSTNAME,
+  /* program field missing */
+  LM_T_SYSLOG_RFC5424_MISSING_APP_NAME,
+  /* pid field missing */
+  LM_T_SYSLOG_RFC5424_MISSING_PROCID,
+  /* msgid field missing */
+  LM_T_SYSLOG_RFC5424_MISSING_MSGID,
+  /* sdata field missing */
+  LM_T_SYSLOG_RFC5424_MISSING_SDATA,
+  /* invalid SDATA */
+  LM_T_SYSLOG_RFC5424_INVALID_SDATA,
+  /* sdata field missing */
+  LM_T_SYSLOG_RFC5424_MISSING_MESSAGE,
+  /* message field missing */
+  LM_T_SYSLOG_MISSING_MESSAGE,
+  LM_T_PREDEFINED_MAX,
 };
 
 enum
@@ -291,35 +334,11 @@ gboolean log_msg_read(LogMessage *self, SerializeArchive *sa);
 /* generic values that encapsulate log message fields, dynamic values and structured data */
 NVHandle log_msg_get_value_handle(const gchar *value_name);
 gboolean log_msg_is_value_name_valid(const gchar *value);
+const gchar *log_msg_get_handle_name(NVHandle handle, gssize *length);
 
 gboolean log_msg_is_handle_macro(NVHandle handle);
 gboolean log_msg_is_handle_sdata(NVHandle handle);
 gboolean log_msg_is_handle_match(NVHandle handle);
-
-/*
- * This macros allows the caching of a NVHandle (e.g.  the numeric
- * identifier of a name-value pair) in a static variable.  This simplifies
- * call sites by
- *   1) not needed an extra initialization step to look up the handle, _or_
- *   2) not having to open code a similar caching mechanism.
- *
- * NOTE: that the check itself is racy and there might be two threads
- * executing the if() at the same time, and if they do they would _both_
- * perform log_msg_get_value_handle().  The reason is that this is not a
- * problem is that the handles are constant within the same execution, so
- * both the winner and loser of the race would eventually set the cache to
- * the right value.  And albeit this 2nd lookup is unnecessary, this would
- * happen only a limited number of times (until the variables becomes
- * visible for all CPUs), from which point on there's no race.
- */
-#define LOG_MSG_GET_VALUE_HANDLE_STATIC(name) \
-  ({                                                              \
-    static NVHandle __log_msg_value_handle = 0;                   \
-                                                                  \
-    if (G_UNLIKELY(!__log_msg_value_handle))                      \
-      __log_msg_value_handle = log_msg_get_value_handle(name);    \
-    __log_msg_value_handle;                                       \
-  })
 
 static inline gboolean
 log_msg_is_handle_referencable_from_an_indirect_value(NVHandle handle)
@@ -366,6 +385,12 @@ log_msg_get_value_if_set_with_type(const LogMessage *self, NVHandle handle,
     return log_msg_get_macro_value(self, flags >> 8, value_len, type);
   else
     return nv_table_get_value(self->payload, handle, value_len, type);
+}
+
+static inline gboolean
+log_msg_is_value_set(const LogMessage *self, NVHandle handle)
+{
+  return nv_table_is_value_set(self->payload, handle);
 }
 
 static inline const gchar *
@@ -462,10 +487,17 @@ log_msg_set_value_by_name(LogMessage *self, const gchar *name, const gchar *valu
   log_msg_set_value_by_name_with_type(self, name, value, length, LM_VT_STRING);
 }
 
+static inline void
+log_msg_set_value_to_string(LogMessage *self, NVHandle handle, const gchar *literal_string)
+{
+  log_msg_set_value(self, handle, literal_string, strlen(literal_string));
+}
+
 void log_msg_rename_value(LogMessage *self, NVHandle from, NVHandle to);
 
 void log_msg_append_format_sdata(const LogMessage *self, GString *result, guint32 seq_num);
 void log_msg_format_sdata(const LogMessage *self, GString *result, guint32 seq_num);
+void log_msg_clear_sdata(LogMessage *self);
 
 void log_msg_set_tag_by_id_onoff(LogMessage *self, LogTagId id, gboolean on);
 void log_msg_set_tag_by_id(LogMessage *self, LogTagId id);
@@ -475,7 +507,7 @@ void log_msg_clear_tag_by_name(LogMessage *self, const gchar *name);
 gboolean log_msg_is_tag_by_id(LogMessage *self, LogTagId id);
 gboolean log_msg_is_tag_by_name(LogMessage *self, const gchar *name);
 void log_msg_tags_foreach(const LogMessage *self, LogMessageTagsForeachFunc callback, gpointer user_data);
-void log_msg_format_tags(const LogMessage *self, GString *result);
+void log_msg_format_tags(const LogMessage *self, GString *result, gboolean include_localtags);
 void log_msg_format_matches(const LogMessage *self, GString *result);
 
 
@@ -508,7 +540,7 @@ void log_msg_add_ack(LogMessage *msg, const LogPathOptions *path_options);
 void log_msg_ack(LogMessage *msg, const LogPathOptions *path_options, AckType ack_type);
 void log_msg_drop(LogMessage *msg, const LogPathOptions *path_options, AckType ack_type);
 const LogPathOptions *log_msg_break_ack(LogMessage *msg, const LogPathOptions *path_options,
-                                        LogPathOptions *local_options);
+                                        LogPathOptions *local_path_options);
 
 void log_msg_refcache_start_producer(LogMessage *self);
 void log_msg_refcache_start_consumer(LogMessage *self, const LogPathOptions *path_options);

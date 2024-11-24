@@ -20,10 +20,11 @@
 #
 #############################################################################
 
-from .s3_object import S3Object, S3ObjectPersist, SharedBool, ConstructorError, PersistLoadError, AlreadyFinishedError
+from .s3_object import S3Object, S3ObjectPersist, ConstructorError, PersistLoadError, AlreadyFinishedError
 
 try:
-    from boto3 import client
+    from boto3 import client, Session
+    from botocore.credentials import create_assume_role_refresher, DeferredRefreshableCredentials
     from botocore.exceptions import ClientError, EndpointConnectionError
 
     deps_installed = True
@@ -31,7 +32,6 @@ except ImportError:
     deps_installed = False
 
 from concurrent.futures import ThreadPoolExecutor
-from glob import glob
 from logging import getLogger
 from pathlib import Path
 from signal import signal, SIGINT, SIG_IGN
@@ -53,6 +53,7 @@ class S3Destination(LogDestination):
             self.bucket = str(options["bucket"])
             self.access_key = str(options["access_key"])
             self.secret_key = str(options["secret_key"])
+            self.role = str(options["role"])
             self.object_key: LogTemplate = options["object_key"]
             self.object_key_timestamp: Optional[LogTemplate] = options["object_key_timestamp"]
             self.message_template: LogTemplate = options["template"]
@@ -64,6 +65,8 @@ class S3Destination(LogDestination):
             self.max_pending_uploads = int(options["max_pending_uploads"])
             self.flush_grace_period = int(options["flush_grace_period"])
             self.region: Optional[str] = str(options["region"])
+            self.server_side_encryption = str(options["server_side_encryption"])
+            self.kms_key = str(options["kms_key"])
             self.storage_class = str(options["storage_class"]).upper().replace("-", "_")
             self.canned_acl = str(options["canned_acl"]).lower().replace("_", "-")
         except KeyError:
@@ -98,6 +101,16 @@ class S3Destination(LogDestination):
 
         if self.region == "":
             self.region = None
+
+        if self.server_side_encryption != "" and self.server_side_encryption != "aws:kms":
+            assert False, "server-side-encryption() supports only aws:kms"
+
+        if self.server_side_encryption == "aws:kms" and self.kms_key == "":
+            assert False, "kms-key() must be set when server-side-encryption() is aws:kms"
+
+        if self.kms_key != "" and self.server_side_encryption == "":
+            self.logger.warn("ignoring kms-key() as server-side-encryption() is disabled")
+            self.kms_key = ""
 
         VALID_STORAGE_CLASSES = {
             "STANDARD",
@@ -142,6 +155,7 @@ class S3Destination(LogDestination):
             )
             return False
 
+        self.session: Optional[Session] = None
         self.client: Optional[Any] = None
 
         self.s3_objects: Dict[str, S3Object] = dict()
@@ -167,8 +181,7 @@ class S3Destination(LogDestination):
         return f"s3({','.join([options['url'], options['bucket'], str(options['object_key'])])})"
 
     def __load_persist(self) -> None:
-        for path_str in glob(pathname="*.json", root_dir=self.working_dir):
-            path = Path(self.working_dir, path_str)
+        for path in Path(self.working_dir).glob("*.json"):
             try:
                 persist = S3ObjectPersist.load(path=path)
             except PersistLoadError:
@@ -236,13 +249,43 @@ class S3Destination(LogDestination):
         if self.is_opened():
             return True
 
-        self.client = client(
-            service_name="s3",
-            endpoint_url=self.url,
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
-            region_name=self.region,
-        )
+        # NOTE: Creating a client via a Session object does some unusual caching, which increases memory usage
+        # NOTE: each reload.  Because of this, we only create Session object if the role is set, and in that case
+        # NOTE: the memory usage is expected to behave unusually.  Sometime we should investigate this further.
+        if self.role != "":
+            self.session = Session(
+                aws_access_key_id=self.access_key if self.access_key != "" else None,
+                aws_secret_access_key=self.secret_key if self.secret_key != "" else None,
+                region_name=self.region,
+            )
+
+            # NOTE: The Session.set_credentials always creates a new Credentials object from the given keys.
+            # NOTE: The DeferredRefreshableCredentials class is a child of RefreshableCredentials which is a
+            # NOTE: child of the Credentials class.
+            self.session._session._credentials = DeferredRefreshableCredentials(
+                refresh_using=create_assume_role_refresher(
+                    self.session.client("sts"),
+                    {"RoleArn": self.role, "RoleSessionName": "syslog-ng"}
+                ),
+                method="sts-assume-role",
+            )
+
+            sts = self.session.client("sts")
+            whoami = sts.get_caller_identity().get("Arn")
+            self.logger.info(f"Using {whoami} to access the bucket")
+
+            self.client = self.session.client(
+                service_name="s3",
+                endpoint_url=self.url if self.url != "" else None,
+            )
+        else:
+            self.client = client(
+                service_name="s3",
+                endpoint_url=self.url if self.url != "" else None,
+                aws_access_key_id=self.access_key if self.access_key != "" else None,
+                aws_secret_access_key=self.secret_key if self.secret_key != "" else None,
+                region_name=self.region,
+            )
 
         is_opened = False
         try:
@@ -341,6 +384,8 @@ class S3Destination(LogDestination):
             target_key=target_key,
             timestamp=timestamp,
             compress=self.compression,
+            server_side_encryption=self.server_side_encryption,
+            kms_key=self.kms_key,
             storage_class=self.storage_class,
             persist_name=self.persist_name,
             executor=self.executor,
@@ -456,4 +501,5 @@ class S3Destination(LogDestination):
         if s3_object.size >= self.max_object_size:
             self.__finish_s3_object(s3_object)
 
+        self.stats_written_bytes_add(len(data))
         return self.SUCCESS

@@ -142,7 +142,7 @@ static CfgFlagHandler value_pair_scope[] =
 static gboolean
 vp_pattern_spec_eval(VPPatternSpec *self, const gchar *input)
 {
-  return g_pattern_match_string(self->pattern, input);
+  return g_pattern_spec_match_string(self->pattern, input);
 }
 
 static void
@@ -387,7 +387,7 @@ vp_merge_builtins(ValuePairs *vp, VPResults *results, LogMessage *msg, LogTempla
       switch (spec->type)
         {
         case VPT_MACRO:
-          log_macro_expand(spec->id, FALSE, options, msg, sb, &type);
+          log_macro_expand(spec->id, options, msg, sb, &type);
           break;
         case VPT_NVPAIR:
         {

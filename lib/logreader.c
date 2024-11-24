@@ -283,7 +283,7 @@ log_reader_open(LogReader *self, LogProtoServer *proto, PollEvents *poll_events)
   log_reader_apply_proto_and_poll_events(self, proto, poll_events);
 }
 
-static gboolean
+gboolean
 log_reader_is_opened(LogReader *self)
 {
   return self->proto && self->poll_events;
@@ -335,6 +335,7 @@ log_reader_update_watches(LogReader *self)
   switch (prepare_action)
     {
     case LPPA_POLL_IO:
+      self->suspended = FALSE;
       poll_events_update_watches(self->poll_events, cond);
       break;
     case LPPA_FORCE_SCHEDULE_FETCH:
@@ -349,6 +350,32 @@ log_reader_update_watches(LogReader *self)
     }
 }
 
+static inline gboolean
+log_reader_work_in_progress(LogReader *self)
+{
+  main_loop_assert_main_thread();
+
+  return self->io_job.working;
+}
+
+static inline void
+log_reader_set_work_in_progress(LogReader *self, gboolean state)
+{
+  if ((self->options->flags & LR_THREADED) == 0)
+    {
+      main_loop_assert_main_thread();
+      self->io_job.working = state;
+    }
+}
+
+/* NOTE: See file-reader, file_reader_notify_method() why this is needed */
+inline void
+log_reader_trigger_one_check(LogReader *self)
+{
+  if (FALSE == log_reader_work_in_progress(self))
+    log_reader_force_check_in_next_poll(self);
+}
+
 /*****************************************************************************
  * Glue into MainLoopIOWorker
  *****************************************************************************/
@@ -358,6 +385,8 @@ log_reader_work_perform(void *s, gpointer arg)
 {
   LogReader *self = (LogReader *) s;
 
+  log_reader_set_work_in_progress(self, TRUE);
+
   self->notify_code = log_reader_fetch_log(self);
 }
 
@@ -365,6 +394,8 @@ static void
 log_reader_work_finished(void *s, gpointer arg)
 {
   LogReader *self = (LogReader *) s;
+
+  log_reader_set_work_in_progress(self, FALSE);
 
   if (self->pending_close)
     {
@@ -389,7 +420,8 @@ log_reader_work_finished(void *s, gpointer arg)
       self->notify_code = 0;
       log_pipe_notify(self->control, notify_code, self);
     }
-  if (self->super.super.flags & PIF_INITIALIZED)
+
+  if ((self->super.super.flags & PIF_INITIALIZED) && self->proto)
     {
       /* reenable polling the source assuming that we're still in
        * business (e.g. the reader hasn't been uninitialized) */
@@ -567,6 +599,7 @@ log_reader_io_handle_in(gpointer s)
   LogReader *self = (LogReader *) s;
 
   log_reader_disable_watches(self);
+
   if ((self->options->flags & LR_THREADED))
     {
       main_loop_io_worker_job_submit(&self->io_job, NULL);

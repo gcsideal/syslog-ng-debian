@@ -1,25 +1,29 @@
 #!/usr/bin/make -f
 
 BUILDER_IMAGES=		\
-	centos-7 	\
-	fedora-37	\
+	almalinux-8	\
+	almalinux-9	\
+	centos-stream9  \
+	fedora-latest	\
+	fedora-rawhide	\
 	debian-stretch	\
-	debian-buster	\
 	debian-bullseye	\
 	debian-bookworm	\
 	debian-testing	\
 	debian-sid	\
 	ubuntu-focal	\
 	ubuntu-jammy \
+	ubuntu-noble \
 	ubuntu-lunar	\
+	ubuntu-mantic	\
 	kira		\
 	tarball
 
 IMAGES=${BUILDER_IMAGES} devshell
-DEFAULT_IMAGE ?= ubuntu-jammy
+DEFAULT_IMAGE ?= ubuntu-noble
 TARBALL_IMAGE ?= tarball
-DEFAULT_DEB_IMAGE=ubuntu-jammy
-DEFAULT_RPM_IMAGE=centos-7
+DEFAULT_DEB_IMAGE=ubuntu-noble
+DEFAULT_RPM_IMAGE=almalinux-8
 DOCKER=docker
 CONTAINER_REGISTRY ?= ghcr.io/syslog-ng
 MODE ?= snapshot
@@ -35,7 +39,7 @@ DOCKER_RUN_ARGS=-e USER_NAME_ON_HOST=$(shell whoami)	\
 	-e CCACHE_DIR=/build/ccache \
 	-e MODE=$(MODE) \
 	-e VERSION=$(VERSION) \
-	-e PATH=/usr/lib/ccache:/usr/lib64/ccache:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+	-e PATH=/usr/lib/ccache:/usr/lib64/ccache:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin$(if $(DOCKER_EXTRA_PATH),:$(DOCKER_EXTRA_PATH)) \
 	-e GRADLE_USER_HOME=/build/gradle-home \
 	-e GRADLE_PROJECT_CACHE_DIR=/build/gradle-cache \
 	-e GRADLE_FLAGS=--build-cache \
@@ -52,9 +56,10 @@ GIT_RELEASE_TAG=syslog-ng-$(VERSION)
 CONFIGURE_OPTS=--enable-debug --enable-manpages --with-python=3 --prefix=/install $(CONFIGURE_ADD)
 DBLD_RULES=$(MAKE) --no-print-directory -f $(DBLD_DIR)/rules
 
-DOCKER_SHELL=$(DOCKER) run $(DOCKER_RUN_ARGS) --rm -ti ${CONTAINER_REGISTRY}/dbld-$* /dbld/shell
+DOCKER_INTERACTIVE=$(shell if tty -s; then echo "-ti"; else echo "-i"; fi)
+DOCKER_SHELL=$(DOCKER) run $(DOCKER_RUN_ARGS) --rm -${DOCKER_INTERACTIVE} ${CONTAINER_REGISTRY}/dbld-$* /dbld/shell $(if $(SHELL_COMMAND),"$(SHELL_COMMAND)",bash)
 
--include dbld/rules.conf
+-include $(if $(RULES_CONF),$(RULES_CONF),$(DBLD_DIR)/rules.conf)
 
 help:
 	@echo "This script allows you to build release/snapshot artifacts, such "
@@ -201,7 +206,7 @@ clean:
 run: run-$(DEFAULT_IMAGE)
 run: RUN_COMMAND=echo Specify RUN_COMMAND to do something sensible here
 run-%: setup
-	$(DOCKER) run $(DOCKER_RUN_ARGS) --rm -ti ${CONTAINER_REGISTRY}/dbld-$* bash -c "$(RUN_COMMAND)"
+	$(DOCKER) run $(DOCKER_RUN_ARGS) --rm ${DOCKER_INTERACTIVE} ${CONTAINER_REGISTRY}/dbld-$* bash -c "$(RUN_COMMAND)"
 
 shell: shell-$(DEFAULT_IMAGE)
 shell-%: setup
@@ -211,8 +216,8 @@ shell-%: setup
 images: $(foreach image,$(IMAGES), image-$(image))
 image: image-$(DEFAULT_IMAGE)
 image-kira: image-ubuntu-focal
-image-devshell: image-tarball
-image-tarball: image-debian-testing
+image-devshell: image-debian-bookworm
+image-tarball: image-debian-bookworm
 image-%:
 	$(DBLD_DIR)/prepare-image-build $* && \
         $(DOCKER) build $(DOCKER_BUILD_ARGS) --build-arg=ARG_IMAGE_PLATFORM=$* --build-arg=COMMIT=$$($(GIT) rev-parse --short HEAD || echo "") --build-arg=CONTAINER_REGISTRY=${CONTAINER_REGISTRY} --network=host -t ${CONTAINER_REGISTRY}/dbld-$* -f $(DBLD_DIR)/images/$*.dockerfile $(DBLD_DIR)
@@ -257,10 +262,10 @@ exec: exec-$(DEFAULT_IMAGE)
 exec: EXEC_COMMAND=echo Specify EXEC_COMMAND to do something sensible here
 exec-%: setup
 	@container=`$(DOCKER) ps | grep dbld-$* | head -1 | cut -d ' ' -f1`; \
-	$(DOCKER) exec -ti  $$container $(EXEC_COMMAND)
+	$(DOCKER) exec ${DOCKER_INTERACTIVE}  $$container $(EXEC_COMMAND)
 
 login: login-$(DEFAULT_IMAGE)
-login-%: EXEC_COMMAND=gosu $(shell whoami) /dbld/shell
+login-%: EXEC_COMMAND=sudo -u $(shell whoami) /dbld/shell
 login-%: exec-%
 	@true
 

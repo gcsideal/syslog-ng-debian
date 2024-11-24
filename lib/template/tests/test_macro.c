@@ -110,7 +110,7 @@ Test(macro, test_context_id_type_is_returned)
 
   LogTemplateEvalOptions options = {NULL, LTZ_SEND, 5555, "5678", LM_VT_INTEGER};
 
-  gboolean result = log_macro_expand(M_CONTEXT_ID, FALSE, &options, msg, resolved, &type);
+  gboolean result = log_macro_expand(M_CONTEXT_ID, &options, msg, resolved, &type);
   cr_assert(result);
   cr_assert_str_eq(resolved->str, "5678");
   cr_assert_eq(type, LM_VT_INTEGER);
@@ -128,6 +128,47 @@ Test(macro, test__asterisk_returns_the_matches_as_a_list)
   assert_macro_value(M__ASTERISK, msg, "foo,bar", LM_VT_LIST);
   log_msg_unref(msg);
 }
+
+Test(macro, test_ipv4_saddr_related_macros)
+{
+  LogMessage *msg = log_msg_new_empty();
+
+  log_msg_set_saddr_ref(msg, g_sockaddr_inet_new("127.0.0.1", 2000));
+  log_msg_set_daddr_ref(msg, g_sockaddr_inet_new("127.0.127.1", 2020));
+  assert_macro_value(M_SOURCE_IP, msg, "127.0.0.1", LM_VT_STRING);
+  assert_macro_value(M_DEST_IP, msg, "127.0.127.1", LM_VT_STRING);
+  assert_macro_value(M_DEST_PORT, msg, "2020", LM_VT_INTEGER);
+  assert_macro_value(M_IP_PROTOCOL, msg, "4", LM_VT_INTEGER);
+  log_msg_unref(msg);
+}
+
+#if SYSLOG_NG_ENABLE_IPV6
+Test(macro, test_ipv6_saddr_related_macros)
+{
+  LogMessage *msg = log_msg_new_empty();
+
+  log_msg_set_saddr_ref(msg, g_sockaddr_inet6_new("dead:beef::1", 2000));
+  log_msg_set_daddr_ref(msg, g_sockaddr_inet6_new("::1", 2020));
+  assert_macro_value(M_SOURCE_IP, msg, "dead:beef::1", LM_VT_STRING);
+  assert_macro_value(M_DEST_IP, msg, "::1", LM_VT_STRING);
+  assert_macro_value(M_DEST_PORT, msg, "2020", LM_VT_INTEGER);
+  assert_macro_value(M_IP_PROTOCOL, msg, "6", LM_VT_INTEGER);
+  log_msg_unref(msg);
+}
+
+Test(macro, test_ipv6_mapped_ipv4_saddr_related_macros)
+{
+  LogMessage *msg = log_msg_new_empty();
+
+  log_msg_set_saddr_ref(msg, g_sockaddr_inet6_new("::FFFF:192.168.1.1", 2000));
+  log_msg_set_daddr_ref(msg, g_sockaddr_inet6_new("::1", 2020));
+  assert_macro_value(M_SOURCE_IP, msg, "192.168.1.1", LM_VT_STRING);
+  assert_macro_value(M_DEST_IP, msg, "::1", LM_VT_STRING);
+  assert_macro_value(M_DEST_PORT, msg, "2020", LM_VT_INTEGER);
+  assert_macro_value(M_IP_PROTOCOL, msg, "4", LM_VT_INTEGER);
+  log_msg_unref(msg);
+}
+#endif
 
 void
 setup(void)

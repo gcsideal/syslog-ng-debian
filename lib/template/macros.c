@@ -1,6 +1,8 @@
 /*
  * Copyright (c) 2002-2014 Balabit
  * Copyright (c) 1998-2014 Balázs Scheidler
+ * Copyright (c) 2024 Axoflow
+ * Copyright (c) 2024 Attila Szakacs <attila.szakacs@axoflow.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -23,6 +25,7 @@
  */
 
 #include "template/macros.h"
+#include "template/globals.h"
 #include "template/escaping.h"
 #include "timeutils/cache.h"
 #include "timeutils/names.h"
@@ -206,6 +209,7 @@ LogMacroDef macros[] =
   { "SOURCEIP", M_SOURCE_IP },
   { "DESTIP", M_DEST_IP },
   { "DESTPORT", M_DEST_PORT },
+  { "IP_PROTO", M_IP_PROTOCOL },
   { "PROTO", M_PROTOCOL },
   { "RAWMSG_SIZE", M_RAWMSG_SIZE },
   { "SEQNUM", M_SEQNUM },
@@ -227,18 +231,17 @@ LogMacroDef macros[] =
 };
 
 
-static GTimeVal app_uptime;
+static struct timespec app_uptime;
 static GHashTable *macro_hash;
-static LogTemplateOptions template_options_for_macro_expand;
 
 static void
-_result_append_value(GString *result, const LogMessage *lm, NVHandle handle, gboolean escape)
+_result_append_value(GString *result, const LogMessage *lm, NVHandle handle, LogMessageValueType *type)
 {
   const gchar *str;
   gssize len = 0;
 
-  str = log_msg_get_value(lm, handle, &len);
-  result_append(result, str, len, escape);
+  str = log_msg_get_value_with_type(lm, handle, &len, type);
+  g_string_append_len(result, str, len);
 }
 
 static gboolean
@@ -269,8 +272,26 @@ _is_message_dest_an_ip_address(const LogMessage *msg)
   return FALSE;
 }
 
+static gint
+_get_originating_ip_protocol(const LogMessage *msg)
+{
+  if (!msg->saddr)
+    return 0;
+  if (g_sockaddr_inet_check(msg->saddr))
+    return 4;
+#if SYSLOG_NG_ENABLE_IPV6
+  if (g_sockaddr_inet6_check(msg->saddr))
+    {
+      if (g_sockaddr_inet6_is_v4_mapped(msg->saddr))
+        return 4;
+      return 6;
+    }
+#endif
+  return 0;
+}
+
 static void
-log_macro_expand_date_time(gint id, gboolean escape,
+log_macro_expand_date_time(gint id,
                            LogTemplateEvalOptions *options, const LogMessage *msg,
                            GString *result, LogMessageValueType *type)
 {
@@ -423,7 +444,7 @@ log_macro_expand_date_time(gint id, gboolean escape,
 }
 
 gboolean
-log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, const LogMessage *msg,
+log_macro_expand(gint id, LogTemplateEvalOptions *options, const LogMessage *msg,
                  GString *result, LogMessageValueType *type)
 {
   LogMessageValueType t = LM_VT_STRING;
@@ -483,7 +504,7 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
     case M_TAGS:
     {
       t = LM_VT_LIST;
-      log_msg_format_tags(msg, result);
+      log_msg_format_tags(msg, result, TRUE);
       break;
     }
     case M__ASTERISK:
@@ -511,7 +532,7 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
           const gchar *p1, *p2;
           int remaining, length;
           gssize host_len;
-          const gchar *host = log_msg_get_value(msg, LM_V_HOST, &host_len);
+          const gchar *host = log_msg_get_value_with_type(msg, LM_V_HOST, &host_len, &t);
 
           p1 = memchr(host, '@', host_len);
 
@@ -524,28 +545,17 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
           length = p2 ? p2 - p1
                    : host_len - (p1 - host);
 
-          result_append(result, p1, length, escape);
+          g_string_append_len(result, p1, length);
         }
       else
         {
-          _result_append_value(result, msg, LM_V_HOST, escape);
+          _result_append_value(result, msg, LM_V_HOST, &t);
         }
       break;
     }
     case M_SDATA:
     {
-      if (escape)
-        {
-          GString *sdstr = g_string_sized_new(0);
-
-          log_msg_append_format_sdata(msg, sdstr, options->seq_num);
-          result_append(result, sdstr->str, sdstr->len, TRUE);
-          g_string_free(sdstr, TRUE);
-        }
-      else
-        {
-          log_msg_append_format_sdata(msg, result, options->seq_num);
-        }
+      log_msg_append_format_sdata(msg, result, options->seq_num);
       break;
     }
     case M_MSGHDR:
@@ -553,31 +563,31 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
       gssize len;
       const gchar *p;
 
-      p = log_msg_get_value(msg, LM_V_LEGACY_MSGHDR, &len);
+      p = log_msg_get_value_with_type(msg, LM_V_LEGACY_MSGHDR, &len, &t);
       if (len > 0)
-        result_append(result, p, len, escape);
+        g_string_append_len(result, p, len);
       else
         {
           /* message, complete with program name and pid */
           len = result->len;
-          _result_append_value(result, msg, LM_V_PROGRAM, escape);
+          _result_append_value(result, msg, LM_V_PROGRAM, &t);
           if (len != result->len)
             {
               const gchar *pid = log_msg_get_value(msg, LM_V_PID, &len);
               if (len > 0)
                 {
-                  result_append(result, "[", 1, FALSE);
-                  result_append(result, pid, len, escape);
-                  result_append(result, "]", 1, FALSE);
+                  g_string_append_c(result, '[');
+                  g_string_append_len(result, pid, len);
+                  g_string_append_c(result, ']');
                 }
-              result_append(result, ": ", 2, FALSE);
+              g_string_append_len(result, ": ", 2);
             }
         }
       break;
     }
     case M_MESSAGE:
     {
-      _result_append_value(result, msg, LM_V_MESSAGE, escape);
+      _result_append_value(result, msg, LM_V_MESSAGE, &t);
       break;
     }
     case M_SOURCE_IP:
@@ -594,7 +604,7 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
         {
           ip = "127.0.0.1";
         }
-      result_append(result, ip, strlen(ip), escape);
+      g_string_append(result, ip);
       break;
     }
     case M_DEST_IP:
@@ -611,7 +621,7 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
         {
           ip = "127.0.0.1";
         }
-      result_append(result, ip, strlen(ip), escape);
+      g_string_append(result, ip);
       break;
     }
     case M_DEST_PORT:
@@ -628,6 +638,12 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
         }
       t = LM_VT_INTEGER;
       format_uint32_padded(result, 0, 0, 10, port);
+      break;
+    }
+    case M_IP_PROTOCOL:
+    {
+      t = LM_VT_INTEGER;
+      format_uint32_padded(result, 0, 0, 10, _get_originating_ip_protocol(msg));
       break;
     }
     case M_PROTOCOL:
@@ -654,7 +670,7 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
     {
       if (options->context_id)
         {
-          result_append(result, options->context_id, strlen(options->context_id), escape);
+          g_string_append(result, options->context_id);
           t = options->context_id_type;
         }
       break;
@@ -696,27 +712,27 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
                            ? get_local_hostname_fqdn()
                            : get_local_hostname_short();
 
-      result_append(result, hname, -1, escape);
+      g_string_append(result, hname);
       break;
     }
     case M_SYSUPTIME:
     {
-      GTimeVal ct;
+      struct timespec ct;
 
-      g_get_current_time(&ct);
-      format_uint64_padded(result, 0, 0, 10, g_time_val_diff(&ct, &app_uptime) / 1000 / 10);
+      clock_gettime(CLOCK_MONOTONIC, &ct);
+      format_uint64_padded(result, 0, 0, 10, timespec_diff_msec(&ct, &app_uptime) / 10);
       break;
     }
 
     default:
     {
-      log_macro_expand_date_time(id, escape, options, msg, result, &t);
+      log_macro_expand_date_time(id, options, msg, result, &t);
       break;
     }
 
     }
   if (type)
-    *type = escape ? LM_VT_STRING : t;
+    *type = t;
 
   return TRUE;
 }
@@ -724,8 +740,8 @@ log_macro_expand(gint id, gboolean escape, LogTemplateEvalOptions *options, cons
 gboolean
 log_macro_expand_simple(gint id, const LogMessage *msg, GString *result, LogMessageValueType *type)
 {
-  LogTemplateEvalOptions options = {&template_options_for_macro_expand, LTZ_LOCAL, 0, NULL, LM_VT_STRING};
-  return log_macro_expand(id, FALSE, &options, msg, result, type);
+  LogTemplateEvalOptions options = {log_template_get_global_template_options(), LTZ_LOCAL, 0, NULL, LM_VT_STRING};
+  return log_macro_expand(id, &options, msg, result, type);
 }
 
 guint
@@ -748,8 +764,7 @@ log_macros_global_init(void)
   gint i;
 
   /* init the uptime (SYSUPTIME macro) */
-  g_get_current_time(&app_uptime);
-  log_template_options_global_defaults(&template_options_for_macro_expand);
+  clock_gettime(CLOCK_MONOTONIC, &app_uptime);
 
   macro_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
   for (i = 0; macros[i].name; i++)

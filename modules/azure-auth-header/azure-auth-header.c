@@ -181,14 +181,27 @@ _attach(LogDriverPlugin *s, LogDriver *driver)
 {
   AzureAuthHeaderPlugin *self = (AzureAuthHeaderPlugin *)s;
 
-  SignalSlotConnector *ssc = driver->super.signal_slot_connector;
+  g_assert(s->signal_connector == NULL);
+  s->signal_connector = signal_slot_connector_ref(driver->super.signal_slot_connector);
+
   msg_debug("AzureAuthHeaderPlugin::attach()",
-            evt_tag_printf("SignalSlotConnector", "%p", ssc),
+            evt_tag_printf("SignalSlotConnector", "%p", s->signal_connector),
             evt_tag_printf("AzureAuthHeaderPlugin", "%p", s));
 
-  CONNECT(ssc, signal_http_header_request, _slot_append_headers, self);
+  CONNECT(s->signal_connector, signal_http_header_request, _slot_append_headers, self);
 
   return TRUE;
+}
+
+static void
+_detach(LogDriverPlugin *s, LogDriver *driver)
+{
+  AzureAuthHeaderPlugin *self = (AzureAuthHeaderPlugin *)s;
+
+  DISCONNECT(s->signal_connector, signal_http_header_request, _slot_append_headers, self);
+
+  signal_slot_connector_unref(s->signal_connector);
+  s->signal_connector = NULL;
 }
 
 static void
@@ -212,6 +225,7 @@ azure_auth_header_plugin_new(void)
   log_driver_plugin_init_instance(&self->super, AZURE_AUTH_HEADER_PLUGIN);
 
   self->super.attach = _attach;
+  self->super.detach = _detach;
   self->super.free_fn = _free;
 
   return self;

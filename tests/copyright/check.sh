@@ -106,7 +106,7 @@ main_logged() {
  find \
   -L \
   . \
-  -iname '.git' -prune \
+  -iname '.git' -prune -o -iname 'dbld' -prune \
   -o \
  -type f \
  -exec grep -Iq . {} \; -print |
@@ -301,7 +301,7 @@ extract_holder_license() {
 
  local EXT="`echo "$FILE" | sed -r "s~^.*\.([^.]+)$~\1~"`"
  case "$EXT" in
-  c|h|cpp|hpp|ym|java)
+  c|h|cpp|hpp|m|mm|ym|java|table)
     extract_holder_license_c
     ;;
   ac|am|cmake|conf|sh|pl|py)

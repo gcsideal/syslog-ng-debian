@@ -4,11 +4,15 @@ noinst_LTLIBRARIES += modules/grpc/otel/libotel_cpp.la
 
 modules_grpc_otel_libotel_cpp_la_SOURCES = \
   $(grpc_credentials_sources) \
+  $(grpc_metrics_sources) \
   modules/grpc/otel/otel-source.h \
   modules/grpc/otel/otel-source.hpp \
   modules/grpc/otel/otel-source.cpp \
   modules/grpc/otel/otel-servicecall.hpp \
   modules/grpc/otel/otel-source-services.hpp \
+  modules/grpc/otel/otel-logmsg-handles.h \
+  modules/grpc/otel/otel-logmsg-handles.hpp \
+  modules/grpc/otel/otel-logmsg-handles.cpp \
   modules/grpc/otel/otel-protobuf-parser.h \
   modules/grpc/otel/otel-protobuf-parser.hpp \
   modules/grpc/otel/otel-protobuf-parser.cpp \
@@ -27,6 +31,7 @@ modules_grpc_otel_libotel_cpp_la_SOURCES = \
 
 modules_grpc_otel_libotel_cpp_la_CXXFLAGS = \
   $(AM_CXXFLAGS) \
+  -Wno-double-promotion -Wno-deprecated -DPROTOBUF_ENABLE_DEBUG_LOGGING_MAY_LEAK_PII=0 \
   $(PROTOBUF_CFLAGS) \
   $(GRPCPP_CFLAGS) \
   -I$(OPENTELEMETRY_PROTO_BUILDDIR) \
@@ -36,7 +41,7 @@ modules_grpc_otel_libotel_cpp_la_CXXFLAGS = \
 
 modules_grpc_otel_libotel_cpp_la_LIBADD = $(MODULE_DEPS_LIBS) $(PROTOBUF_LIBS) $(GRPCPP_LIBS)
 modules_grpc_otel_libotel_cpp_la_LDFLAGS = $(MODULE_LDFLAGS)
-modules_grpc_otel_libotel_cpp_la_DEPENDENCIES = $(MODULE_DEPS_LIBS)
+EXTRA_modules_grpc_otel_libotel_cpp_la_DEPENDENCIES = $(MODULE_DEPS_LIBS)
 
 module_LTLIBRARIES += modules/grpc/otel/libotel.la
 
@@ -50,20 +55,24 @@ modules_grpc_otel_libotel_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   -I$(top_srcdir)/modules/grpc \
   -I$(top_srcdir)/modules/grpc/otel \
-  -I$(top_builddir)/modules/grpc/otel
+  -I$(top_builddir)/modules/grpc/otel \
+  -I$(top_srcdir)/modules/grpc
 
 modules_grpc_otel_libotel_la_LIBADD = \
   $(MODULE_DEPS_LIBS) \
   $(top_builddir)/modules/grpc/protos/libgrpc-protos.la \
   $(top_builddir)/modules/grpc/otel/libotel_cpp.la \
-  -lstdc++
+  $(top_builddir)/modules/grpc/otel/filterx/libfilterx.la
+
+nodist_EXTRA_modules_grpc_otel_libotel_la_SOURCES = force-cpp-linker-with-default-stdlib.cpp
 
 modules_grpc_otel_libotel_la_LDFLAGS = $(MODULE_LDFLAGS)
 
-modules_grpc_otel_libotel_la_DEPENDENCIES = \
+EXTRA_modules_grpc_otel_libotel_la_DEPENDENCIES = \
   $(MODULE_DEPS_LIBS) \
   $(top_builddir)/modules/grpc/protos/libgrpc-protos.la \
-  $(top_builddir)/modules/grpc/otel/libotel_cpp.la
+  $(top_builddir)/modules/grpc/otel/libotel_cpp.la \
+  $(top_builddir)/modules/grpc/otel/filterx/libfilterx.la
 
 modules/grpc/otel modules/grpc/otel/ mod-otel: modules/grpc/otel/libotel.la
 else
@@ -82,3 +91,4 @@ EXTRA_DIST += \
 .PHONY: modules/grpc/otel/ mod-otel
 
 include modules/grpc/otel/tests/Makefile.am
+include modules/grpc/otel/filterx/Makefile.am

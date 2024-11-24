@@ -55,6 +55,7 @@ typedef enum
   TSO_NOTLSv13=0x0020,
   TSO_IGNORE_UNEXPECTED_EOF=0x0040,
   TSO_IGNORE_HOSTNAME_MISMATCH=0x0080,
+  TSO_IGNORE_VALIDITY_PERIOD=0x0100,
 } TLSSslOptions;
 
 typedef enum
@@ -95,6 +96,7 @@ struct _TLSContext
   GList *trusted_fingerprint_list;
   GList *trusted_dn_list;
   gint ssl_options;
+  gint ssl_version;
   gchar *location;
 };
 
@@ -115,9 +117,11 @@ enum TLSContextError
 
 gboolean tls_context_set_verify_mode_by_name(TLSContext *self, const gchar *mode_str);
 gboolean tls_context_set_ssl_options_by_name(TLSContext *self, GList *options);
+gboolean tls_context_set_ssl_version_by_name(TLSContext *self, const gchar *value);
 gint tls_context_get_verify_mode(const TLSContext *self);
 void tls_context_set_verify_mode(TLSContext *self, gint verify_mode);
 gboolean tls_context_ignore_hostname_mismatch(TLSContext *self);
+gboolean tls_context_ignore_validity_period(TLSContext *self);
 void tls_context_set_key_file(TLSContext *self, const gchar *key_file);
 void tls_context_set_cert_file(TLSContext *self, const gchar *cert_file);
 gboolean tls_context_set_keylog_file(TLSContext *self, gchar *keylog_file_path, GError **error);

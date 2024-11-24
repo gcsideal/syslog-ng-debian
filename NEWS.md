@@ -1,269 +1,171 @@
-4.4.0
+4.8.1
 =====
-
-Read Axoflow's [blog post](https://axoflow.com/axosyslog-release-4-4/) for more details.
-You can read more about the new features in the AxoSyslog [documentation](https://axoflow.com/docs/axosyslog-core/).
-
 
 ## Highlights
 
-### Sending messages between syslog-ng instances via OTLP/gRPC
+ * `elasticsearch-datastream()` destinations can be used to feed Elasticsearch [data streams](https://www.elastic.co/guide/en/elasticsearch/reference/current/data-streams.html).
 
-The `syslog-ng-otlp()` source and destination helps to transfer the internal representation
-of a log message between syslog-ng instances. In contrary to the `syslog-ng()` (`ewmm()`)
-drivers, `syslog-ng-otlp()` does not transfer the messages on simple TCP connections, but uses
-the OpenTelemetry protocol to do so.
+    Example config:
 
-It is easily scalable (`workers()` option), uses built-in application layer acknowledgement,
-out of the box supports google service authentication (ADC or ALTS), and gives the possibility
-of better load balancing.
-
-The performance is currently similar to `ewmm()` (OTLP is ~30% quicker) but there is a source
-side limitation, which will be optimized. We measured 200-300% performance improvement with a
-PoC optimized code using multiple threads, so stay tuned.
-
-Note: The `syslog-ng-otlp()` source is only an alias to the `opentelemetry()` source.
-This is useful for not needing to open different ports for the syslog-ng messages and other
-OpenTelemetry messages. The syslog-ng messages are marked with a `@syslog-ng` scope name and
-the current syslog-ng version as the scope version. Both sources will handle the incoming
-syslog-ng messages as syslog-ng messages, and all other messages as simple OpenTelemetry
-messages.
-([#4564](https://github.com/syslog-ng/syslog-ng/pull/4564))
-
-### Grafana Loki destination
-
-The `loki()` destination sends messages to Grafana Loki using gRPC.
-The message format conforms to the documented HTTP endpoint:
-https://grafana.com/docs/loki/latest/reference/api/#push-log-entries-to-loki
-
-Example config:
-```
-loki(
-    url("localhost:9096")
-    labels(
-        "app" => "$PROGRAM",
-        "host" => "$HOST",
-    )
-
-    workers(16)
-    batch-timeout(10000)
-    batch-lines(1000)
-);
-```
-
-Loki requires monotonic timestamps within the same label-set, which makes
-it difficult to use the original message timestamp without the possibility
-of message loss. In case the monotonic property is violated, Loki discards
-the problematic messages with an error. The source of the timestamps can be
-configured with the `timestamp()` option (`current`, `received`, `msg`).
-
-([#4631](https://github.com/syslog-ng/syslog-ng/pull/4631))
-
-### S3 destination
-
-The `s3()` destination stores log messages in S3 objects.
-
-Minimal config:
-```
-s3(
-    url("http://localhost:9000")
-    bucket("syslog-ng")
-    access-key("my-access-key")
-    secret-key("my-secret-key")
-    object-key("${HOST}/my-logs")
-    template("${MESSAGE}\n")
-);
-```
-
-#### Compression
-
-Setting `compression(yes)` enables gzip compression, and implicitly adds a `.gz` suffix to the
-created object's key. Use the `compresslevel()` options to set the level of compression (0-9).
-
-#### Rotation based on object size
-
-The `max-object-size()` option configures syslog-ng to finish an object if it reaches a certain
-size. syslog-ng will append an index (`"-1"`, `"-2"`, ...) to the end of the object key when
-starting a new object after rotation.
-
-#### Rotation based on timestamp
-
-The `object-key-timestamp()` option can be used to set a datetime related template, which gets
-appended to the end of the object (e.g. `"${R_MONTH_ABBREV}${R_DAY}"` => `"-Sep25"`). When a log
-message arrives with a newer timestamp template resolution, the previous timestamped object gets
-finised and a new one is started with the new timestamp. Backfill messages do not reopen and append
-the old object, but starts a new object with the key having an index appended to the old object.
-
-#### Rotation based on timeout
-
-The `flush-grace-period()` option sets the number of minutes to wait for new messages to arrive to
-objects, if the timeout expires the object is finished, and a new message will start a new with
-an index appended.
-
-#### Upload options
-
-The objects are uploaded with the multipart upload API. Chunks are composed locally. When a chunk
-reaches a certain size (by default 5 MiB), the chunk is uploaded. When an object is finished, the
-multipart upload gets completed and the chunks are merged by S3.
-
-Upload parameters can be configured with the `chunk-size()`, `upload-threads()` and
-`max-pending-uploads()` options.
-
-
-#### Additional options
-
-Additional options include `region()`, `storage-class()` and `canned-acl()`.
-
-([#4624](https://github.com/syslog-ng/syslog-ng/pull/4624))
-
-
-## Features
-
-  * `http()`: Added compression ability for use with metered egress/ingress
-
-    The new features can be accessed with the following options:
-     * `accept-encoding()` for requesting the compression of HTTP responses form the server.
-       (These are currently not used by syslog-ng, but they still contribute to network traffic.)
-       The available options are `identity` (for no compression), `gzip` or `deflate`.
-       If you want the driver to accept multiple compression types, you can list them separated by
-       commas inside the quotation mark, or write `all`, if you want to enable all available compression types.
-     * `content-compression()` for compressing messages sent by syslog-ng. The available options are
-       `identity` for no compression, `gzip`, or `deflate`.
-
-    Below you can see a configuration example:
     ```
-    destination d_http_compressed{
-      http(url("127.0.0.1:80"), content-compression("deflate"), accept-encoding("all"));
-    };
-    ```
-    ([#4137](https://github.com/syslog-ng/syslog-ng/pull/4137))
-
-  * `opensearch`: Added a new destination.
-
-    It is similar to `elasticsearch-http()`, with the difference that it does not have the `type()`
-    option, which is deprecated and advised not to use.
-    ([#4560](https://github.com/syslog-ng/syslog-ng/pull/4560))
-
-  * Added metrics for message delays: a new metric is introduced that measures the
-    delay the messages accumulate while waiting to be delivered by syslog-ng.
-    The measurement is sampled, e.g. syslog-ng would take the very first message
-    in every second and expose its delay as a value of the new metric.
-
-    There are two new metrics:
-      * syslogng_output_event_delay_sample_seconds -- contains the latency of
-        outgoing messages
-      * syslogng_output_event_delay_sample_age_seconds -- contains the age of the last
-        measurement, relative to the current time.
-    ([#4565](https://github.com/syslog-ng/syslog-ng/pull/4565))
-
-  * `metrics-probe`: Added dynamic labelling support via name-value pairs
-
-    You can use all value-pairs options, like `key()`, `rekey()`, `pair()` or `scope()`, etc...
-
-    Example:
-    ```
-    metrics-probe(
-      key("foo")
-      labels(
-        "static-label" => "bar"
-        key(".my_prefix.*" rekey(shift-levels(1)))
-      )
+    elasticsearch-datastream(
+      url("https://elastic-endpoint:9200/my-data-stream/_bulk")
+      user("elastic")
+      password("ba3DI8u5qX61We7EP748V8RZ")
     );
     ```
-    ```
-    syslogng_foo{static_label="bar",my_prefix_baz="almafa",my_prefix_foo="bar",my_prefix_nested_axo="flow"} 4
-    ```
-    ([#4610](https://github.com/syslog-ng/syslog-ng/pull/4610))
+    ([#5069](https://github.com/syslog-ng/syslog-ng/pull/5069))
+   
+ * `building`: thanks to Sergey Fedorov (@barracuda156) and Marius Schamschula (@Schamschula), macOS builds now support gcc again. They also updated the [MacPort version](https://github.com/macports/macports-ports/blob/30c55ba04d8c0693c18cdf84014187cd3c53e60f/sysutils/syslog-ng-devel/Portfile) of syslog-ng (develop). Great work, and thank you so much for your contribution!
+    ([#5108](https://github.com/syslog-ng/syslog-ng/pull/5108))
+   
+## Features
 
-  * `systemd-journal()`: Added support for enabling multiple systemd-journal() sources
+  * `tls()`: expose the key fingerprint of the peer in `${.tls.x509_fp}` if
+    `trusted-keys()` is used to retain the actual peer identity in the received
+    messages.
+    ([#5068](https://github.com/syslog-ng/syslog-ng/pull/5068))
 
-    Using multiple systemd-journal() sources are now possible as long as each source uses a unique
-    systemd namespace. The namespace can be configured with the `namespace()`` option, which has a
-    default value of `"*"`.
-    ([#4553](https://github.com/syslog-ng/syslog-ng/pull/4553))
+  * `syslog-parser`: Added the `no-piggyback-errors` and the `piggyback-errors` flags to control whether the message retains the original message or not on parse error(s). By default the old behaviour/`piggyback-errors` flag is active.
 
-  * `stdout()`: added a new destination that allows you to write messages easily
-    to syslog-ng's stdout.
-    ([#4620](https://github.com/syslog-ng/syslog-ng/pull/4620))
+    - `no-piggyback-errors`: On failure, the original message will be left as it was before parsing, the value of `$MSGFORMAT` will be set to `syslog-error`, and a tag will be placed on the message corresponding to the parser's failure.
+    - `piggyback-errors`: On failure, the old behaviour is used (clearing the entire message then syslog-ng will generate a new message in place of the old one describing the parser's error).
 
-  * `network()`: Added `ignore-hostname-mismatch` as a new flag to `ssl-options()`.
-
-    By specifying `ignore-hostname-mismatch`, you can ignore the subject name of a
-    certificate during the validation process. This means that syslog-ng will
-    only check if the certificate itself is trusted by the current set of trust
-    anchors (e.g. trusted CAs) ignoring the mismatch between the targeted
-    hostname and the certificate subject.
-    ([#4628](https://github.com/syslog-ng/syslog-ng/pull/4628))
+    The following new tags can be added by the `syslog-parser` to the message when the parsing failed:
+      - `syslog.rfc5424_missing_hostname`
+      - `syslog.rfc5424_missing_app_name`
+      - `syslog.rfc5424_missing_procid`
+      - `syslog.rfc5424_missing_msgid`
+      - `syslog.rfc5424_missing_sdata`
+      - `syslog.rfc5424_invalid_sdata`
+      - `syslog.rfc5424_missing_message`
+    ([#5063](https://github.com/syslog-ng/syslog-ng/pull/5063))
 
 
 ## Bugfixes
 
-  * `syslog-ng`: fix runtime `undefined symbol: random_choice_generator_parser'` when executing `syslog-ng -V` or
-    using an example plugin
-    ([#4615](https://github.com/syslog-ng/syslog-ng/pull/4615))
+  * `syslog-ng-ctl`: fix escaping of `stats prometheus`
 
-  * Fix threaded destination crash during a configuration revert
+    Metric labels (for example, the ones produced by `metrics-probe()`) may contain control characters, invalid UTF-8 or `\`
+    characters. In those specific rare cases, the escaping of the `stats prometheus` output was incorrect.
+    ([#5046](https://github.com/syslog-ng/syslog-ng/pull/5046))
 
-    Threaded destinations that do not support the `workers()` option crashed while
-    syslog-ng was trying to revert to an old configuration.
-    ([#4588](https://github.com/syslog-ng/syslog-ng/pull/4588))
+  * `wildcard-file()`: fix crashes can occure if the same wildcard file is used in multiple sources
 
-  * `redis()`: fix incrementing seq_num
-    ([#4588](https://github.com/syslog-ng/syslog-ng/pull/4588))
+    Because of some persistent name construction and validation bugs the following config crashed `syslog-ng`
+    (if there were more than one log file is in the `/path` folder)
 
-  * `python()`: fix crash when using `Persist` or `LogTemplate` without global `python{}` code block in configuration
-    ([#4572](https://github.com/syslog-ng/syslog-ng/pull/4572))
+    ``` config
+    @version: current
 
-  * `mqtt()` destination: fix template option initialization
-    ([#4605](https://github.com/syslog-ng/syslog-ng/pull/4605))
+    @include "scl.conf"
 
-  * `opentelemetry`: Fixed error handling in case of insert failure.
-    ([#4583](https://github.com/syslog-ng/syslog-ng/pull/4583))
+    source s_files1 {
+        file("/path/*.log"
+            persist-name("p1")
+        );
+    };
 
-  * pdbtool: add validation for types of `<value>` tags
+    source s_files2 {
+        file("/path/*.log"
+            persist-name("p2")
+        );
+    };
 
-    In patterndb, you can add extra name-value pairs following a match with the tags.
-    But the actual value of these name-value pairs were never validated against their types,
-    meaning that an incorrect value could be set using this construct.
-    ([#4621](https://github.com/syslog-ng/syslog-ng/pull/4621))
+    destination s_stdout {
+        stdout();
+    };
 
-  * `grouping-by()`, `group-lines()`: Fixed a persist name generating error.
-    ([#4478](https://github.com/syslog-ng/syslog-ng/pull/4478))
+    log {
+        source(s_files1);
+        destination(s_stdout);
+    };
 
+    log {
+        source(s_files2);
+        destination(s_stdout);
+    };
+    ```
 
-## Packaging
+    NOTE:
 
-  * debian: Added tzdata-legacy to BuildDeps for recent debian versions.
+    - The issue occurred regardless of the presence of the `persist-name()` option.
+    - It affected not only the simplified example of the legacy wildcard `file()` but also the new `wildcard-file()` source.
+    ([#5091](https://github.com/syslog-ng/syslog-ng/pull/5091))
 
-    In the recent debian packaging some of the timezone info files moved
-    to a new tzdata-legacy package from the standard tzdata package.
-    ([#4643](https://github.com/syslog-ng/syslog-ng/pull/4643))
+  * `syslog-ng-ctl`: fix crash of syslog-ng service in g_hash_table lookup function after `syslog-ng-ctl reload`
+    ([#5087](https://github.com/syslog-ng/syslog-ng/pull/5087))
 
-  * rhel: `contrib/vim` has been removed from the source.
-    ([#4607](https://github.com/syslog-ng/syslog-ng/pull/4607))
+  * `file()`, `stdout()`: fix log sources getting stuck
+
+    Due to an acknowledgment bug in the `file()` and `stdout()` destinations,
+    sources routed to those destinations may have gotten stuck as they were
+    flow-controlled incorrectly.
+
+    This issue occured only in extremely rare cases with regular files, but it
+    occured frequently with `/dev/stderr` and other slow pseudo-devices.
+    ([#5134](https://github.com/syslog-ng/syslog-ng/pull/5134))
+
+  * `directory-monitor`: fixed a main thread assertion crash that might have occurred during syslog-ng stop or restart
+    ([#5086](https://github.com/syslog-ng/syslog-ng/pull/5086))
+
+  * `Config  @version`: fixed compat-mode inconsistencies when `@version` was not specified at the top of the configuration
+    file or was not specified at all
+    ([#5145](https://github.com/syslog-ng/syslog-ng/pull/5145))
+
+  * `grpc`: Fix potential memoryleak when the grpc module is loaded but not used.
+    ([#5062](https://github.com/syslog-ng/syslog-ng/pull/5062))
+
+  * `s3()`: Eliminated indefinite memory usage increase for each reload.
+
+    The increased memory usage is caused by the `botocore` library, which
+    caches the session information. We only need the Session object, if
+    `role()` is set. The increased memory usage still happens with that set,
+    currently we only fixed the unset case.
+    ([#5149](https://github.com/syslog-ng/syslog-ng/pull/5149))
+
+  * `opentelemetry()` sources: fix crash when `workers()` is set to `> 1`
+    ([#5138](https://github.com/syslog-ng/syslog-ng/pull/5138))
+
+  * 
+    `opentelemetry()` sources: fix source hang-up on flow-controlled paths
+    ([#5148](https://github.com/syslog-ng/syslog-ng/pull/5148))
+
+  * `metrics-probe()`: fix disappearing metrics from `stats prometheus` output
+
+    `metrics-probe()` metrics became orphaned and disappeared from the `syslog-ng-ctl stats prometheus` output
+    whenever an ivykis worker stopped (after 10 seconds of inactivity).
+    ([#5075](https://github.com/syslog-ng/syslog-ng/pull/5075))
+
+  * `affile`: Fix an invalid `lseek` call mainly on the `pipe()` source, but also possible if using affile on pipe like files (pipe, socket and FIFO).
+    ([#5058](https://github.com/syslog-ng/syslog-ng/pull/5058))
 
 
 ## Other changes
 
-  * APT packages: Dropped support for Ubuntu Bionic.
-  ([#4648](https://github.com/syslog-ng/syslog-ng/pull/4648))
+  * `format-json`: spaces around `=` in `$(format-json)` template function could cause a
+    [crash](https://github.com/syslog-ng/syslog-ng/issues/5065).
+    The fix of the issue also introduced an enhancement, from now on spaces are allowed
+    around the `=` operator, so the following `$(format-json)` template function calls
+    are all valid:
+    ```
+    $(format-json foo =alma)
+    $(format-json foo= alma)
+    $(format-json foo = alma)
+    $(format-json foo=\" alma \")
+    $(format-json foo= \" alma \")
+    $(format-json foo1= alma foo2 =korte foo3 = szilva foo4 = \" meggy \" foo5=\"\")
+    ```
+    Please note the usage of the escaped strings like `\" meggy \"`, and the (escaped and) quoted form
+    that used for an empty value `\"\"`, the latter is a breaking change as earlier an expression like
+    `key= ` led to a json key-value pair with an empty value `{"key":""}` that will not work anymore.
+    ([#5080](https://github.com/syslog-ng/syslog-ng/pull/5080))
 
-  * `vim`: Syntax highlight file is no longer packaged.
+  * `building`: fixed multiple potentional FreeBSD build errors
+    ([#5099](https://github.com/syslog-ng/syslog-ng/pull/5099))
 
-    vim syntax files where previously installed by the RedHat packages of syslog-ng
-    (but not the Debian ones). These files where sometime lagging behind, so in order
-    to provide a more up-to-date experience on all platforms, regardless of the
-    installation of the syslog-ng package, the vim syntax files have been moved to a
-    dedicated repository [syslog-ng/vim-syslog-ng](https://github.com/syslog-ng/vim-syslog-ng) that can be used using a plugin manager such as
-    [vim-plug](https://github.com/junegunn/vim-plug), [vim-pathogen](https://github.com/tpope/vim-pathogen) or [vundle](https://github.com/VundleVim/Vundle.vim).
-    ([#4607](https://github.com/syslog-ng/syslog-ng/pull/4607))
-
-
-## syslog-ng Discord
-
-For a bit more interactive discussion, join our Discord server:
-
-[![Axoflow Discord Server](https://discordapp.com/api/guilds/1082023686028148877/widget.png?style=banner2)](https://discord.gg/E65kP9aZGm)
+  * `docker`: Changed the container image's base to debian:bookworm.
+    ([#5056](https://github.com/syslog-ng/syslog-ng/pull/5056))
 
 
 ## Credits
@@ -277,5 +179,7 @@ of syslog-ng, contribute.
 
 We would like to thank the following people for their contribution:
 
-Alex Becker, Attila Szakacs, Balazs Scheidler, Bálint Horváth, Hofi,
-László Várady, Romain Tartière, Szilard Parrag
+Andras Mitzki, Attila Szakacs, Balazs Scheidler, Hofi,
+Kovács Gergő Ferenc, László Várady, Mate Ory,
+Peter Czanik (CzP), Sergey Fedorov, Marius Schamschula, Szilard Parrag,
+Tamas Pal, shifter

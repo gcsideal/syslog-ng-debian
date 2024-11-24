@@ -117,38 +117,39 @@ g_sockaddr_set_port(GSockAddr *a, guint16 port)
 }
 
 guint8 *
-g_sockaddr_get_address(GSockAddr *self, guint8 *buffer, socklen_t buffer_size)
+g_sockaddr_get_address(GSockAddr *self, guint8 *buffer, gsize buffer_size, gsize *addr_len)
 {
   if (self->sa.sa_family == AF_INET)
     {
       struct in_addr addr = g_sockaddr_inet_get_address(self);
-      socklen_t len = sizeof(addr);
+      gsize len = sizeof(addr);
       if (buffer_size < len)
         {
           errno = EINVAL;
           return NULL;
         }
       memcpy(buffer, &addr, len);
+      *addr_len = len;
       return buffer;
     }
 #if SYSLOG_NG_ENABLE_IPV6
   else if (self->sa.sa_family == AF_INET6)
     {
       struct in6_addr *addr = g_sockaddr_inet6_get_address(self);
-      socklen_t len = sizeof(struct in6_addr);
+      gsize len = sizeof(struct in6_addr);
       if (buffer_size < len)
         {
           errno = EINVAL;
           return NULL;
         }
       memcpy(buffer, addr, len);
+      *addr_len = len;
       return buffer;
     }
 #endif
   else
     {
-      errno = EAFNOSUPPORT;
-      return NULL;
+      g_assert_not_reached();
     }
 }
 
@@ -377,7 +378,10 @@ g_sockaddr_inet6_format(GSockAddr *s, gchar *text, gulong n, gint format)
     }
   else if (format == GSA_ADDRESS_ONLY)
     {
-      inet_ntop(AF_INET6, &self->sin6.sin6_addr, text, n);
+      if (IN6_IS_ADDR_V4MAPPED(&self->sin6.sin6_addr))
+        inet_ntop(AF_INET, &self->sin6.sin6_addr.s6_addr[12], text, n);
+      else
+        inet_ntop(AF_INET6, &self->sin6.sin6_addr, text, n);
     }
   else
     g_assert_not_reached();
@@ -411,6 +415,12 @@ static void
 g_sockaddr_inet6_set_port(GSockAddr *s, guint16 port)
 {
   g_sockaddr_inet6_get_sa(s)->sin6_port = htons(port);
+}
+
+gboolean
+g_sockaddr_inet6_is_v4_mapped(GSockAddr *s)
+{
+  return IN6_IS_ADDR_V4MAPPED(&g_sockaddr_inet6_get_sa(s)->sin6_addr);
 }
 
 static GSockAddrFuncs inet6_sockaddr_funcs =

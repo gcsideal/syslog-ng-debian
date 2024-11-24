@@ -16,22 +16,22 @@ modules_kafka_tests_test_kafka_config_SOURCES = \
 modules_kafka_tests_test_kafka_topic_SOURCES = \
 	modules/kafka/tests/test_kafka_topic.c
 
-modules_kafka_tests_test_kafka_props_DEPENDENCIES =      \
+EXTRA_modules_kafka_tests_test_kafka_props_DEPENDENCIES =      \
         $(top_builddir)/modules/kafka/libkafka.la
 
-modules_kafka_tests_test_kafka_config_DEPENDENCIES =	\
+EXTRA_modules_kafka_tests_test_kafka_config_DEPENDENCIES =	\
         $(top_builddir)/modules/kafka/libkafka.la
 
-modules_kafka_tests_test_kafka_topic_DEPENDENCIES =      \
-        $(top_builddir)/modules/kafka/libkafka.la  
+EXTRA_modules_kafka_tests_test_kafka_topic_DEPENDENCIES =      \
+        $(top_builddir)/modules/kafka/libkafka.la
 
 modules_kafka_tests_test_kafka_props_CFLAGS	= $(TEST_CFLAGS) -I$(top_srcdir)/modules/kafka
 
-modules_kafka_tests_test_kafka_config_CFLAGS	= $(TEST_CFLAGS) -I$(top_srcdir)/modules/kafka
+modules_kafka_tests_test_kafka_config_CFLAGS	= $(TEST_CFLAGS) -I$(top_srcdir)/modules/kafka $(LIBRDKAFKA_CFLAGS)
 
-modules_kafka_tests_test_kafka_topic_CFLAGS	= $(TEST_CFLAGS) -I$(top_srcdir)/modules/kafka
+modules_kafka_tests_test_kafka_topic_CFLAGS	= $(TEST_CFLAGS) -I$(top_srcdir)/modules/kafka $(LIBRDKAFKA_CFLAGS)
 
-modules_kafka_tests_test_kafka_props_LDADD	= $(TEST_LDADD) 
+modules_kafka_tests_test_kafka_props_LDADD	= $(TEST_LDADD)
 
 modules_kafka_tests_test_kafka_config_LDADD	= $(TEST_LDADD) $(LIBRDKAFKA_LIBS)
 

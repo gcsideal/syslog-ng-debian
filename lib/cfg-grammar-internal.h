@@ -42,6 +42,9 @@
 
 #include "filter/filter-expr-parser.h"
 #include "filter/filter-pipe.h"
+#include "filterx/filterx-parser.h"
+#include "filterx/filterx-expr.h"
+#include "filterx/filterx-pipe.h"
 #include "parser/parser-expr-parser.h"
 #include "rewrite/rewrite-expr-parser.h"
 #include "block-ref-parser.h"
@@ -49,6 +52,7 @@
 #include "cfg-block.h"
 #include "cfg-path.h"
 #include "multi-line/multi-line-factory.h"
+#include "metrics/dyn-metrics-template.h"
 
 #include "logthrsource/logthrfetcherdrv.h"
 #include "logthrdest/logthrdestdrv.h"
@@ -77,7 +81,6 @@ extern LogSchedulerOptions *last_scheduler_options;
 extern LogParser *last_parser;
 extern FilterExprNode *last_filter_expr;
 extern LogTemplateOptions *last_template_options;
-extern LogTemplate *last_template;
 extern ValuePairs *last_value_pairs;
 extern ValuePairsTransformSet *last_vp_transset;
 extern LogMatcherOptions *last_matcher_options;
@@ -88,6 +91,7 @@ extern LogRewrite *last_rewrite;
 extern CfgArgs *last_block_args;
 extern DNSCacheOptions *last_dns_cache_options;
 extern MultiLineOptions *last_multi_line_options;
+extern DynMetricsTemplate *last_dyn_metrics_template;
 
 
 #endif

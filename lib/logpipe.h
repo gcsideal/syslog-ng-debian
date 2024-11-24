@@ -27,6 +27,7 @@
 
 #include "syslog-ng.h"
 #include "logmsg/logmsg.h"
+#include "filterx/filterx-eval.h"
 #include "cfg.h"
 #include "atomic.h"
 #include "messages.h"
@@ -40,6 +41,10 @@
 #define NC_FILE_EOF    5
 #define NC_REOPEN_REQUIRED 6
 #define NC_FILE_DELETED 7
+
+/* notify result mask values */
+#define NR_OK          0x0000
+#define NR_STOP_ON_EOF 0x0001
 
 /* indicates that the LogPipe was initialized */
 #define PIF_INITIALIZED       0x0001
@@ -70,6 +75,9 @@
 
 /* node created directly by the user */
 #define PIF_CONFIG_RELATED    0x0100
+
+/* sync filterx state and message in right before calling queue() */
+#define PIF_SYNC_FILTERX      0x0200
 
 /* private flags range, to be used by other LogPipe instances for their own purposes */
 
@@ -214,28 +222,59 @@ struct _LogPathOptions
   gboolean flow_control_requested;
 
   gboolean *matched;
-  const LogPathOptions *parent;
+  const LogPathOptions *lpo_parent_junction;
+  FilterXEvalContext *filterx_context;
 };
 
 #define LOG_PATH_OPTIONS_INIT { TRUE, FALSE, NULL, NULL }
 #define LOG_PATH_OPTIONS_INIT_NOACK { FALSE, FALSE, NULL, NULL }
 
-static inline void
-log_path_options_push_junction(LogPathOptions *local_path_options, gboolean *matched, const LogPathOptions *parent)
+/*
+ * Embed a step in our LogPathOptions chain.
+ */
+static inline LogPathOptions *
+log_path_options_chain(LogPathOptions *local_path_options, const LogPathOptions *lpo_previous_hop)
 {
-  *local_path_options = *parent;
-  local_path_options->matched = matched;
-  local_path_options->parent = parent;
+  *local_path_options = *lpo_previous_hop;
+  return local_path_options;
 }
 
+/* LogPathOptions are chained up at the start of a junction and teared down
+ * at the end (see log_path_options_pop_junction().
+ *
+ * The "matched" value is kept separate on the parent level and the junction
+ * level.  This way the junction can separately act on matching/non-matching
+ * messages and potentially propagate it to the parent (or not), see
+ * logmpx.c for details.
+ * */
+static inline void
+log_path_options_push_junction(LogPathOptions *local_path_options,
+                               gboolean *matched,
+                               const LogPathOptions *lpo_parent_junction)
+{
+  *local_path_options = *lpo_parent_junction;
+  local_path_options->matched = matched;
+  local_path_options->lpo_parent_junction = lpo_parent_junction;
+}
+
+/* Part of the junction related state needs to be "popped" once the
+ * conditional decision is concluded.  This happens in the `if (filter)`
+ * form, once the filter is evaluated, or at the end of the junction.  This
+ * basically resets the "matched" pointer to that of the parent junction.
+ */
 static inline void
 log_path_options_pop_conditional(LogPathOptions *local_path_options)
 {
-  if (local_path_options->parent)
-    local_path_options->matched = local_path_options->parent->matched;
+  if (local_path_options->lpo_parent_junction)
+    local_path_options->matched = local_path_options->lpo_parent_junction->matched;
 }
 
 /*
+ * Tear down the embedded junction related state from the LogPathOptions
+ * chain.  This implies log_path_options_pop_conditional() as well, which
+ * will do nothing if there was a conditional midpoint (e.g.  `if
+ * (filter)`).
+ *
  * NOTE: we need to be optional about ->parent being set, as synthetic
  * messages (e.g.  the likes emitted by db-parser/grouping-by() may arrive
  * at the end of a junction without actually crossing the beginning of the
@@ -248,8 +287,8 @@ log_path_options_pop_junction(LogPathOptions *local_path_options)
 {
   log_path_options_pop_conditional(local_path_options);
 
-  if (local_path_options->parent)
-    local_path_options->parent = local_path_options->parent->parent;
+  if (local_path_options->lpo_parent_junction)
+    local_path_options->lpo_parent_junction = local_path_options->lpo_parent_junction->lpo_parent_junction;
 }
 
 typedef struct _LogPipeOptions LogPipeOptions;
@@ -297,7 +336,7 @@ struct _LogPipe
   LogPipe *(*clone)(LogPipe *self);
 
   void (*free_fn)(LogPipe *self);
-  void (*notify)(LogPipe *self, gint notify_code, gpointer user_data);
+  gint (*notify)(LogPipe *self, gint notify_code, gpointer user_data);
   GList *info;
 };
 
@@ -352,6 +391,8 @@ log_pipe_init(LogPipe *s)
       if (!s->init || s->init(s))
         {
           s->flags |= PIF_INITIALIZED;
+          if (s->cfg)
+            cfg_tree_register_initialized_pipe(&s->cfg->tree, s);
           return TRUE;
         }
       return FALSE;
@@ -370,6 +411,8 @@ log_pipe_deinit(LogPipe *s)
 
           if (s->post_deinit)
             s->post_deinit(s);
+          if (s->cfg)
+            cfg_tree_deregister_initialized_pipe(&s->cfg->tree, s);
           return TRUE;
         }
       return FALSE;
@@ -424,9 +467,12 @@ log_pipe_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
         }
     }
 
+  if ((s->flags & PIF_SYNC_FILTERX))
+    filterx_eval_sync_message(path_options->filterx_context, &msg, path_options);
+
   if (G_UNLIKELY(s->flags & (PIF_HARD_FLOW_CONTROL | PIF_JUNCTION_END | PIF_CONDITIONAL_MIDPOINT)))
     {
-      local_path_options = *path_options;
+      path_options = log_path_options_chain(&local_path_options, path_options);
       if (s->flags & PIF_HARD_FLOW_CONTROL)
         {
           local_path_options.flow_control_requested = 1;
@@ -440,7 +486,6 @@ log_pipe_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
         {
           log_path_options_pop_conditional(&local_path_options);
         }
-      path_options = &local_path_options;
     }
 
   if (s->queue)
@@ -461,11 +506,12 @@ log_pipe_clone(LogPipe *self)
   return self->clone(self);
 }
 
-static inline void
+static inline gint
 log_pipe_notify(LogPipe *s, gint notify_code, gpointer user_data)
 {
   if (s->notify)
-    s->notify(s, notify_code, user_data);
+    return s->notify(s, notify_code, user_data);
+  return NR_OK;
 }
 
 static inline void

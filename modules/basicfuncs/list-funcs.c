@@ -393,9 +393,9 @@ string_matcher_prepare_pcre(StringMatcher *self)
       PCRE2_UCHAR error_message[128];
 
       pcre2_get_error_message(rc, error_message, sizeof(error_message));
-      msg_warning("$(list-search): Failed to JIT compile regular expression",
-                  evt_tag_str("regexp", self->pattern),
-                  evt_tag_str("error", (gchar *) error_message));
+      msg_debug("$(list-search): Failed to JIT compile regular expression, continuing without JIT",
+                evt_tag_str("regexp", self->pattern),
+                evt_tag_str("error", (gchar *) error_message));
     }
   return TRUE;
 }
@@ -445,7 +445,7 @@ string_matcher_match(StringMatcher *self, const char *string, gsize string_len)
     case SMM_SUBSTRING:
       return (strstr(string, self->pattern) != NULL);
     case SMM_GLOB:
-      return (g_pattern_match_string(self->glob, string));
+      return (g_pattern_spec_match_string(self->glob, string));
     case SMM_PCRE:
       return (string_matcher_match_pcre(self, string, string_len));
     default:

@@ -291,7 +291,7 @@ affile_dw_queue(LogPipe *s, LogMessage *lm, const LogPathOptions *path_options)
   AFFileDestWriter *self = (AFFileDestWriter *) s;
 
   g_mutex_lock(&self->lock);
-  self->last_msg_stamp = cached_g_current_time_sec();
+  self->last_msg_stamp = get_cached_realtime_sec();
   if (self->last_open_stamp == 0)
     self->last_open_stamp = self->last_msg_stamp;
 
@@ -309,6 +309,15 @@ affile_dw_queue(LogPipe *s, LogMessage *lm, const LogPathOptions *path_options)
   g_mutex_unlock(&self->lock);
 
   log_pipe_forward_msg(&self->super, lm, path_options);
+}
+
+static void
+affile_dw_unset_owner(AFFileDestWriter *self)
+{
+  if (self->owner)
+    log_pipe_unref(&self->owner->super.super.super);
+
+  self->owner = NULL;
 }
 
 static void
@@ -353,7 +362,7 @@ affile_dw_free(LogPipe *s)
   log_pipe_free_method(s);
 }
 
-static void
+static gint
 affile_dw_notify(LogPipe *s, gint notify_code, gpointer user_data)
 {
   AFFileDestWriter *self = (AFFileDestWriter *)s;
@@ -368,6 +377,7 @@ affile_dw_notify(LogPipe *s, gint notify_code, gpointer user_data)
     default:
       break;
     }
+  return NR_OK;
 }
 
 static AFFileDestWriter *
@@ -519,7 +529,7 @@ affile_dd_reuse_writer(gpointer key, gpointer value, gpointer user_data)
   affile_dw_set_owner(writer, self);
   if (!log_pipe_init(&writer->super))
     {
-      affile_dw_set_owner(writer, NULL);
+      affile_dw_unset_owner(writer);
       log_pipe_unref(&writer->super);
       g_hash_table_remove(self->writer_hash, key);
     }

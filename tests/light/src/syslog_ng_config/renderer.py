@@ -20,7 +20,11 @@
 # COPYING for details.
 #
 #############################################################################
+from src.syslog_ng_config import stringify
+from src.syslog_ng_config.statements import ArrowedOptions
 from src.syslog_ng_config.statements.filters.filter import Filter
+from src.syslog_ng_config.statements.template.template import Template
+from src.syslog_ng_config.statements.template.template import TemplateFunction
 
 
 def render_version(version):
@@ -61,6 +65,45 @@ def render_options(name, options):
     return config_snippet
 
 
+def render_arrowed_options(name, keys):
+    config_snippet = "         {}(\n".format(name)
+    for key, value in keys.items():
+        config_snippet += "        {} => {}\n".format(stringify(key), value)
+    config_snippet += "        )\n"
+
+    return config_snippet
+
+
+def render_template_statement(template):
+    if not template.use_simple_statement:
+        config_snippet = "template {} {{\n".format(template.name)
+        config_snippet += "        template({});\n".format(stringify(template.template))
+        if template.template_escape is not None:
+            config_snippet += "        template-escape({});\n".format(template.template_escape)
+        config_snippet += "};\n"
+    else:
+        config_snippet = "template {} {};\n".format(template.name, stringify(template.template))
+    return config_snippet
+
+
+def render_template_function(template):
+    return "template-function {} {};\n".format(template.name, stringify(template.template))
+
+
+def render_template(template):
+    if isinstance(template, Template):
+        return render_template_statement(template)
+    elif isinstance(template, TemplateFunction):
+        return render_template_function(template)
+
+
+def render_templates(templates):
+    config_snippet = ""
+    for template in templates:
+        config_snippet += render_template(template)
+    return config_snippet
+
+
 def render_list(name, options):
     config_snippet = ""
 
@@ -82,7 +125,9 @@ def render_driver_options(driver_options):
     config_snippet = ""
 
     for option_name, option_value in driver_options.items():
-        if isinstance(option_value, dict):
+        if isinstance(option_value, ArrowedOptions):
+            config_snippet += render_arrowed_options(option_name, option_value)
+        elif isinstance(option_value, dict):
             config_snippet += render_options(option_name, option_value)
         elif (isinstance(option_value, tuple) or isinstance(option_value, list)):
             config_snippet += render_list(option_name, option_value)
@@ -164,6 +209,8 @@ class ConfigRenderer(object):
         version = self.__syslog_ng_config["version"]
         includes = self.__syslog_ng_config["includes"]
         global_options = self.__syslog_ng_config["global_options"]
+        preamble = self.__syslog_ng_config["preamble"]
+        templates = self.__syslog_ng_config["templates"]
         statement_groups = self.__syslog_ng_config["statement_groups"]
         logpath_groups = self.__syslog_ng_config["logpath_groups"]
 
@@ -175,6 +222,10 @@ class ConfigRenderer(object):
             config += render_includes(includes)
         if global_options:
             config += render_global_options(global_options)
+        if preamble:
+            config += preamble
+        if templates:
+            config += render_templates(templates)
         if statement_groups:
             config += render_statement_groups(statement_groups)
         if logpath_groups:

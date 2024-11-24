@@ -288,8 +288,6 @@ cfg_is_shutting_down(GlobalConfig *cfg)
 gboolean
 cfg_init(GlobalConfig *cfg)
 {
-  gint regerr;
-
   msg_apply_config_log_level(cfg->log_level);
   if (cfg->file_template_name && !(cfg->file_template = cfg_tree_lookup_template(&cfg->tree, cfg->file_template_name)))
     msg_error("Error resolving file template",
@@ -300,6 +298,7 @@ cfg_init(GlobalConfig *cfg)
 
   if (cfg->bad_hostname_re)
     {
+      gint regerr;
       if ((regerr = regcomp(&cfg->bad_hostname, cfg->bad_hostname_re, REG_NOSUB | REG_EXTENDED)) != 0)
         {
           gchar buf[256];
@@ -364,9 +363,12 @@ cfg_set_version(GlobalConfig *self, gint version)
 {
   if (self->user_version != 0)
     {
-      msg_warning("WARNING: you have multiple @version directives in your configuration, only the first one is considered",
+      msg_warning("WARNING: The @version directive must be placed at the top of the main configuration file "
+                  "(preferably as the very first line), preceding any @include directives and other configuration "
+                  "elements, otherwise, the current version will be used. If you specify multiple @version directives "
+                  "in your configuration, only the first one will be considered",
                   cfg_format_config_version_tag(self),
-                  cfg_format_version_tag("new-version", version));
+                  cfg_format_version_tag("ignored-version", version));
       return TRUE;
     }
   cfg_set_version_without_validation(self, version);
@@ -693,9 +695,10 @@ cfg_read_config(GlobalConfig *self, const gchar *fname, gchar *preprocess_into)
 
       if (self->user_version == 0)
         {
-          msg_error("ERROR: configuration files without a version number have become unsupported in " VERSION_3_13
-                    ", please specify a version number using @version as the first line in the configuration file");
-          return FALSE;
+          msg_warning("WARNING: no version information provided in the configuration file. Please specify `current` "
+                      "to use the latest version and silence this warning, or specify a specific version number using "
+                      "@version as the first line in the configuration file.");
+          cfg_set_current_version(self);
         }
 
       if (res)

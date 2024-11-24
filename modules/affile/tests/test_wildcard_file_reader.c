@@ -25,6 +25,8 @@
 #include "apphook.h"
 #include "wildcard-file-reader.h"
 #include "logpipe.h"
+#include "poll-file-changes.h"
+
 #include "iv.h"
 #include <glib/gstdio.h>
 #include <unistd.h>
@@ -42,6 +44,9 @@ static void
 _eof(FileReader *reader, gpointer user_data)
 {
   TestFileStateEvent *test = (TestFileStateEvent *) user_data;
+
+  cr_assert_eq(test->deleted_eof_called, FALSE);
+
   test->deleted_eof_called = TRUE;
 }
 
@@ -73,9 +78,15 @@ void file_reader_queue_method(LogPipe *s, LogMessage *msg, const LogPathOptions 
   return;
 }
 
-void file_reader_notify_method(LogPipe *s, gint notify_code, gpointer user_data)
+gint file_reader_notify_method(LogPipe *s, gint notify_code, gpointer user_data)
 {
-  return;
+  return NR_OK;
+}
+
+gboolean
+log_reader_is_opened(LogReader *self)
+{
+  return TRUE;
 }
 
 #if SYSLOG_NG_USE_CONST_IVYKIS_MOCK
@@ -94,9 +105,12 @@ void iv_task_register(struct iv_task *_t)
 
 void file_reader_init_instance(FileReader *self, const gchar *filename,
                                FileReaderOptions *options, FileOpener *opener,
-                               LogSrcDriver *owner, GlobalConfig *cfg)
+                               LogSrcDriver *owner, GlobalConfig *cfg,
+                               const gchar *persist_name_prefix)
 {
   log_pipe_init_instance(&self->super, cfg);
+  self->reader = log_reader_new(cfg);
+  self->reader->poll_events = poll_file_changes_new(-1, "", 1, &self->super);
   return;
 }
 
@@ -105,8 +119,9 @@ static void
 _init(void)
 {
   app_startup();
+  configuration = cfg_new_snippet();
   test_event = test_deleted_file_state_event_new();
-  reader = (WildcardFileReader *)wildcard_file_reader_new(TEST_FILE_NAME, NULL, NULL, NULL, NULL);
+  reader = (WildcardFileReader *)wildcard_file_reader_new(TEST_FILE_NAME, NULL, NULL, NULL, configuration);
   wildcard_file_reader_on_deleted_file_eof(reader, _eof, test_event);
   cr_assert_eq(log_pipe_init(&reader->super.super), TRUE);
 }
@@ -117,6 +132,8 @@ _teardown(void)
   log_pipe_deinit(&reader->super.super);
   log_pipe_unref(&reader->super.super);
   free(test_event);
+  if (configuration)
+    cfg_free(configuration);
   app_shutdown();
 }
 
@@ -124,15 +141,8 @@ TestSuite(test_wildcard_file_reader, .init = _init, .fini = _teardown);
 
 Test(test_wildcard_file_reader, constructor)
 {
-  cr_assert_eq(reader->file_state.eof, FALSE);
+  cr_assert_eq(reader->file_state.deleted_eof, FALSE);
   cr_assert_eq(reader->file_state.deleted, FALSE);
-}
-
-Test(test_wildcard_file_reader, msg_read)
-{
-  reader->file_state.eof = TRUE;
-  log_pipe_queue(&reader->super.super, NULL, &path_options);
-  cr_assert_eq(reader->file_state.eof, FALSE);
 }
 
 Test(test_wildcard_file_reader, notif_deleted)
@@ -140,37 +150,44 @@ Test(test_wildcard_file_reader, notif_deleted)
   log_pipe_queue(&reader->super.super, NULL, &path_options);
   log_pipe_notify(&reader->super.super, NC_FILE_DELETED, NULL);
   cr_assert_eq(reader->file_state.deleted, TRUE);
+  cr_assert_eq(reader->file_state.deleted_eof, FALSE);
 }
-
 
 Test(test_wildcard_file_reader, notif_eof)
 {
   log_pipe_queue(&reader->super.super, NULL, &path_options);
   log_pipe_notify(&reader->super.super, NC_FILE_EOF, NULL);
-  cr_assert_eq(reader->file_state.eof, TRUE);
+  cr_assert_eq(reader->file_state.deleted_eof, FALSE);
 }
 
-Test(test_wildcard_file_reader, status_change_deleted_not_eof)
+Test(test_wildcard_file_reader, notif_eof_after_deleted)
 {
   log_pipe_queue(&reader->super.super, NULL, &path_options);
-  log_pipe_notify(&reader->super.super, NC_FILE_DELETED, NULL);
-  cr_assert_eq(test_event->deleted_eof_called, FALSE);
+
+  cr_assert_eq(reader->file_state.deleted_eof, FALSE);
+  cr_assert_eq(reader->file_state.deleted, FALSE);
+
+  gint result = log_pipe_notify(&reader->super.super, NC_FILE_DELETED, NULL);
+  cr_assert_eq(result & NR_STOP_ON_EOF, 0);
+
+  result = log_pipe_notify(&reader->super.super, NC_FILE_EOF, NULL);
+  cr_assert_eq(result & NR_STOP_ON_EOF, NR_STOP_ON_EOF);
+  cr_assert_eq(reader->file_state.deleted_eof, TRUE);
 }
 
 Test(test_wildcard_file_reader, status_change_deleted_eof)
 {
   log_pipe_queue(&reader->super.super, NULL, &path_options);
-  log_pipe_notify(&reader->super.super, NC_FILE_DELETED, NULL);
-  log_pipe_notify(&reader->super.super, NC_FILE_EOF, NULL);
-  cr_assert_eq(test_event->deleted_eof_called, TRUE);
-}
 
-Test(test_wildcard_file_reader, status_finished_then_delete)
-{
-  log_pipe_queue(&reader->super.super, NULL, &path_options);
+  cr_assert_eq(reader->file_state.deleted_eof, FALSE);
+  cr_assert_eq(reader->file_state.deleted, FALSE);
+
   log_pipe_notify(&reader->super.super, NC_FILE_EOF, NULL);
   cr_assert_eq(test_event->deleted_eof_called, FALSE);
 
   log_pipe_notify(&reader->super.super, NC_FILE_DELETED, NULL);
+  cr_assert_eq(test_event->deleted_eof_called, FALSE);
+
+  log_pipe_notify(&reader->super.super, NC_FILE_EOF, NULL);
   cr_assert_eq(test_event->deleted_eof_called, TRUE);
 }

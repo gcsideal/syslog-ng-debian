@@ -26,6 +26,7 @@
 #include "cfg-lexer-subst.h"
 #include "cfg-block-generator.h"
 #include "cfg-grammar.h"
+#include "cfg.h"
 #include "block-ref-parser.h"
 #include "pragma-parser.h"
 #include "messages.h"
@@ -96,6 +97,9 @@ cfg_lexer_push_context(CfgLexer *self, gint type, CfgLexerKeyword *keywords, con
   context->keywords = keywords;
   memcpy(&context->desc, desc, strlen(desc) + 1);
   self->context_stack = g_list_prepend(self->context_stack, context);
+
+  if (cfg_lexer_get_context_type(self) == LL_CONTEXT_FILTERX)
+    cfg_lexer_push_filterx_state(self);
 }
 
 /*
@@ -106,6 +110,9 @@ cfg_lexer_push_context(CfgLexer *self, gint type, CfgLexerKeyword *keywords, con
 void
 cfg_lexer_pop_context(CfgLexer *self)
 {
+  if (cfg_lexer_get_context_type(self) == LL_CONTEXT_FILTERX)
+    cfg_lexer_pop_filterx_state(self);
+
   if (self->context_stack)
     {
       g_free((gchar *) self->context_stack->data);
@@ -622,7 +629,7 @@ cfg_lexer_include_file_glob_at(CfgLexer *self, CfgIncludeLevel *level, const gch
 
   r = glob(pattern, GLOB_NOMAGIC, _cfg_lexer_glob_err, &globbuf);
 
-  if (r != 0)
+  if (r != 0 || globbuf.gl_pathc == 0)
     {
       globfree(&globbuf);
       if (r == GLOB_NOMATCH)
@@ -634,9 +641,8 @@ cfg_lexer_include_file_glob_at(CfgLexer *self, CfgIncludeLevel *level, const gch
               return TRUE;
             }
 #endif
-          return FALSE;
         }
-      return TRUE;
+      return FALSE;
     }
 
   for (i = 0; i < globbuf.gl_pathc; i++)
@@ -963,6 +969,26 @@ cfg_lexer_append_preprocessed_output(CfgLexer *self, const gchar *token_text)
     g_string_append_printf(self->preprocess_output, "%s", token_text);
 }
 
+static CfgTokenBlock *
+_construct_block_ref_prelude(CfgLexer *self)
+{
+  CfgTokenBlock *block;
+  CFG_STYPE token;
+
+  /* we inject one token to a new token-block:
+   *  1) the context from which the block ref parser is invoked
+   */
+  block = cfg_token_block_new();
+
+  /* add plugin->type as a token */
+  memset(&token, 0, sizeof(token));
+  token.type = LL_TOKEN;
+  token.token = cfg_lexer_get_context_type(self);
+  cfg_token_block_add_and_consume_token(block, &token);
+
+  return block;
+}
+
 static gboolean
 cfg_lexer_parse_and_run_block_generator(CfgLexer *self, Plugin *p, CFG_STYPE *yylval)
 {
@@ -975,10 +1001,11 @@ cfg_lexer_parse_and_run_block_generator(CfgLexer *self, Plugin *p, CFG_STYPE *yy
 
   gint saved_line = level->lloc.first_line;
   gint saved_column = level->lloc.first_column;
-  CfgParser *gen_parser = p->parser;
-  if (gen_parser && !cfg_parser_parse(gen_parser, self, (gpointer *) &args, NULL))
+
+  cfg_lexer_inject_token_block(self, _construct_block_ref_prelude(self));
+  if (!cfg_parser_parse(p->parser, self, (gpointer *) &args, NULL))
     {
-      cfg_parser_cleanup(gen_parser, args);
+      cfg_parser_cleanup(p->parser, args);
 
       level->lloc.first_line = saved_line;
       level->lloc.first_column = saved_column;
@@ -997,8 +1024,8 @@ cfg_lexer_parse_and_run_block_generator(CfgLexer *self, Plugin *p, CFG_STYPE *yy
   success = cfg_block_generator_generate(gen, self->cfg, args, result,
                                          cfg_lexer_format_location(self, &level->lloc, buf, sizeof(buf)));
 
-  free(yylval->cptr);
-  cfg_parser_cleanup(gen_parser, args);
+  cfg_lexer_free_token(yylval);
+  cfg_parser_cleanup(p->parser, args);
 
   if (!success)
     {
@@ -1081,6 +1108,15 @@ cfg_lexer_preprocess(CfgLexer *self, gint tok, CFG_STYPE *yylval, CFG_LTYPE *yyl
 
       return CLPR_LEX_AGAIN;
     }
+  else if (cfg_lexer_get_context_type(self) != LL_CONTEXT_PRAGMA && !self->first_non_pragma_seen)
+    {
+      /* Config version must be set before the first non-pragma element to avoid
+       * version-specific inconsistencies (e.g. template functions). */
+      if (cfg_get_user_version(self->cfg) == 0)
+        cfg_set_current_version(self->cfg);
+
+      self->first_non_pragma_seen = TRUE;
+    }
 
   return CLPR_OK;
 }
@@ -1112,9 +1148,27 @@ cfg_lexer_lex(CfgLexer *self, CFG_STYPE *yylval, CFG_LTYPE *yylloc)
             cfg_lexer_start_block_state(self, "{}");
           else if (cfg_lexer_get_context_type(self) == LL_CONTEXT_BLOCK_ARG)
             cfg_lexer_start_block_state(self, "()");
+          else if (cfg_lexer_get_context_type(self) == LL_CONTEXT_BLOCK_FUNCARG)
+            cfg_lexer_start_block_arg_state(self);
 
           tok = cfg_lexer_lex_next_token(self, yylval, yylloc);
           cfg_lexer_append_preprocessed_output(self, self->token_pretext->str);
+
+          if (cfg_lexer_get_context_type(self) == LL_CONTEXT_TEMPLATE_REF)
+            {
+              cfg_lexer_pop_context(self);
+
+              if ((tok == LL_IDENTIFIER || tok == LL_STRING))
+                {
+
+                  LogTemplate *template = cfg_tree_lookup_template(&configuration->tree, yylval->cptr);
+                  if (template != NULL)
+                    {
+                      tok = LL_TEMPLATE_REF;
+                      log_template_unref(template);
+                    }
+                }
+            }
         }
 
       preprocess_result = cfg_lexer_preprocess(self, tok, yylval, yylloc);
@@ -1223,6 +1277,7 @@ static const gchar *lexer_contexts[] =
   [LL_CONTEXT_BLOCK_ARG] = "block-arg",
   [LL_CONTEXT_BLOCK_REF] = "block-ref",
   [LL_CONTEXT_BLOCK_CONTENT] = "block-content",
+  [LL_CONTEXT_BLOCK_FUNCARG] = "block-func-arg",
   [LL_CONTEXT_PRAGMA] = "pragma",
   [LL_CONTEXT_FORMAT] = "format",
   [LL_CONTEXT_TEMPLATE_FUNC] = "template-func",
@@ -1232,6 +1287,11 @@ static const gchar *lexer_contexts[] =
   [LL_CONTEXT_SERVER_PROTO] = "server-proto",
   [LL_CONTEXT_OPTIONS] = "options",
   [LL_CONTEXT_CONFIG] = "config",
+  [LL_CONTEXT_TEMPLATE_REF] = "template-ref",
+  [LL_CONTEXT_FILTERX] = "filterx",
+  [LL_CONTEXT_FILTERX_SIMPLE_FUNC] = "filterx-simple-func",
+  [LL_CONTEXT_FILTERX_ENUM] = "filterx-enum",
+  [LL_CONTEXT_FILTERX_FUNC] = "filterx-func",
 };
 
 gint

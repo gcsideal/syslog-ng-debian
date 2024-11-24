@@ -22,6 +22,7 @@
 
 #include "directory-monitor.h"
 #include "timeutils/misc.h"
+#include "mainloop-call.h"
 
 #include <stdio.h>
 #include <errno.h>
@@ -144,6 +145,14 @@ _get_real_path(DirectoryMonitor *self)
 void
 directory_monitor_stop(DirectoryMonitor *self)
 {
+  msg_debug("Stopping directory monitor", evt_tag_str("dir", self->dir));
+
+  if (FALSE == main_loop_is_main_thread())
+    {
+      main_loop_call((MainLoopTaskFunc) directory_monitor_stop, self, TRUE);
+      return;
+    }
+
   if (iv_timer_registered(&self->check_timer))
     {
       iv_timer_unregister(&self->check_timer);
@@ -178,17 +187,6 @@ _collect_all_files(DirectoryMonitor *self, GDir *directory)
 }
 
 static void
-_arm_recheck_timer(DirectoryMonitor *self)
-{
-  iv_validate_now();
-  self->check_timer.cookie = self;
-  self->check_timer.handler = (GDestroyNotify) directory_monitor_start;
-  self->check_timer.expires = iv_now;
-  timespec_add_msec(&self->check_timer.expires, self->recheck_time);
-  iv_timer_register(&self->check_timer);
-}
-
-static void
 _set_real_path(DirectoryMonitor *self)
 {
   if (self->real_path)
@@ -197,8 +195,21 @@ _set_real_path(DirectoryMonitor *self)
 }
 
 void
+rearm_timer(struct iv_timer *rescan_timer, gint rearm_time)
+{
+  iv_validate_now();
+  rescan_timer->expires = iv_now;
+  timespec_add_msec(&rescan_timer->expires, rearm_time);
+  iv_timer_register(rescan_timer);
+}
+
+void
 directory_monitor_start(DirectoryMonitor *self)
 {
+  msg_debug("Starting directory monitor", evt_tag_str("dir", self->dir), evt_tag_str("dir_monitor_method", self->method));
+
+  main_loop_assert_main_thread();
+
   GDir *directory = NULL;
   GError *error = NULL;
   if (self->watches_running)
@@ -212,7 +223,7 @@ directory_monitor_start(DirectoryMonitor *self)
       msg_error("Can not open directory",
                 evt_tag_str("base_dir", self->real_path),
                 evt_tag_str("error", error->message));
-      _arm_recheck_timer(self);
+      rearm_timer(&self->check_timer, self->recheck_time);
       g_error_free(error);
       return;
     }
@@ -245,17 +256,27 @@ directory_monitor_schedule_destroy(DirectoryMonitor *self)
 void
 directory_monitor_stop_and_destroy(DirectoryMonitor *self)
 {
-  msg_debug("Stopping directory monitor", evt_tag_str("dir", self->dir));
+  if (FALSE == main_loop_is_main_thread())
+    {
+      main_loop_call((MainLoopTaskFunc) directory_monitor_stop_and_destroy, self, TRUE);
+      return;
+    }
+
   directory_monitor_stop(self);
   directory_monitor_free(self);
 }
 
 void
-directory_monitor_init_instance(DirectoryMonitor *self, const gchar *dir, guint recheck_time)
+directory_monitor_init_instance(DirectoryMonitor *self, const gchar *dir, guint recheck_time, const gchar *method)
 {
+  self->method = method;
   self->dir = g_strdup(dir);
   self->recheck_time = recheck_time;
+
   IV_TIMER_INIT(&self->check_timer);
+  self->check_timer.handler = (GDestroyNotify) directory_monitor_start;
+  self->check_timer.cookie = self;
+
   IV_TASK_INIT(&self->scheduled_destructor);
   self->scheduled_destructor.cookie = self;
   self->scheduled_destructor.handler = (GDestroyNotify)directory_monitor_stop_and_destroy;
@@ -265,7 +286,7 @@ DirectoryMonitor *
 directory_monitor_new(const gchar *dir, guint recheck_time)
 {
   DirectoryMonitor *self = g_new0(DirectoryMonitor, 1);
-  directory_monitor_init_instance(self, dir, recheck_time);
+  directory_monitor_init_instance(self, dir, recheck_time, "unknown");
   return self;
 }
 

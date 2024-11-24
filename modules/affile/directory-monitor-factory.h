@@ -31,13 +31,14 @@ typedef enum
   MM_AUTO,
   MM_POLL,
   MM_INOTIFY,
+  MM_KQUEUE,
   MM_UNKNOWN
 } MonitorMethod;
 
 typedef struct _DirectoryMonitorOptions
 {
   const gchar *dir;
-  guint follow_freq;
+  guint monitor_freq;
   MonitorMethod method;
 } DirectoryMonitorOptions;
 

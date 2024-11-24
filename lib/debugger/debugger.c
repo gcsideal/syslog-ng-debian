@@ -74,7 +74,7 @@ _display_msg_details(Debugger *self, LogMessage *msg)
 
   log_msg_values_foreach(msg, _format_nvpair, NULL);
   g_string_truncate(output, 0);
-  log_msg_format_tags(msg, output);
+  log_msg_format_tags(msg, output, TRUE);
   printf("TAGS=%s\n", output->str);
   printf("\n");
   g_string_free(output, TRUE);
@@ -411,7 +411,7 @@ debugger_perform_tracing(Debugger *self, LogPipe *pipe_, LogMessage *msg)
 
   long diff = prev_ts->tv_sec == 0 ? 0 : timespec_diff_nsec(&ts, prev_ts);
   printf("[%"G_GINT64_FORMAT".%09"G_GINT64_FORMAT" +%ld] Tracing %s\n",
-         ts.tv_sec, ts.tv_nsec, diff,
+         (gint64)ts.tv_sec, (gint64)ts.tv_nsec, diff,
          log_expr_node_format_location(pipe_->expr_node, buf, sizeof(buf)));
   *prev_ts = ts;
   return TRUE;

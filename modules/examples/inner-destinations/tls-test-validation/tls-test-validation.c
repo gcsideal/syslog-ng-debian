@@ -52,15 +52,27 @@ _slot_append_test_identity(TlsTestValidationPlugin *self, AFSocketTLSCertificate
 static gboolean
 _attach(LogDriverPlugin *s, LogDriver *driver)
 {
-  SignalSlotConnector *ssc = driver->super.signal_slot_connector;
+  g_assert(s->signal_connector == NULL);
+  s->signal_connector = signal_slot_connector_ref(driver->super.signal_slot_connector);
 
   msg_debug("TlsTestValidationPlugin::attach()",
-            evt_tag_printf("SignalSlotConnector", "%p", ssc));
+            evt_tag_printf("SignalSlotConnector", "%p", s->signal_connector));
 
-  /* DISCONNECT: the whole SignalSlotConnector is destroyed when the owner LogDriver is freed up, so DISCONNECT is not required */
-  CONNECT(ssc, signal_afsocket_tls_certificate_validation, _slot_append_test_identity, s);
+  CONNECT(s->signal_connector, signal_afsocket_tls_certificate_validation, _slot_append_test_identity, s);
 
   return TRUE;
+}
+
+static void
+_detach(LogDriverPlugin *s, LogDriver *driver)
+{
+  msg_debug("TlsTestValidationPlugin::detach()",
+            evt_tag_printf("SignalSlotConnector", "%p", s->signal_connector));
+
+  DISCONNECT(s->signal_connector, signal_afsocket_tls_certificate_validation, _slot_append_test_identity, s);
+
+  signal_slot_connector_unref(s->signal_connector);
+  s->signal_connector = NULL;
 }
 
 static void
@@ -80,6 +92,7 @@ tls_test_validation_plugin_new(void)
   log_driver_plugin_init_instance(&self->super, TLS_TEST_VALIDATION_PLUGIN);
 
   self->super.attach = _attach;
+  self->super.detach = _detach;
   self->super.free_fn = _free;
 
   return self;

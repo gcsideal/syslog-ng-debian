@@ -10,7 +10,7 @@ modules_basicfuncs_libbasicfuncs_la_LIBADD	=	\
 	$(MODULE_DEPS_LIBS)
 modules_basicfuncs_libbasicfuncs_la_LDFLAGS	=	\
 	$(MODULE_LDFLAGS)
-modules_basicfuncs_libbasicfuncs_la_DEPENDENCIES=	\
+EXTRA_modules_basicfuncs_libbasicfuncs_la_DEPENDENCIES=	\
 	$(MODULE_DEPS_LIBS)
 
 EXTRA_DIST					+=	\
@@ -26,6 +26,7 @@ EXTRA_DIST					+=	\
 	modules/basicfuncs/tf-template.c		\
 	modules/basicfuncs/tf-iterate.c			\
 	modules/basicfuncs/tf-map.c			\
+	modules/basicfuncs/tf-tag.c			\
 	modules/basicfuncs/tf-filter.c			\
 	modules/basicfuncs/vp-funcs.c			\
 	modules/basicfuncs/CMakeLists.txt

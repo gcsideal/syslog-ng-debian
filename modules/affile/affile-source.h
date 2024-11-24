@@ -37,8 +37,12 @@ typedef struct _AFFileSourceDriver
   FileOpener *file_opener;
   FileReaderOptions file_reader_options;
   FileOpenerOptions file_opener_options;
+  gchar *transport_name;
+  gsize transport_name_len;
 } AFFileSourceDriver;
 
+void affile_sd_set_transport_name(AFFileSourceDriver *s, const gchar *transport_name);
+gboolean affile_sd_init(LogPipe *s);
 AFFileSourceDriver *affile_sd_new_instance(gchar *filename, GlobalConfig *cfg);
 LogDriver *affile_sd_new(gchar *filename, GlobalConfig *cfg);
 

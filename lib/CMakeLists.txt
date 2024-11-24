@@ -19,12 +19,14 @@ add_subdirectory(control)
 add_subdirectory(healthcheck)
 add_subdirectory(debugger)
 add_subdirectory(filter)
+add_subdirectory(filterx)
 add_subdirectory(logmsg)
 add_subdirectory(logproto)
 add_subdirectory(multi-line)
 add_subdirectory(parser)
 add_subdirectory(rewrite)
 add_subdirectory(stats)
+add_subdirectory(metrics)
 add_subdirectory(template)
 add_subdirectory(transport)
 add_subdirectory(value-pairs)
@@ -44,12 +46,14 @@ set(LIB_SUBDIR_HEADERS
     ${HEALTHCHECK_HEADERS}
     ${DEBUGGER_HEADERS}
     ${FILTER_HEADERS}
+    ${FILTERX_HEADERS}
     ${LOGMSG_HEADERS}
     ${LOGPROTO_HEADERS}
     ${MULTI_LINE_HEADERS}
     ${PARSER_HEADERS}
     ${REWRITE_HEADERS}
     ${STATS_HEADERS}
+    ${METRICS_HEADERS}
     ${TEMPLATE_HEADERS}
     ${TRANSPORT_HEADERS}
     ${VALUE_PAIRS_HEADERS}
@@ -63,6 +67,7 @@ set(LIB_SUBDIR_HEADERS
     ${LOGTHRSOURCE_HEADERS}
     ${SIGNAL_SLOT_CONNECTOR_HEADERS}
     ${CMAKE_CURRENT_BINARY_DIR}/filter/filter-expr-grammar.h
+    ${CMAKE_CURRENT_BINARY_DIR}/filterx/filterx-grammar.h
     ${CMAKE_CURRENT_BINARY_DIR}/rewrite/rewrite-expr-grammar.h
     ${CMAKE_CURRENT_BINARY_DIR}/parser/parser-expr-grammar.h
 )
@@ -82,8 +87,10 @@ set (LIB_HEADERS
     cfg-block.h
     cfg-block-generator.h
     cfg-grammar-internal.h
+    cfg-helpers.h
     cfg-parser.h
     cfg-path.h
+    cfg-source.h
     cfg-tree.h
     cfg-walker.h
     cfg-persist.h
@@ -127,6 +134,7 @@ set (LIB_HEADERS
     mainloop-control.h
     msg-format.h
     msg-stats.h
+    on-error.h
     parse-number.h
     pathutils.h
     persist-state.h
@@ -179,8 +187,10 @@ set(LIB_SOURCES
     cfg-lexer.c
     cfg-lexer-subst.c
     cfg-grammar-internal.c
+    cfg-helpers.c
     cfg-parser.c
     cfg-path.c
+    cfg-source.c
     cfg-tree.c
     cfg-walker.c
     cfg-persist.c
@@ -224,6 +234,7 @@ set(LIB_SOURCES
     mainloop-control.c
     msg-format.c
     msg-stats.c
+    on-error.c
     parse-number.c
     pathutils.c
     persist-state.c
@@ -256,12 +267,14 @@ set(LIB_SOURCES
     ${HEALTHCHECK_SOURCES}
     ${DEBUGGER_SOURCES}
     ${FILTER_SOURCES}
+    ${FILTERX_SOURCES}
     ${LOGMSG_SOURCES}
     ${LOGPROTO_SOURCES}
     ${MULTI_LINE_SOURCES}
     ${PARSER_SOURCES}
     ${REWRITE_SOURCES}
     ${STATS_SOURCES}
+    ${METRICS_SOURCES}
     ${TEMPLATE_SOURCES}
     ${TRANSPORT_SOURCES}
     ${VALUE_PAIRS_SOURCES}
@@ -276,6 +289,7 @@ set(LIB_SOURCES
     ${PROJECT_BINARY_DIR}/lib/cfg-lex.c
     ${PROJECT_BINARY_DIR}/lib/pragma-grammar.c
     ${CMAKE_CURRENT_BINARY_DIR}/filter/filter-expr-grammar.c
+    ${CMAKE_CURRENT_BINARY_DIR}/filterx/filterx-grammar.c
     ${CMAKE_CURRENT_BINARY_DIR}/rewrite/rewrite-expr-grammar.c
     ${CMAKE_CURRENT_BINARY_DIR}/parser/parser-expr-grammar.c
     )
@@ -313,6 +327,17 @@ set_source_files_properties(
     PROPERTIES
     COMPILE_FLAGS ${BISON_BUILT_SOURCE_CFLAGS})
 
+generate_y_from_ym (lib/filterx/filterx-grammar)
+bison_target(FilterXGrammar
+    ${CMAKE_CURRENT_BINARY_DIR}/filterx/filterx-grammar.y
+    ${CMAKE_CURRENT_BINARY_DIR}/filterx/filterx-grammar.c
+    COMPILE_FLAGS ${BISON_FLAGS})
+add_flex_bison_dependency(CfgLexer FilterXGrammar)
+set_source_files_properties(
+    ${CMAKE_CURRENT_BINARY_DIR}/filterx/filterx-grammar.c
+    PROPERTIES
+    COMPILE_FLAGS ${BISON_BUILT_SOURCE_CFLAGS})
+
 generate_y_from_ym (lib/rewrite/rewrite-expr-grammar)
 bison_target(RewriteExprGrammar
     ${CMAKE_CURRENT_BINARY_DIR}/rewrite/rewrite-expr-grammar.y
@@ -338,6 +363,7 @@ set_source_files_properties(
 set(CORE_INCLUDE_DIRS
     ${Gettext_INCLUDE_DIR}
     ${IVYKIS_INCLUDE_DIR}
+    ${JSONC_INCLUDE_DIR}
     ${LIBPCRE_INCLUDE_DIRS}
     ${Libsystemd_INCLUDE_DIRS}
 )
@@ -365,6 +391,7 @@ target_link_libraries(
     GLib::GModule
     ${Gettext_LIBRARIES}
     ${IVYKIS_LIBRARY}
+    ${JSONC_LIBRARY}
     ${LIBPCRE_LIBRARIES}
     ${Libsystemd_LIBRARIES}
     resolv
@@ -378,6 +405,8 @@ target_link_libraries(
 set_target_properties(syslog-ng
     PROPERTIES VERSION ${SYSLOG_NG_VERSION}
     SOVERSION ${SYSLOG_NG_VERSION})
+
+gperf_generate(severity-aliases.table ${CMAKE_CURRENT_BINARY_DIR}/severity-aliases.h syslog-ng)
 
 if (${IVYKIS_INTERNAL})
    add_dependencies(syslog-ng IVYKIS)
@@ -393,11 +422,13 @@ install(FILES ${CONTROL_HEADERS} DESTINATION include/syslog-ng/control)
 install(FILES ${HEALTHCHECK_HEADERS} DESTINATION include/syslog-ng/healthcheck)
 install(FILES ${DEBUGGER_HEADERS} DESTINATION include/syslog-ng/debugger)
 install(FILES ${FILTER_HEADERS} DESTINATION include/syslog-ng/filter)
+install(FILES ${FILTERX_HEADERS} DESTINATION include/syslog-ng/filterx)
 install(FILES ${LOGMSG_HEADERS} DESTINATION include/syslog-ng/logmsg)
 install(FILES ${LOGPROTO_HEADERS} DESTINATION include/syslog-ng/logproto)
 install(FILES ${PARSER_HEADERS} DESTINATION include/syslog-ng/parser)
 install(FILES ${REWRITE_HEADERS} DESTINATION include/syslog-ng/rewrite)
 install(FILES ${STATS_HEADERS} DESTINATION include/syslog-ng/stats)
+install(FILES ${METRICS_HEADERS} DESTINATION include/syslog-ng/metrics)
 install(FILES ${TEMPLATE_HEADERS} DESTINATION include/syslog-ng/template)
 install(FILES ${TRANSPORT_HEADERS} DESTINATION include/syslog-ng/transport)
 install(FILES ${CSV_SCANNER_HEADERS} DESTINATION include/syslog-ng/scanner/csv-scanner)

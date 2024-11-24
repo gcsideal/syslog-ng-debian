@@ -41,6 +41,21 @@ if (NOT DEFINED ENABLE_GRPC OR ENABLE_GRPC)
   endif()
 
   if (GRPC_DEPS_FOUND)
+    # Workaround of https://github.com/protocolbuffers/protobuf/issues/18307
+    # The latest (BSD variants) protobuf builds are forcibly bound to libupd, so
+    # find_package(gRPC...) will fail with
+    #     Targets not yet defined: protobuf::libupb, protobuf::protoc-gen-upb,
+    #     protobuf::protoc-gen-upbdefs, protobuf::protoc-gen-upb_minitable
+    # Try to satisfy it temporally.
+    #
+    find_library (UPB_LIBRARIES NAMES upb)
+    if (UPB_LIBRARIES)
+      add_library(protobuf::libupb STATIC IMPORTED)
+      add_executable(protobuf::protoc-gen-upb IMPORTED)
+      add_executable(protobuf::protoc-gen-upbdefs IMPORTED)
+      add_executable(protobuf::protoc-gen-upb_minitable IMPORTED)
+    endif()
+
     find_package(gRPC 1.16.1 QUIET)
 
     if (NOT gRPC_FOUND)
@@ -57,18 +72,25 @@ endif()
 
 module_switch(ENABLE_GRPC "Enable GRPC" GRPC_DEPS_FOUND)
 
-if (NOT ENABLE_GRPC)
-  return()
+if (ENABLE_GRPC)
+  set (CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard" FORCE)
+  set (CMAKE_CXX_STANDARD_REQUIRED ON CACHE BOOL "C++ standard is a requirement" FORCE)
+
+  include(ProtobufGenerateCpp)
+
+  set(MODULE_GRPC_LIBS
+    gRPC::grpc
+    gRPC::grpc++
+    protobuf::libprotobuf)
+
+  add_subdirectory(credentials)
+  add_subdirectory(metrics)
+  add_subdirectory(protos)
 endif()
 
-add_subdirectory(credentials)
-
-include(ProtobufGenerateCpp)
-
-set(MODULE_GRPC_LIBS
-  gRPC::grpc
-  gRPC::grpc++
-  protobuf::libprotobuf)
-
-add_subdirectory(protos)
+# These are intentionally not inside the above if (ENABLE_GRPC) block
+# Let any other possible module_switch-es take effect and is being always visible
+# (all modules are protected via ENABLE_GRPC as well)
+add_subdirectory(loki)
 add_subdirectory(otel)
+add_subdirectory(bigquery)

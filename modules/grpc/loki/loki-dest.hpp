@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) 2024 Axoflow
+ * Copyright (c) 2024 Attila Szakacs <attila.szakacs@axoflow.com>
  * Copyright (c) 2023 László Várady
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -26,13 +28,13 @@
 #include "loki-dest.h"
 
 #include "compat/cpp-start.h"
-#include "syslog-ng.h"
 #include "template/templates.h"
 #include "stats/stats-cluster-key-builder.h"
 #include "logmsg/logmsg.h"
 #include "compat/cpp-end.h"
 
 #include "credentials/grpc-credentials-builder.hpp"
+#include "metrics/grpc-metrics.hpp"
 
 #include <string>
 #include <vector>
@@ -98,9 +100,17 @@ public:
     this->message = msg;
   }
 
-  void set_timestamp(LogMessageTimeStamp t)
+  bool set_timestamp(const char *t)
   {
-    this->timestamp = t;
+    if (strcasecmp(t, "current") == 0)
+      this->timestamp = LM_TS_PROCESSED;
+    else if (strcasecmp(t, "received") == 0)
+      this->timestamp = LM_TS_RECVD;
+    else if (strcasecmp(t, "msg") == 0)
+      this->timestamp = LM_TS_STAMP;
+    else
+      return false;
+    return true;
   }
 
   void set_keepalive_time(int t)
@@ -118,6 +128,27 @@ public:
     this->keepalive_max_pings_without_data = p;
   }
 
+  void set_tenant_id(std::string tid)
+  {
+    this->tenant_id = tid;
+  }
+
+  void add_extra_channel_arg(std::string name, long value)
+  {
+    this->int_extra_channel_args.push_back(std::pair<std::string, long> {name, value});
+  }
+
+  void add_extra_channel_arg(std::string name, std::string value)
+  {
+    this->string_extra_channel_args.push_back(std::pair<std::string, std::string> {name, value});
+  }
+
+  void add_header(std::string name, std::string value)
+  {
+    std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+    this->headers.push_back(std::pair<std::string, std::string> {name, value});
+  }
+
   const std::string &get_url()
   {
     return this->url;
@@ -131,6 +162,7 @@ private:
   LogTemplateOptions template_options;
 
   std::string url;
+  std::string tenant_id;
 
   LogTemplate *message = nullptr;
   std::vector<Label> labels;
@@ -142,6 +174,12 @@ private:
   int keepalive_time;
   int keepalive_timeout;
   int keepalive_max_pings_without_data;
+
+  std::list<std::pair<std::string, long>> int_extra_channel_args;
+  std::list<std::pair<std::string, std::string>> string_extra_channel_args;
+  std::list<std::pair<std::string, std::string>> headers;
+
+  DestDriverMetrics metrics;
 };
 
 

@@ -7,6 +7,7 @@ compatinclude_HEADERS		= 	\
 	lib/compat/compat.h		\
 	lib/compat/getutent.h		\
 	lib/compat/glib.h		\
+	lib/compat/json.h		\
 	lib/compat/lfs.h		\
 	lib/compat/pio.h		\
 	lib/compat/socket.h		\
@@ -20,7 +21,9 @@ compatinclude_HEADERS		= 	\
 	lib/compat/getent-generic.h	\
 	lib/compat/un.h			\
 	lib/compat/cpp-start.h	\
-	lib/compat/cpp-end.h
+	lib/compat/cpp-end.h	\
+	lib/compat/curl.h	\
+	lib/compat/inttypes.h
 
 compat_sources			= 	\
 	lib/compat/getutent.c		\

@@ -27,11 +27,23 @@
 #include "parser/parser-expr.h"
 #include "scanner/csv-scanner/csv-scanner.h"
 
+typedef struct _CSVParserColumn
+{
+  gchar *name;
+  LogMessageValueType type;
+} CSVParserColumn;
+
+CSVParserColumn *csv_parser_column_new(const gchar *name, LogMessageValueType type);
+void csv_parser_column_free(CSVParserColumn *s);
+
 CSVScannerOptions *csv_parser_get_scanner_options(LogParser *s);
+void csv_parser_set_columns(LogParser *s, GList *columns);
 gboolean csv_parser_set_flags(LogParser *s, guint32 flags);
 void csv_parser_set_drop_invalid(LogParser *s, gboolean drop_invalid);
 void csv_parser_set_prefix(LogParser *s, const gchar *prefix);
+void csv_parser_set_list_name(LogParser *s, const gchar *list_name);
 LogParser *csv_parser_new(GlobalConfig *cfg);
+void csv_parser_set_on_error(LogParser *s, gint on_error);
 
 guint32 csv_parser_lookup_flag(const gchar *flag);
 gint csv_parser_lookup_dialect(const gchar *flag);

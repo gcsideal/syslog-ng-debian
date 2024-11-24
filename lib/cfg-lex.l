@@ -159,7 +159,7 @@ yy_filter_input(CfgLexer *self, gchar *buf, gsize buf_size)
 #define YY_USER_ACTION                                                  \
   do {                                                                  \
     CFG_LTYPE *cur_lloc = &yyextra->include_stack[yyextra->include_depth].lloc; \
-    if (YY_START == INITIAL)                                            \
+    if (YY_START == INITIAL || YY_START == filterx) 			\
       {                                                                 \
         cur_lloc->first_column = cur_lloc->last_column;                 \
       }                                                                 \
@@ -171,7 +171,7 @@ yy_filter_input(CfgLexer *self, gchar *buf, gsize buf_size)
 
 #define YY_BREAK \
   do {                                                                  \
-    if (yyextra->token_text && YY_START == INITIAL)                     \
+    if (yyextra->token_text && (YY_START == INITIAL || YY_START == filterx)) \
       {                                                                 \
         g_string_append_len(yyextra->token_pretext, yyextra->token_text->str, yyextra->token_text->len); \
         g_string_truncate(yyextra->token_text, 0);                      \
@@ -251,6 +251,11 @@ _cfg_lex_extend_token_location_to_next_line(CfgLexer *lexer)
 #define YYSTYPE CFG_STYPE
 #define YYLTYPE CFG_LTYPE
 
+#pragma GCC diagnostic ignored "-Wswitch-default"
+#if (defined(__GNUC__) && __GNUC__ >= 6) || (defined(__clang__) && __clang_major__ >= 10)
+#  pragma GCC diagnostic ignored "-Wmisleading-indentation"
+#endif
+
 %}
 
 %option bison-bridge bison-locations reentrant
@@ -268,26 +273,30 @@ odigit  [0-7]
 alpha		[a-zA-Z]
 alphanum	[a-zA-Z0-9]
 word	[^ \#'"\(\)\{\}\[\]\\;\r\n\t,|\.@:]
+filterx_word	[^ \#'"/\(\)\{\}\[\]\\;\r\n\t,|\.@:]
 
 /* block related states must be last, as we use this fact in YY_INPUT */
+%x filterx
 %x string
 %x qstring
+%x slash_string
 %x block
+%x block_arg
 %x block_content
 %x block_string
 %x block_qstring
 %%
 
-\#                         {
+<INITIAL,filterx>\#        {
                              _process_commented_line(yyscanner,yyextra->token_text,yyextra->token_text);
                            }
-^@                         {
+<INITIAL,filterx>^@        {
                              return LL_PRAGMA;
                            }
 
     /* continuation line: just move the location and skip the newline character */
-\\\r?\n                    { _cfg_lex_extend_token_location_to_next_line(yyextra); }
-\r?\n                      {
+<INITIAL,filterx>\\\r?\n   { _cfg_lex_extend_token_location_to_next_line(yyextra); }
+<INITIAL,filterx>\r?\n     {
                              *yylloc = yyextra->include_stack[yyextra->include_depth].lloc;
                              _cfg_lex_move_token_location_to_new_line(yyextra);
                              if (yyextra->tokenize_eol)
@@ -295,67 +304,103 @@ word	[^ \#'"\(\)\{\}\[\]\\;\r\n\t,|\.@:]
                              else
                                g_string_append(yyextra->string_buffer, yytext);
                            }
-{white}+		   ;
-\.\.                       { return LL_DOTDOT; }
-\.\.\.                     { return LL_DOTDOTDOT; }
-=>                         { return LL_ARROW; }
-(-|\+)?{digit}+\.{digit}+  { yylval->fnum = strtod(yytext, NULL); return LL_FLOAT; }
-0x{xdigit}+ 		   {
+<INITIAL,filterx>{white}+  ;
+<INITIAL,filterx>\.\.      { return LL_DOTDOT; }
+<INITIAL,filterx>\.\.\.    { return LL_DOTDOTDOT; }
+<INITIAL,filterx>=>        { return LL_ARROW; }
+<INITIAL,filterx>=         { return KW_ASSIGN; }
+<INITIAL,filterx><	   { return KW_TA_LT; }
+<INITIAL,filterx><=        { return KW_TA_LE; }
+<INITIAL,filterx>==        { return KW_TA_EQ; }
+<INITIAL,filterx>!=        { return KW_TA_NE; }
+<INITIAL,filterx>>=        { return KW_TA_GE; }
+<INITIAL,filterx>>         { return KW_TA_GT; }
+<INITIAL,filterx>===       { return KW_TAV_EQ; }
+<INITIAL,filterx>!==       { return KW_TAV_NE; }
+<filterx>\+=               { return KW_PLUS_ASSIGN; }
+<filterx>=~                { return KW_REGEXP_MATCH; }
+
+<INITIAL,filterx>(-|\+)?{digit}+\.{digit}+  { yylval->fnum = strtod(yytext, NULL); return LL_FLOAT; }
+<INITIAL,filterx>0x{xdigit}+ {
                              if (!parse_int64_base16(yytext, &yylval->num))
                                {
                                  return LL_ERROR;
                                }
                              return LL_NUMBER;
                            }
-0{odigit}+		   {
+<INITIAL,filterx>0{odigit}+ {
                              if (!parse_int64_base8(yytext, &yylval->num))
                                {
                                  return LL_ERROR;
                                }
                              return LL_NUMBER;
                            }
-(-|\+)?{digit}+(M|m|G|g|k|K)?(i|I)?(b|B)? {
+<INITIAL,filterx>(-|\+)?{digit}+(M|m|G|g|k|K)?(i|I)?(b|B)? {
                              if (!parse_int64_with_suffix(yytext, &yylval->num))
                                {
                                  return LL_ERROR;
                                }
                              return LL_NUMBER;
                            }
-({word}+(\.)?)*{word}+ 	   { return cfg_lexer_map_word_to_token(yyextra, yylval, yylloc, yytext); }
-\,			   ;
 
-\"                         {
+    /* this is the original LL_IDENTIFIER pattern, which basically allows almost everything as an unquoted string */
+<INITIAL>({word}+(\.)?)*{word}+    { return cfg_lexer_map_word_to_token(yyextra, yylval, yylloc, yytext); }
+
+    /* and this is the version in filterx, which only allows "traditional" identifiers */
+<filterx>[a-zA-Z][_a-zA-Z0-9]* 	   { return cfg_lexer_map_word_to_token(yyextra, yylval, yylloc, yytext); }
+<filterx>\$\{([^}]+)\}   { yylval->cptr = strndup(yytext+2, strlen(yytext) - 3); return LL_MESSAGE_REF; }
+<INITIAL>\,	   	   ;
+
+<INITIAL,filterx>\"        {
 			     g_string_truncate(yyextra->string_buffer, 0);
 			     yy_push_state(string, yyscanner);
 			   }
-\'			   {
+<INITIAL,filterx>\'	   {
 			     g_string_truncate(yyextra->string_buffer, 0);
 			     yy_push_state(qstring, yyscanner);
 			   }
-.                          { return (unsigned char) yytext[0]; }
+<filterx>\/		   {
+			     g_string_truncate(yyextra->string_buffer, 0);
+			     yy_push_state(slash_string, yyscanner);
+			   }
+<INITIAL,filterx>.         { return (unsigned char) yytext[0]; }
 
     /* continuation line within a string: just move the location and skip the newline character as if it was never there */
-<string,qstring>\\\r?\n    { _cfg_lex_extend_token_location_to_next_line(yyextra); }
-<string>\\a		   { g_string_append_c(yyextra->string_buffer, 7); }
-<string>\\n	   	   { g_string_append_c(yyextra->string_buffer, 10); }
-<string>\\r		   { g_string_append_c(yyextra->string_buffer, 13); }
-<string>\\t		   { g_string_append_c(yyextra->string_buffer, 9); }
-<string>\\v		   { g_string_append_c(yyextra->string_buffer, 11); }
-<string>\\x{xdigit}{1,2}   { g_string_append_c(yyextra->string_buffer, strtol(yytext+2, NULL, 16)); }
-<string>\\o{odigit}{1,3}   { g_string_append_c(yyextra->string_buffer, strtol(yytext+2, NULL, 8)); }
-<string>\\[^anrtv]	   { g_string_append_c(yyextra->string_buffer, yytext[1]); }
-<string>\"		   {
-			     yy_pop_state(yyscanner);
-			     yylval->cptr = strdup(yyextra->string_buffer->str);
-			     return LL_STRING;
-		           }
-<string>[^"\\\r\n]+	   { g_string_append(yyextra->string_buffer, yytext); }
+<string,qstring,slash_string>\\\r?\n    { _cfg_lex_extend_token_location_to_next_line(yyextra); }
+<string,slash_string>\\a		{ g_string_append_c(yyextra->string_buffer, 7); }
+<string,slash_string>\\n	   	{ g_string_append_c(yyextra->string_buffer, 10); }
+<string,slash_string>\\r		{ g_string_append_c(yyextra->string_buffer, 13); }
+<string,slash_string>\\t		{ g_string_append_c(yyextra->string_buffer, 9); }
+<string,slash_string>\\v		{ g_string_append_c(yyextra->string_buffer, 11); }
+<string,slash_string>\\x{xdigit}{1,2}   { g_string_append_c(yyextra->string_buffer, strtol(yytext+2, NULL, 16)); }
+<string,slash_string>\\o{odigit}{1,3}   { g_string_append_c(yyextra->string_buffer, strtol(yytext+2, NULL, 8)); }
+<string>\\[^anrtv]	                { g_string_append_c(yyextra->string_buffer, yytext[1]); }
+<string>[^"\\\r\n]+	                { g_string_append(yyextra->string_buffer, yytext); }
+<string>\"		                {
+			                        yy_pop_state(yyscanner);
+			                        yylval->cptr = strdup(yyextra->string_buffer->str);
+			                        return LL_STRING;
+		                        }
+<slash_string>\\b		        { g_string_append_c(yyextra->string_buffer, 8); }
+<slash_string>\\f		        { g_string_append_c(yyextra->string_buffer, 12); }
+<slash_string>\\\\	                { g_string_append_c(yyextra->string_buffer, '\\'); }
+<slash_string>\\\/	                { g_string_append_c(yyextra->string_buffer, '/'); }
+<slash_string>\\[^anrtvbfox]	        { g_string_append_c(yyextra->string_buffer, yytext[1]); }
+<slash_string>[^\/\\\r\n]+              { g_string_append(yyextra->string_buffer, yytext); }
+<slash_string>\/	                {
+			                        yy_pop_state(yyscanner);
+			                        yylval->cptr = strdup(yyextra->string_buffer->str);
+			                        return LL_STRING;
+			                }
 <qstring>[^'\r\n]+	   { g_string_append(yyextra->string_buffer, yytext); }
 <qstring>\'		   {
 			     yy_pop_state(yyscanner);
 			     yylval->cptr = strdup(yyextra->string_buffer->str);
 			     return LL_STRING;
 			   }
+<string,qstring,slash_string><<EOF>>  {
+                             yy_pop_state(yyscanner); YY_FATAL_ERROR( "Unterminated quote" );
+                           }
 
     /* the rule below will only be applied to embedded newlines within
      * string/qstring.  There's a difference how we handle backslash quotation
@@ -379,7 +424,7 @@ word	[^ \#'"\(\)\{\}\[\]\\;\r\n\t,|\.@:]
      *   - the rule below gets matched and the newline is included in the string
      */
 
-<string,qstring>\r?\n	   {
+<string,qstring,slash_string>\r?\n	   {
                              g_string_append(yyextra->string_buffer, yytext);
                              _cfg_lex_extend_token_location_to_next_line(yyextra);
                            }
@@ -393,7 +438,7 @@ word	[^ \#'"\(\)\{\}\[\]\\;\r\n\t,|\.@:]
 
     /* rules to parse a block as a LL_BLOCK token */
 <block>{white}+            ;
-<block>[^{( \t\r\n]+       { YY_FATAL_ERROR("Expected opening bracket as block boundary, e.g. opening brace or parenthesis"); }
+<block>[^{( \t\r\n]+       { yy_pop_state(yyscanner); YY_FATAL_ERROR("Expected opening bracket as block boundary, e.g. opening brace or parenthesis"); }
 <block>\r?\n		   { _cfg_lex_move_token_location_to_new_line(yyextra); };
 <block>\({white}*\)        { yy_pop_state(yyscanner); yylval->cptr = NULL; return LL_BLOCK; }
 <block>\({white}*\"\"{white}*\) { yy_pop_state(yyscanner); yylval->cptr = g_strdup(""); return LL_BLOCK; }
@@ -449,10 +494,45 @@ word	[^ \#'"\(\)\{\}\[\]\\;\r\n\t,|\.@:]
 
                            }
 
-
 <block_content>[^{}()\"\'\n\r#]+   {
                              g_string_append(yyextra->string_buffer, yytext);
                            }
+
+<block_arg>[\(\[\{]        {
+                             g_string_append_c(yyextra->string_buffer, yytext[0]);
+                             yyextra->brace_count++;
+                           }
+<block_arg>[\)\]\}]        {
+                             if (yyextra->brace_count > 0)
+                               {
+                                 g_string_append_c(yyextra->string_buffer, yytext[0]);
+                                 yyextra->brace_count--;
+                               }
+                             else
+                               {
+                                 yy_pop_state(yyscanner);
+                                 yylval->cptr = strdup(yyextra->string_buffer->str);
+                                 unput(')');
+                                 return LL_BLOCK;
+                               }
+                           }
+
+
+<block_arg>,               {
+                             if (yyextra->brace_count > 0)
+                               {
+                                 g_string_append_c(yyextra->string_buffer, yytext[0]);
+                               }
+                             else
+                               {
+                                 yy_pop_state(yyscanner);
+                                 yylval->cptr = strdup(yyextra->string_buffer->str);
+                                 unput(',');
+                                 return LL_BLOCK;
+                               }
+                           }
+<block_arg>[^\[\]\{\}\(\),]   { g_string_append_c(yyextra->string_buffer, yytext[0]); }
+
 
 <block_string>[^\\"\r\n]+  { g_string_append(yyextra->string_buffer, yytext); }
 <block_string>\\.          { g_string_append(yyextra->string_buffer, yytext); }
@@ -479,7 +559,7 @@ word	[^ \#'"\(\)\{\}\[\]\\;\r\n\t,|\.@:]
                              _cfg_lex_extend_token_location_to_next_line(yyextra);
                            }
 
-<INITIAL><<EOF>>           {
+<INITIAL,filterx><<EOF>>   {
                              if (!cfg_lexer_start_next_include(yyextra))
                                {
                                  if (yyextra->include_depth == 0)
@@ -514,6 +594,28 @@ cfg_lexer_start_block_state(CfgLexer *self, const gchar block_boundary[2])
 {
   memcpy(&self->block_boundary, block_boundary, sizeof(self->block_boundary));
   yy_push_state(block, self->state);
+}
+
+void
+cfg_lexer_start_block_arg_state(CfgLexer *self)
+{
+  g_string_truncate(self->string_buffer, 0);
+  self->brace_count = 0;
+  yy_push_state(block_arg, self->state);
+}
+
+void
+cfg_lexer_push_filterx_state(CfgLexer *self)
+{
+  yy_push_state(filterx, self->state);
+}
+
+void
+cfg_lexer_pop_filterx_state(CfgLexer *self)
+{
+  struct yyguts_t *yyg = self->state;
+  g_assert(YY_START == filterx);
+  yy_pop_state(self->state);
 }
 
 /* avoid warnings of unused symbols */

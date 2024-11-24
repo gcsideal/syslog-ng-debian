@@ -32,6 +32,8 @@ from src.common.pytest_operations import calculate_testcase_name
 
 logger = logging.getLogger(__name__)
 
+base_number_of_open_fds = 0
+
 
 def calculate_report_file_path(working_dir):
     return Path(working_dir, "testcase.reportlog")
@@ -42,9 +44,13 @@ def chdir_to_light_base_dir():
     os.chdir(absolute_light_base_dir)
 
 
-def calculate_working_dir(pytest_config_object, testcase_name):
+def get_report_dir(pytest_config_object):
     chdir_to_light_base_dir()
-    report_dir = Path(pytest_config_object.getoption("--reports")).resolve().absolute()
+    return Path(pytest_config_object.getoption("--reports")).resolve().absolute()
+
+
+def calculate_working_dir(pytest_config_object, testcase_name):
+    report_dir = get_report_dir(pytest_config_object)
     return Path(report_dir, calculate_testcase_name(testcase_name))
 
 
@@ -53,6 +59,18 @@ def pytest_runtest_setup(item):
     working_dir = calculate_working_dir(item.config, item.name)
     logging_plugin.set_log_path(calculate_report_file_path(working_dir))
     os.chdir(working_dir)
+
+
+def pytest_sessionstart(session):
+    global base_number_of_open_fds
+    base_number_of_open_fds = len(psutil.Process().open_files())
+
+    report_dir = get_report_dir(session.config)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    if report_dir.parent.name == "reports":
+        last_report_dir = Path(report_dir.parent, "last")
+        last_report_dir.unlink(True)
+        last_report_dir.symlink_to(report_dir)
 
 
 def light_extra_files(target_dir):
@@ -64,8 +82,10 @@ def light_extra_files(target_dir):
 
 @pytest.fixture(autouse=True)
 def setup(request):
-    assert len(psutil.Process().open_files()) == 1, "Previous testcase has unclosed opened fds"
-    assert len(psutil.Process().connections(kind="inet")) == 0, "Previous testcase has unclosed opened sockets"
+    global base_number_of_open_fds
+    number_of_open_fds = len(psutil.Process().open_files())
+    assert base_number_of_open_fds + 1 == number_of_open_fds, "Previous testcase has unclosed opened fds"
+    assert len(psutil.Process().net_connections(kind="inet")) == 0, "Previous testcase has unclosed opened sockets"
     testcase_parameters = request.getfixturevalue("testcase_parameters")
 
     copy_file(testcase_parameters.get_testcase_file(), Path.cwd())

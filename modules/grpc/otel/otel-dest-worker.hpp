@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2023 Attila Szakacs
+ * Copyright (c) 2024 Axoflow
+ * Copyright (c) 2023-2024 Attila Szakacs <attila.szakacs@axoflow.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published
@@ -70,12 +71,17 @@ public:
   virtual LogThreadedResult flush(LogThreadedFlushMode mode);
 
 protected:
+  void prepare_context(::grpc::ClientContext &context);
+
   void clear_current_msg_metadata();
   void get_metadata_for_current_msg(LogMessage *msg);
 
   virtual ScopeLogs *lookup_scope_logs(LogMessage *msg);
+  virtual ScopeLogs *lookup_fallback_scope_logs(LogMessage *msg);
   virtual ScopeMetrics *lookup_scope_metrics(LogMessage *msg);
   virtual ScopeSpans *lookup_scope_spans(LogMessage *msg);
+
+  bool should_initiate_flush();
 
   bool insert_log_record_from_log_msg(LogMessage *msg);
   void insert_fallback_log_record_from_log_msg(LogMessage *msg);
@@ -88,7 +94,7 @@ protected:
 
 protected:
   OtelDestWorker *super;
-  const DestDriver &owner;
+  DestDriver &owner;
 
   std::shared_ptr<::grpc::Channel> channel;
   std::unique_ptr<LogsService::Stub> logs_service_stub;
@@ -97,10 +103,13 @@ protected:
 
   ExportLogsServiceRequest logs_service_request;
   ExportLogsServiceResponse logs_service_response;
+  size_t logs_current_batch_bytes;
   ExportMetricsServiceRequest metrics_service_request;
   ExportMetricsServiceResponse metrics_service_response;
+  size_t metrics_current_batch_bytes;
   ExportTraceServiceRequest trace_service_request;
   ExportTraceServiceResponse trace_service_response;
+  size_t spans_current_batch_bytes;
 
   ProtobufFormatter formatter;
 
@@ -111,6 +120,8 @@ protected:
     InstrumentationScope scope;
     std::string scope_schema_url;
   } current_msg_metadata;
+
+  ScopeLogs *fallback_msg_scope_logs = nullptr;
 };
 
 }

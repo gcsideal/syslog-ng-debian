@@ -228,10 +228,9 @@ stats_cluster_foreach_counter(StatsCluster *self, StatsForeachCounterFunc func, 
 
   for (type = 0; type < self->counter_group.capacity; type++)
     {
-      if (self->live_mask & (1 << type))
-        {
-          func(self, type, &self->counter_group.counters[type], user_data);
-        }
+      StatsCounterItem *counter = stats_cluster_get_counter(self, type);
+      if (counter)
+        func(self, type, counter, user_data);
     }
 }
 
@@ -359,13 +358,33 @@ stats_cluster_untrack_counter(StatsCluster *self, gint type, StatsCounterItem **
 
   if (self->use_count == 0 && (*counter)->external)
     {
-      (*counter)->external = FALSE;
-      (*counter)->value_ref = NULL;
+      stats_counter_clear(*counter);
       gint type_mask = 1 << type;
       self->live_mask &= ~type_mask;
     }
 
   *counter = NULL;
+}
+
+static inline void
+_reset_counter_if_needed(StatsCluster *sc, gint type, StatsCounterItem *counter, gpointer user_data)
+{
+  if (strcmp(stats_cluster_get_type_name(sc, type), "memory_usage") == 0)
+    return;
+
+  switch (type)
+    {
+    case SC_TYPE_QUEUED:
+      return;
+    default:
+      stats_counter_set(counter, 0);
+    }
+}
+
+void
+stats_cluster_reset_counter_if_needed(StatsCluster *sc, StatsCounterItem *counter)
+{
+  _reset_counter_if_needed(sc, counter->type, counter, NULL);
 }
 
 static gchar *
@@ -395,14 +414,6 @@ stats_cluster_is_alive(StatsCluster *self, gint type)
   g_assert(type < self->counter_group.capacity);
 
   return !!((1<<type) & self->live_mask);
-}
-
-gboolean
-stats_cluster_is_indexed(StatsCluster *self, gint type)
-{
-  g_assert(type < self->counter_group.capacity);
-
-  return !!((1<<type) & self->indexed_mask);
 }
 
 StatsCluster *
@@ -438,7 +449,7 @@ stats_counter_group_free(StatsCounterGroup *self)
 static void
 stats_cluster_free_counter(StatsCluster *self, gint type, StatsCounterItem *item, gpointer user_data)
 {
-  stats_counter_free(item);
+  stats_counter_clear(item);
 }
 
 void
