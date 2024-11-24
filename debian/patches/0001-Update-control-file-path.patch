@@ -9,10 +9,10 @@ upstream default /var/run
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/doc/man/syslog-ng.8.xml b/doc/man/syslog-ng.8.xml
-index a5fd30d..aa6220a 100644
+index 030d434..4df5702 100644
 --- a/doc/man/syslog-ng.8.xml
 +++ b/doc/man/syslog-ng.8.xml
-@@ -81,7 +81,7 @@
+@@ -103,7 +103,7 @@
            <term><command>--control &lt;file&gt; </command> or <command>-c &lt;file&gt;</command>
                      </term>
            <listitem>
