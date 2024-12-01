@@ -1,10 +1,12 @@
-syslog-ng (4.8.1-1~1.gbp043538) UNRELEASED; urgency=medium
-
-  ** SNAPSHOT build @043538f3c13131f10a5c5a78c20fd3d4a3514fa4 **
+syslog-ng (4.8.1-1) unstable; urgency=medium
 
   * New upstream version 4.8.1
+  * Drop patches already applied upstream
+  * Adding gperf as a build-time dependency
+  * Disable cloud-auth for now
+  * Add new scl files
 
- -- SZALAY Attila <sasa@debian.org>  Sun, 24 Nov 2024 12:01:08 +0000
+ -- SZALAY Attila <sasa@debian.org>  Sun, 01 Dec 2024 19:15:26 +0000
 
 syslog-ng (4.4.0-3) unstable; urgency=medium
 
