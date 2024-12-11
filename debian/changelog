@@ -1,3 +1,9 @@
+syslog-ng (4.8.1-2) unstable; urgency=medium
+
+  * Fix arch-indepenendent-only build
+
+ -- SZALAY Attila <sasa@debian.org>  Wed, 11 Dec 2024 20:16:33 +0000
+
 syslog-ng (4.8.1-1) unstable; urgency=medium
 
   * New upstream version 4.8.1
