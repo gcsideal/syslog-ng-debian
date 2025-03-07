@@ -30,6 +30,7 @@ usr/lib/syslog-ng/*/libtimestamp.so
 usr/lib/syslog-ng/*/libcef.so
 usr/lib/syslog-ng/*/libdisk-buffer.so
 usr/lib/syslog-ng/*/libappmodel.so
+usr/lib/syslog-ng/*/libcorrelation.so
 usr/lib/syslog-ng/*/libregexp-parser.so
 usr/lib/syslog-ng/*/librate-limit-filter.so
 usr/lib/syslog-ng/*/libtfgetent.so

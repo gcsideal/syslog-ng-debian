@@ -1,4 +1,4 @@
-syslog-ng (4.8.1-3) UNRELEASED; urgency=medium
+syslog-ng (4.8.1-3) unstable; urgency=medium
 
   [ Luca Boccassi <bluca@debian.org> ]
   * autopkgtest: fix testinitscript to remove correctly systemd-
@@ -7,6 +7,7 @@ syslog-ng (4.8.1-3) UNRELEASED; urgency=medium
   [ Laszlo Boszormenyi (GCS) ]
   * Backport upstream fix for EINVAL complaints seeking /dev/kmsg
     (closes: #1099729).
+  * Readd PatternDB support library to syslog-ng-core.
 
  -- Laszlo Boszormenyi (GCS) <gcs@debian.org>  Fri, 07 Mar 2025 17:32:24 +0100
 
