@@ -8,6 +8,7 @@ syslog-ng (4.8.1-3) unstable; urgency=medium
   * Backport upstream fix for EINVAL complaints seeking /dev/kmsg
     (closes: #1099729).
   * Readd PatternDB support library to syslog-ng-core.
+  * Add required python3-setuptools as build dependency.
 
  -- Laszlo Boszormenyi (GCS) <gcs@debian.org>  Fri, 07 Mar 2025 17:32:24 +0100
 
