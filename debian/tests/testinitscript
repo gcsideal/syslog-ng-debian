@@ -4,7 +4,7 @@
 echo "First reboot the host to activate SystemV init system"
 if [ -z "$ADT_REBOOT_MARK" ]
 then
-    apt install --assume-yes sysvinit-core
+    apt install --assume-yes --allow-remove-essential sysvinit-core systemd-sysv- runit-init-
     cp /usr/share/sysvinit/inittab /etc/inittab
     sed -i "/ttyS0/ s/^#//" /etc/inittab
     /tmp/autopkgtest-reboot "fixinit"
