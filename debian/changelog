@@ -1,3 +1,11 @@
+syslog-ng (4.8.1-2.1) unstable; urgency=high
+
+  * Non-maintainer upload.
+  * autopkgtest: fix testinitscript to remove correctly systemd-
+    sysv/runit-init with the new protected flags (Closes: #1099718)
+
+ -- Luca Boccassi <bluca@debian.org>  Fri, 07 Mar 2025 15:56:14 +0000
+
 syslog-ng (4.8.1-2) unstable; urgency=medium
 
   * Fix arch-indepenendent-only build
