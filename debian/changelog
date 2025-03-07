@@ -1,10 +1,14 @@
-syslog-ng (4.8.1-2.1) unstable; urgency=high
+syslog-ng (4.8.1-3) UNRELEASED; urgency=medium
 
-  * Non-maintainer upload.
+  [ Luca Boccassi <bluca@debian.org> ]
   * autopkgtest: fix testinitscript to remove correctly systemd-
-    sysv/runit-init with the new protected flags (Closes: #1099718)
+    sysv/runit-init with the new protected flags (closes: #1099718).
 
- -- Luca Boccassi <bluca@debian.org>  Fri, 07 Mar 2025 15:56:14 +0000
+  [ Laszlo Boszormenyi (GCS) ]
+  * Backport upstream fix for EINVAL complaints seeking /dev/kmsg
+    (closes: #1099729).
+
+ -- Laszlo Boszormenyi (GCS) <gcs@debian.org>  Fri, 07 Mar 2025 17:32:24 +0100
 
 syslog-ng (4.8.1-2) unstable; urgency=medium
 
