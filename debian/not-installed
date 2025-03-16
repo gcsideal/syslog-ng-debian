@@ -5,7 +5,6 @@ usr/lib/syslog-ng/syslog-ng/libtest/libsyslog-ng-test.a
 usr/lib/*/pkgconfig/syslog-ng-test.pc
 usr/bin/syslog-ng-update-virtualenv
 usr/lib/syslog-ng/*/libmetrics-probe.so
-usr/share/syslog-ng/smart-multi-line.fsm
 usr/share/syslog-ng/include/scl/darwinosl/*
 
 # Need cloud-auth which currently not compile
