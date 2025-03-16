@@ -6,224 +6,3456 @@ Copyright: Copyright (C) Balázs Scheidler
            Copyright (C) BalaBit IT Security Ltd.
 
 Files: *
+Copyright: 2002-2015, Balabit
+ 1996-2015, Balázs Scheidler
+License: BSD-4-Clause-UC and/or GPL-2 and/or LGPL-2.1+
+
+Files: AUTHORS
+  CONTRIBUTING.md
+  NEWS.md
+  VERSION.txt
+  dist.conf.in
+  syslog-ng-config.h.in
+  syslog-ng-native-connector.pc.in
+  syslog-ng.pc.in
 Copyright: Copyright (C) Balázs Scheidler
-           Copyright (C) BalaBit IT Security Ltd.
+ Copyright (C) BalaBit IT Security Ltd.
 License: GPL-2+ with OpenSSL exception
 
-Files: lib/*
-       libtest/*
-       syslog-ng/*
-       syslog-ng-ctl/*
+Files: Makefile.am
+  autogen.sh
+  sub-configure.sh
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: Mk/*
 Copyright: Copyright (C) Balázs Scheidler
-           Copyright (C) BalaBit IT Security Ltd.
-License: LGPL-2.1+ with OpenSSL exception
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
 
-Files: lib/ack-tracker/ack_tracker.h
-       lib/ack-tracker/bookmark.h
-       lib/ack-tracker/early_ack_tracker.c
-       lib/host-id.*
-       lib/ack-tracker/late_ack_tracker.c
-       lib/ringbuffer.*
-       lib/template/common-template-typedefs.h
-Copyright: Copyright (C) BalaBit IT Ltd.
-           Copyright (C) Laszlo Budai
-License: LGPL-2.1+ with OpenSSL exception
-
-Files: modules/*
+Files: cmake/*
 Copyright: Copyright (C) Balázs Scheidler
-           Copyright (C) BalaBit IT Security Ltd.
+ Copyright (C) BalaBit IT Security Ltd.
 License: GPL-2+ with OpenSSL exception
 
-Files: modules/geoip2/*
-       scl/*
-Copyright: Copyright (C) BalaBit IT Security Ltd.
+Files: contrib/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
 License: GPL-2+ with OpenSSL exception
 
-Files: lib/compat/time.h
-       lib/filter/filter-in-list.*
-       lib/logproto/logproto-indented-multiline-server.*
-       lib/logthrdest/logthrdestdrv.*
-       lib/scratch-buffers.*
-       lib/tests/test_cfg_tree.c
-       lib/type-hinting.*
-       lib/value-pairs/value-pairs.*
-       scl/graphite/*
-Copyright: Copyright (C) BalaBit IT Security Ltd.
-           Copyright (C) Gergely Nagy
-License: LGPL-2.1+ with OpenSSL exception
-
-Files: lib/pathutils.*
-       lib/persistable-state-presenter.*
-       lib/presented-persistable-state.h
-       lib/rcptid.*
-       lib/rewrite/rewrite-groupset.c
-       lib/run-id.*
-       lib/tests/test_rcptid.c
-       lib/tests/test_runid.c
-       libtest/config_parse_lib.*
-Copyright: Copyright (C) BalaBit IT Security Ltd.
-           Copyright (C) Viktor Tusa
-           Copyright (C) Viktor Juhasz
-License: LGPL-2.1+ with OpenSSL exception
-
-Files: lib/persistable-state-header.h
-Copyright: Copyright (C) BalaBit IT Security Ltd.
-           Copyright (C) Viktor Tusa
-           Copyright (C) Viktor Juhasz
-           Copyright (C) Balázs Scheidler
-License: LGPL-2.1+ with OpenSSL exception
-
-Files: lib/rewrite/rewrite-groupset.h
-       libtest/persist_lib.*
-Copyright: Copyright (C) BalaBit IT Security Ltd.
-           Copyright (C) Viktor Tusa
-License: LGPL-2.1+ with OpenSSL exception
-
-Files: lib/uuid.*
-Copyright: Copyright (C) BalaBit IT Security Ltd.
-           Copyright (C) Balázs Scheidler
-           Copyright (C) Gergely Nagy
-License: LGPL-2.1+ with OpenSSL exception
-
-Files: lib/cache.*
-       lib/compat/glib.h
-       lib/compat/inet_aton.c
-       lib/compat/lfs.h
-       lib/compat/pio.h
-       lib/compat/socket.h
-       lib/compat/string.h
-       lib/compat/strtok_r.c
-       lib/control/control-server.*
-       lib/control/control-server-unix.c
-       lib/hostname.h
-       lib/hostname-unix.c
-       lib/host-resolve.*
-       lib/reloc.*
-       lib/template/tests/test_template_compile.c
-       lib/tests/test_cache.c
-       lib/tests/test_cfg_lexer_subst.c
-       lib/tests/test_hostname.c
-       lib/tests/test_host_resolve.c
-       lib/logmsg/tests/test_log_message.c
-       lib/tests/test_parse_number.c
-       lib/tests/test_reloc.c
-       lib/tests/test_type_hints.c
-       lib/thread-utils.h
-       lib/versioning.h
-       scl/nodejs/*
-Copyright: Copyright (C) BalaBit IT Security Ltd.
-License: LGPL-2.1+ with OpenSSL exception
-
-Files: modules/afamqp/*
-Copyright: Copyright (C) BalaBit IT Security Ltd.
-           Copyright (C) Nagy, Attila <bra@fsn.hu>
-           Copyright (C) Gergely Nagy
+Files: contrib/init.d.RedHat-7.3
+Copyright: 2000, sysfive.com GmbH
 License: GPL-2+ with OpenSSL exception
 
-Files: modules/kvformat/*
-Copyright: Copyright (C) BalaBit IT Security Ltd.
-License: GPL-2+ with OpenSSL exception
+Files: contrib/relogger.pl
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL
 
-Files: modules/afmongodb/*
-       modules/afsmtp/*
-       modules/afsocket/unix-credentials.*
-       modules/json/json-parser.*
-       modules/json/json-parser-parser.*
-       modules/json/json-plugin.*
-       modules/json/tests/test_format_json.c
-       modules/linux-kmsg-format/*
-       modules/kvformat/tests/test_format_welf.c
-       modules/python/python-dest.*
-       modules/python/python-parser.*
-       modules/python/python-plugin.c
-       modules/python/python-value-pairs.*
-       modules/riemann/*
-       modules/system-source/*
-Copyright: Copyright (c) BalaBit IT Ltd.
-           Copyright (C) Gergely Nagy
-License: GPL-2+ with OpenSSL exception
+Files: contrib/syslog-ng-helm-chart/*
+Copyright: 2020, Nicolas Kowenski
+License: LGPL-2.1+
 
-Files: modules/afsocket/systemd-syslog-source.*
-Copyright: Copyright (C) BalaBit IT Ltd.
-           Copyright (C) Tibor Benke
-           Copyright (C) Balázs Scheidler
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/afsocket/transport-unix-socket.c
-       modules/basicfuncs/cond-funcs.c
-Copyright: Copyright (C) BalaBit IT Ltd.
-           Copyright (C) Gergely Nagy
-           Copyright (C) Balázs Scheidler
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/afstomp/*
-Copyright: Copyright (C) Nagy, Attila <bra@fsn.hu>
-           Copyright (C) BalaBit IT Ltd.
-           Copyright (C) Viktor Tusa
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/afstomp/stomp.*
-Copyright: Copyright (C) Viktor Tusa
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/basicfuncs/str-funcs.c
-Copyright: Copyright (C) BalaBit IT Ltd.
-           Copyright (C) Viktor Tusa
-           Copyright (C) Balázs Scheidler
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/redis/*
-Copyright: Copyright (C) Tihamer Petrovics <tihameri@gmail.com>
-           Copyright (C) BalaBit IT Ltd.
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/cryptofuncs/*
-Copyright: Copyright (c) BalaBit IT Ltd.
-           Copyright (C) Gergely Nagy
-           Copyright (C) Peter Gyongyosi
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/dbparser/patternize.*
-Copyright: Copyright (C) Péter Gyöngyösi
-           Copyright (C) BalaBit IT Security Ltd.
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/graphite/*
-Copyright: Copyright (C) BalaBit IT Ltd.
-           Copyright (C) Viktor Tusa
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/json/format-json.c
-Copyright: Copyright (c) BalaBit IT Ltd.
-           Copyright (C) Balint Kovacs
-           Copyright (C) Gergely Nagy
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/systemd-journal/*
-       modules/java-modules/*
-       modules/java/*
-Copyright: Copyright (C) BalaBit IT Security Ltd.
-           Copyright (C) Viktor Juhasz
-License: GPL-2+ with OpenSSL exception
-
-Files: modules/java-modules/http/src/main/java/org/syslog_ng/http/HTTPDestinationOptions.java
-Copyright: Copyright (C) BalaBit IT Security Ltd.
-           Copyright (C) Adam Arsenault
-           Copyright (C) Viktor Juhasz
-License: GPL-2+ with OpenSSL exception
-
-Files: scl/syslogconf/convert-syslogconf.awk
-Copyright: Jonathan W. Marks <j-marks@uiuc.edu>
-License: GPL-2+ with OpenSSL exception
-
-Files: scl/rewrite/cc-mask.conf
-Copyright: Copyright (C) Márton Illés
+Files: dbld/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
 License: GPL-2+ with OpenSSL exception
 
 Files: debian/*
-Copyright: Copyright (C) 2011-2015 Gergely Nagy <algernon@madhouse-project.org>,
-           Copyright (C) 2010-     Laszlo Boszormenyi (GCS) <gcs@debian.org>
+Copyright: Copyright (C) 2011-2015 Gergely Nagy <algernon@madhouse-project.org>
+ Copyright (C) 2010-     Laszlo Boszormenyi (GCS) <gcs@debian.org>
 License: GPL-2+
+
+Files: debian/man/*
+Copyright: (co 2011, Gergely Nagy
+License: GPL-3
+
+Files: debian/rules
+Copyright: 2011-2014, Gergely Nagy <algernon@madhouse-project.org>
+ 2010-2012, Laszlo Boszormenyi (GCS) <gcs@debian.hu>
+License: GPL-2
+
+Files: dev-utils/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2
+
+Files: dev-utils/plugin_skeleton_creator/Makefile.am
+  dev-utils/plugin_skeleton_creator/plugin_template_Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: dev-utils/plugin_skeleton_creator/create_plugin.sh
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: doc/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: doc/ChangeLog.1
+Copyright: debian/rules debian/syslog-ng.conf
+License: GPL-2+ with OpenSSL exception
+
+Files: doc/man/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: docker/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: docker/Dockerfile
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/*
+Copyright: 2002-2019, Balabit
+ 1998-2019, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/ack-tracker/*
+Copyright: 2020, One Identity
+ 2020, Laszlo Budai
+License: LGPL-2.1+
+
+Files: lib/ack-tracker/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/ack-tracker/ack_tracker.h
+  lib/ack-tracker/bookmark.h
+  lib/ack-tracker/consecutive_ack_tracker.c
+  lib/ack-tracker/consecutive_ack_tracker_factory.c
+  lib/ack-tracker/instant_ack_tracker_bookmarkless.c
+Copyright: 2014, 2016, 2017, 2019, Laszlo Budai
+ 2002-2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/ack-tracker/consecutive_ack_record_container.h
+  lib/ack-tracker/consecutive_ack_record_container_dynamic.c
+  lib/ack-tracker/consecutive_ack_record_container_static.c
+  lib/ack-tracker/consecutive_ack_tracker.h
+Copyright: 2018, 2019, Laszlo Budai <laszlo.budai@outlook.com>
+ 2002-2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/ack-tracker/instant_ack_tracker.c
+  lib/ack-tracker/instant_ack_tracker.h
+Copyright: 2020, One Identity
+ 2020, Laszlo Budai <laszlo.budai@outlook.com>
+License: LGPL-2.1+
+
+Files: lib/ack-tracker/tests/*
+Copyright: 2020, One Identity
+ 2020, Laszlo Budai <laszlo.budai@outlook.com>
+License: LGPL-2.1+
+
+Files: lib/ack-tracker/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/ack-tracker/tests/test_consecutive_ack_record_container.c
+Copyright: 2014, 2016, 2017, 2019, Laszlo Budai
+ 2002-2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/atomic-gssize.h
+  lib/list-adt.h
+  lib/window-size-counter.c
+  lib/window-size-counter.h
+Copyright: 2018, 2019, Laszlo Budai <laszlo.budai@balabit.com>
+ 2002-2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/cache.c
+  lib/cache.h
+  lib/cfg-walker.c
+  lib/cfg-walker.h
+  lib/host-resolve.c
+  lib/host-resolve.h
+  lib/hostname-unix.c
+  lib/hostname.h
+  lib/merge-grammar.py
+  lib/reloc.c
+  lib/reloc.h
+  lib/thread-utils.h
+  lib/versioning.h
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/cfg-grammar-internal.c
+  lib/cfg-grammar-internal.h
+  lib/mainloop-threaded-worker.c
+  lib/mainloop-threaded-worker.h
+Copyright: 2020, 2022, Balázs Scheidler <bazsi77@gmail.com>
+ 2002-2014, Balabit
+ 1998-2013, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/cfg-lexer-subst.c
+  lib/cfg-lexer-subst.h
+  lib/crypto.c
+  lib/crypto.h
+  lib/module-config.c
+  lib/module-config.h
+  lib/utf8utils.c
+  lib/utf8utils.h
+Copyright: 2010-2016, 2019, Balázs Scheidler
+ 2010-2016, 2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/cfg-monitor.c
+  lib/cfg-monitor.h
+Copyright: 2023, László Várady
+License: LGPL-2.1+
+
+Files: lib/cfg-path.c
+  lib/cfg-path.h
+Copyright: 2019, Mehul Prajapati
+ 2002-2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/cfg-persist.h
+Copyright: 2023, Axoflow
+ 2002-2013, Balabit
+ 1998-2012, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/compat/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/compat/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/compat/compat.h
+  lib/compat/getutent.c
+  lib/compat/getutent.h
+  lib/compat/memrchr.c
+  lib/compat/pio.c
+Copyright: 2002-2019, Balabit
+ 1998-2019, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/compat/cpp-end.h
+  lib/compat/cpp-start.h
+Copyright: 2023, Attila Szakacs
+License: LGPL-2.1+
+
+Files: lib/compat/getline.c
+Copyright: 2023, László Várady
+ 2011 The NetBSD Foundation, Inc
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/compat/glib.h
+Copyright: 2011, Ryan Lortie
+ 2002-2013, Balabit
+License: LGPL-2.1+
+
+Files: lib/compat/pcre.h
+Copyright: 2017, Balazs Scheidler
+ 2017, Balabit
+License: LGPL-2.1+
+
+Files: lib/compat/strcasestr.c
+Copyright: 2002-2019, Balabit
+ 1998-2019, Balázs Scheidler
+ 1990, 1993 The Regents of the University of California
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/compat/strnlen.c
+Copyright: 2018, 2019, Kokan
+ 2018, 2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/compat/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/compat/tests/test_strtok_r.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/compat/time.h
+Copyright: 2014, Gergely Nagy <algernon@madhouse-project.org>
+ 2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/control/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/control/control-command-thread.c
+  lib/control/control-command-thread.h
+  lib/control/control-connection.c
+  lib/control/control-connection.h
+  lib/control/control-server-unix.h
+Copyright: 2020-2022, Balazs Scheidler <bazsi77@gmail.com>
+ 2002-2013, 2015, 2016, 2020, Balabit
+License: LGPL-2.1+
+
+Files: lib/control/control-server-unix.c
+  lib/control/control-server.c
+  lib/control/control-server.h
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/control/tests/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/control/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/control/tests/test_control_cmds.c
+Copyright: 2013-2015, Balabit
+ 2013, JuhÃ¡sz Viktor <jviktor@balabit.hu>
+License: LGPL-2.1+
+
+Files: lib/debugger/*
+Copyright: 2010-2016, 2019, Balázs Scheidler
+ 2010-2016, 2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/debugger/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/debugger/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/debugger/tests/test-debugger.c
+Copyright: 2013, 2015, BalÃ¡zs Scheidler <bazsi@balabit.hu>
+ 2013, 2015, Balabit
+License: LGPL-2.1+
+
+Files: lib/dynamic-window-pool.c
+  lib/dynamic-window.c
+Copyright: 2019, László Várady <laszlo.varady@balabit.com>
+ 2019, Laszlo Budai <laszlo.budai@balabit.com>
+ 2002-2019, One Identity
+License: LGPL-2.1+
+
+Files: lib/dynamic-window-pool.h
+  lib/dynamic-window.h
+Copyright: 2019, Laszlo Budai <laszlo.budai@balabit.com>
+ 2002-2019, One Identity
+License: LGPL-2.1+
+
+Files: lib/eventlog/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: BSD-3-clause
+
+Files: lib/eventlog/AUTHORS
+  lib/eventlog/CREDITS
+  lib/eventlog/ChangeLog.0
+  lib/eventlog/NEWS
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/eventlog/ChangeLog
+Copyright: debian/libevtlog-dev.install
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/eventlog/src/*
+Copyright: 2003, BalaBit IT Ltd.
+License: BSD-3-clause
+
+Files: lib/eventlog/src/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/eventlog/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/eventlog/tests/evt_tag_mem.c
+Copyright: 2019-2022, One Identity
+License: LGPL-2.1+
+
+Files: lib/file-perms.c
+  lib/file-perms.h
+Copyright: 2012, 2017, Balazs Scheidler <bazsi@balabit.hu>
+ 2012, 2017, Balabit
+License: LGPL-2.1+
+
+Files: lib/filter/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/filter/filter-in-list.c
+  lib/filter/filter-in-list.h
+Copyright: 2011-2014, Gergely Nagy <algernon@balabit.hu>
+ 2011-2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/filter/filter-netmask6.c
+  lib/filter/filter-netmask6.h
+Copyright: 2014, Zoltan Fried
+ 2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/filter/filter-tags.c
+Copyright: 2012, 2013, Gergely Nagy <algernon@balabit.hu>
+ 2010-2013, Balázs Scheidler
+ 2010-2013, Balabit
+License: LGPL-2.1+
+
+Files: lib/filter/tests/*
+Copyright: 2011-2015, 2018, Balabit
+ 2011-2014, Gergely Nagy <algernon@balabit.hu>
+License: LGPL-2.1+
+
+Files: lib/filter/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/filter/tests/filters-in-list/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/filter/tests/test_filter_call.c
+Copyright: 2018, 2019, Kokan
+ 2018, 2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/filter/tests/test_filters_common.c
+  lib/filter/tests/test_filters_common.h
+  lib/filter/tests/test_filters_statistics.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/filter/tests/test_filters_fop.c
+Copyright: 2019, Szemere
+ 2018, Balabit
+License: LGPL-2.1+
+
+Files: lib/filter/tests/test_filters_fop_cmp.c
+Copyright: 2021, Balazs Scheidler <bazsi77@gmail.com>
+ 2018, Balabit
+ 2013, Gergely Nagy <algernon@balabit.hu>
+License: LGPL-2.1+
+
+Files: lib/filter/tests/test_filters_in_list.c
+Copyright: 2011-2014, Gergely Nagy <algernon@balabit.hu>
+ 2011-2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/filter/tests/test_filters_netmask6.c
+Copyright: 2018, Balabit
+ 2014, Zoltan Fried
+License: LGPL-2.1+
+
+Files: lib/generic-number.c
+  lib/generic-number.h
+Copyright: 2020-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: lib/healthcheck/*
+Copyright: 2023, László Várady <laszlo.varady93@gmail.com>
+License: LGPL-2.1+
+
+Files: lib/healthcheck/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/host-id.c
+  lib/host-id.h
+  lib/pe-versioning.h
+  lib/resolved-configurable-paths.c
+  lib/resolved-configurable-paths.h
+  lib/ringbuffer.c
+  lib/ringbuffer.h
+Copyright: 2014, 2016, 2017, 2019, Laszlo Budai
+ 2002-2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/logmsg/*
+Copyright: 2010-2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2002-2016, Balabit
+License: LGPL-2.1+
+
+Files: lib/logmsg/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/logmsg/logmsg-serialize-fixup.c
+Copyright: 2016, Balázs Scheidler
+ 2012-2015, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2012, 2013, Viktor Tusa
+ 2002-2016, Balabit
+License: LGPL-2.1+
+
+Files: lib/logmsg/logmsg-serialize-fixup.h
+Copyright: 2010-2016, 2019, Balázs Scheidler
+ 2010-2016, 2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/logmsg/logmsg.c
+  lib/logmsg/logmsg.h
+  lib/logmsg/nvtable.c
+  lib/logmsg/nvtable.h
+Copyright: 2002-2019, Balabit
+ 1998-2019, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/logmsg/nvhandle-descriptors.c
+  lib/logmsg/nvhandle-descriptors.h
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/logmsg/nvtable-serialize-endianutils.h
+  lib/logmsg/nvtable-serialize.c
+  lib/logmsg/nvtable-serialize.h
+Copyright: 2012-2015, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2012, 2013, Viktor Tusa
+ 2002-2015, Balabit
+ 1998-2012, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/logmsg/nvtable-serialize-legacy.c
+  lib/logmsg/nvtable-serialize-legacy.h
+Copyright: 2012, 2013, Viktor Tusa
+ 2012, 2013, Viktor Juhasz
+ 2002-2013, Balabit
+ 1998-2013, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/logmsg/serialization.h
+Copyright: 2015-2018, Balazs Scheidler <balazs.scheidler@balabit.com>
+ 2015-2018, Balabit
+License: LGPL-2.1+
+
+Files: lib/logmsg/tags.c
+  lib/logmsg/tags.h
+Copyright: 2009-2013, Balázs Scheidler
+ 2009-2013, Balabit
+ 2009, Marton Illes
+License: LGPL-2.1+
+
+Files: lib/logmsg/tests/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/logmsg/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/logmsg/tests/dump_logmsg.c
+Copyright: 2020-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: lib/logmsg/tests/messages/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/logmsg/tests/test_gsockaddr_serialize.c
+  lib/logmsg/tests/test_logmsg_serialize.c
+  lib/logmsg/tests/test_timestamp_serialize.c
+Copyright: 2010-2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2002-2016, Balabit
+License: LGPL-2.1+
+
+Files: lib/logmsg/tests/test_nvtable.c
+Copyright: 2009-2016, 2018, BalÃ¡zs Scheidler
+ 2009-2016, 2018, Balabit
+License: LGPL-2.1+
+
+Files: lib/logmsg/tests/test_tags.c
+Copyright: 2009-2016, BalÃ¡zs Scheidler
+ 2009-2016, Balabit
+ 2009, Marton Illes
+License: LGPL-2.1+
+
+Files: lib/logmsg/type-hinting.c
+  lib/logmsg/type-hinting.h
+Copyright: 2011-2014, Gergely Nagy <algernon@balabit.hu>
+ 2011-2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/logproto/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/logproto/logproto-multiline-server.c
+  lib/logproto/logproto-multiline-server.h
+Copyright: 2012, 2017, Balazs Scheidler <bazsi@balabit.hu>
+ 2012, 2017, Balabit
+License: LGPL-2.1+
+
+Files: lib/logproto/tests/*
+Copyright: 2002-2019, Balabit
+ 1998-2019, BalÃ¡zs Scheidler
+License: LGPL-2.1+
+
+Files: lib/logproto/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/logproto/tests/test-dgram-server.c
+Copyright: 2007-2019, Balabit
+ 2007-2014, BalÃ¡zs Scheidler <balazs.scheidler@balabit.com>
+License: LGPL-2.1+
+
+Files: lib/logproto/tests/test-regexp-multiline-server.c
+Copyright: 2014, Viktor Tusa <viktor.tusa@balabit.com>
+ 2013-2019, Balabit
+ 2013, 2014, BalÃ¡zs Scheidler <balazs.scheidler@balabit.com>
+License: LGPL-2.1+
+
+Files: lib/logproto/tests/test_findeom.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/logscheduler-pipe.c
+  lib/logscheduler-pipe.h
+Copyright: 2023, Balázs Scheidler <balazs.scheidler@axoflow.com>
+License: LGPL-2.1+
+
+Files: lib/logscheduler.c
+  lib/logscheduler.h
+Copyright: 2019, 2021, 2022, Balázs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: lib/logthrdest/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/logthrdest/logthrdestdrv.c
+  lib/logthrdest/logthrdestdrv.h
+Copyright: 2011-2014, Gergely Nagy <algernon@balabit.hu>
+ 2011-2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/logthrdest/tests/test_logthrdestdrv.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/logthrsource/*
+Copyright: 2018, László Várady <laszlo.varady@balabit.com>
+ 2018, Balabit
+License: LGPL-2.1+
+
+Files: lib/logthrsource/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/logthrsource/tests/*
+Copyright: 2018, LÃ¡szlÃ³ VÃ¡rady <laszlo.varady@balabit.com>
+ 2018, Balabit
+License: LGPL-2.1+
+
+Files: lib/logthrsource/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/metrics-pipe.c
+  lib/metrics-pipe.h
+Copyright: 2023, Attila Szakacs
+License: LGPL-2.1+
+
+Files: lib/multi-line/*
+Copyright: 2022, Balazs Scheidler <bazsi77@gmail.com>
+ 2013, 2017, Balazs Scheidler <bazsi@balabit.hu>
+ 2013, 2017, Balabit
+License: LGPL-2.1+
+
+Files: lib/multi-line/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/multi-line/indented-multi-line.c
+  lib/multi-line/indented-multi-line.h
+Copyright: 2022, Balazs Scheidler <bazsi77@gmail.com>
+ 2012, Gergely Nagy <algernon@balabit.hu>
+ 2012, Balabit
+License: LGPL-2.1+
+
+Files: lib/multi-line/smart-multi-line.c
+  lib/multi-line/smart-multi-line.h
+Copyright: 2020-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: lib/multi-line/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/multi-line/tests/test_smart_multi_line.c
+Copyright: 2020-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: lib/parse-number.c
+  lib/parse-number.h
+Copyright: 2011-2014, Gergely Nagy <algernon@balabit.hu>
+ 2011-2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/parser/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/pathutils.c
+  lib/pathutils.h
+  lib/persistable-state-presenter.c
+  lib/persistable-state-presenter.h
+  lib/presented-persistable-state.h
+  lib/rcptid.c
+  lib/rcptid.h
+  lib/run-id.c
+  lib/run-id.h
+Copyright: 2013, Viktor Tusa
+ 2013, Viktor Juhasz
+ 2002-2018, Balabit
+License: LGPL-2.1+
+
+Files: lib/persist-state.c
+Copyright: 2023, One Identity LLC.
+ 2002-2013, Balabit
+ 1998-2012, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/persistable-state-header.h
+Copyright: 2012, 2013, Viktor Tusa
+ 2012, 2013, Viktor Juhasz
+ 2002-2013, Balabit
+ 1998-2013, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/plugin-types.h
+Copyright: 2013, Balázs Scheidler <bazsi@balabit.hu>
+ 2013, Balabit
+License: LGPL-2.1+
+
+Files: lib/rewrite/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/rewrite/rewrite-groupset.c
+Copyright: 2014, Viktor Tusa <viktor.tusa@balabit.com>
+ 2014, Viktor Juhász <viktor.juhasz@balabit.com>
+ 2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/rewrite/rewrite-groupset.h
+Copyright: 2014, Viktor Tusa <viktor.tusa@balabit.com>
+ 2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/rewrite/rewrite-rename.c
+  lib/rewrite/rewrite-rename.h
+  lib/rewrite/rewrite-set-severity.c
+  lib/rewrite/rewrite-set-severity.h
+Copyright: 2019, 2021, Kokan <kokaipeter@gmail.com>
+ 2019, 2021, Balabit
+License: LGPL-2.1+
+
+Files: lib/rewrite/rewrite-set-facility.c
+Copyright: 2020, 2021, Balazs Scheidler <bazsi77@gmail.com>
+ 2019, Kokan <kokaipeter@gmail.com>
+ 2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/rewrite/rewrite-set-facility.h
+  lib/rewrite/rewrite-set-matches.c
+  lib/rewrite/rewrite-set-pri.c
+  lib/rewrite/rewrite-set-pri.h
+Copyright: 2020-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: lib/rewrite/rewrite-set-matches.h
+  lib/rewrite/rewrite-unset-matches.c
+  lib/rewrite/rewrite-unset-matches.h
+Copyright: 2019, 2021, 2022, Balázs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: lib/rewrite/rewrite-set-tag.c
+Copyright: 2021, 2022, Balazs Scheidler <bazsi77@gmail.com>
+ 2002-2018, Balabit
+ 1998-2018, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/rewrite/tests/*
+Copyright: 2020-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: lib/rewrite/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/rewrite/tests/test_rename.c
+  lib/rewrite/tests/test_set_severity.c
+Copyright: 2019, 2021, Kokan <kokaipeter@gmail.com>
+ 2019, 2021, Balabit
+License: LGPL-2.1+
+
+Files: lib/rewrite/tests/test_rewrite.c
+Copyright: 2014, Viktor Tusa <viktor.tusa@balabit.com>
+ 2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/rewrite/tests/test_set_pri.c
+Copyright: 2020, 2021, Balazs Scheidler <bazsi77@gmail.com>
+ 2019, Kokan <kokaipeter@gmail.com>
+ 2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/scanner/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/scanner/csv-scanner/csv-scanner.c
+  lib/scanner/csv-scanner/csv-scanner.h
+Copyright: 2002-2019, Balabit
+ 1998-2019, BalÃ¡zs Scheidler
+License: LGPL-2.1+
+
+Files: lib/scanner/csv-scanner/tests/test_csv_scanner.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/scanner/kv-scanner/kv-scanner.c
+  lib/scanner/kv-scanner/kv-scanner.h
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/scanner/kv-scanner/tests/test_kv_scanner.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/scanner/list-scanner/list-scanner.c
+  lib/scanner/list-scanner/list-scanner.h
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/scanner/list-scanner/tests/test_list_scanner.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/scanner/xml-scanner/tests/test_xml_scanner.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/scanner/xml-scanner/xml-scanner.c
+  lib/scanner/xml-scanner/xml-scanner.h
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/scratch-buffers.c
+  lib/scratch-buffers.h
+Copyright: 2015-2018, Balazs Scheidler <balazs.scheidler@balabit.com>
+ 2015-2018, Balabit
+License: LGPL-2.1+
+
+Files: lib/secret-storage/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/secret-storage/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/secret-storage/secret-storage.c
+Copyright: 2023, One Identity LLC
+ 2018, Balabit
+License: LGPL-2.1+
+
+Files: lib/secret-storage/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/signal-handler.c
+Copyright: 2018, 2019, Kokan
+ 2018, 2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/signal-handler.h
+Copyright: 2020, Balabit
+ 2020, Attila Szakacs
+License: LGPL-2.1+
+
+Files: lib/signal-slot-connector/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/signal-slot-connector/signal-slot-connector.c
+  lib/signal-slot-connector/signal-slot-connector.h
+Copyright: 2019, Laszlo Budai <laszlo.budai@oneidentity.com>
+ 2002-2019, One Identity
+License: LGPL-2.1+
+
+Files: lib/signal-slot-connector/tests/test_signal_slots.c
+Copyright: 2019, Laszlo Budai
+ 2002-2019, One Identity
+License: LGPL-2.1+
+
+Files: lib/stats/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/stats/aggregator/*
+Copyright: 2019-2022, One Identity
+License: LGPL-2.1+
+
+Files: lib/stats/aggregator/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/stats/stats-cluster-key-builder.c
+  lib/stats/stats-cluster-key-builder.h
+Copyright: 2023, Attila Szakacs
+License: LGPL-2.1+
+
+Files: lib/stats/stats-cluster-logpipe.c
+  lib/stats/stats-cluster-logpipe.h
+  lib/stats/stats-cluster-single.c
+  lib/stats/stats-cluster-single.h
+Copyright: 2014, 2016, 2017, 2019, Laszlo Budai
+ 2002-2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/stats/stats-compat.h
+  lib/stats/stats-prometheus.c
+  lib/stats/stats-prometheus.h
+Copyright: 2023, László Várady
+License: LGPL-2.1+
+
+Files: lib/stats/stats-query-commands.c
+  lib/stats/stats-query-commands.h
+  lib/stats/stats-query.c
+  lib/stats/stats-query.h
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/stats/tests/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/stats/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/stats/tests/test_alias_ctr_reg.c
+  lib/stats/tests/test_external_ctr_reg.c
+Copyright: 2020, One Identity
+ 2019, Laszlo Budai <laszlo.budai@oneidentity.com>
+License: LGPL-2.1+
+
+Files: lib/stats/tests/test_stats_cluster.c
+Copyright: 2013, 2015, BalÃ¡zs Scheidler <bazsi@balabit.hu>
+ 2013, 2015, Balabit
+License: LGPL-2.1+
+
+Files: lib/stats/tests/test_stats_cluster_key_builder.c
+Copyright: 2023, Attila Szakacs
+License: LGPL-2.1+
+
+Files: lib/stats/tests/test_stats_prometheus.c
+Copyright: 2023, LÃ¡szlÃ³ VÃ¡rady
+License: LGPL-2.1+
+
+Files: lib/str-repr/*
+Copyright: 2010-2016, 2019, Balázs Scheidler
+ 2010-2016, 2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/str-repr/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/str-repr/tests/*
+Copyright: 2009-2016, 2018, BalÃ¡zs Scheidler
+ 2009-2016, 2018, Balabit
+License: LGPL-2.1+
+
+Files: lib/str-repr/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/template/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/template/common-template-typedefs.h
+Copyright: 2014, 2016, 2017, 2019, Laszlo Budai
+ 2002-2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/template/eval.c
+  lib/template/eval.h
+Copyright: 2020-2022, Balazs Scheidler <bazsi77@gmail.com>
+ 2002-2013, 2015, 2016, 2020, Balabit
+License: LGPL-2.1+
+
+Files: lib/template/tests/*
+Copyright: 2007-2019, Balabit
+ 2007-2014, BalÃ¡zs Scheidler <balazs.scheidler@balabit.com>
+License: LGPL-2.1+
+
+Files: lib/template/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/template/tests/test_macro.c
+Copyright: 2018, 2019, Kokan
+ 2018, 2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/template/tests/test_template_compile.c
+Copyright: 2013, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2013, 2014, BalÃ¡zs Scheidler <balazs.scheidler@balabit.com>
+ 2013, 2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/template/tests/test_template_on_error.c
+Copyright: 2011-2014, Gergely Nagy <algernon@balabit.hu>
+ 2011-2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/template/user-function.c
+Copyright: 2010-2016, 2019, Balázs Scheidler
+ 2010-2016, 2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/tests/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/tests/test_apphook.c
+Copyright: 2018, 2019, Kokan
+ 2018, 2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/tests/test_cfg_tree.c
+Copyright: 2011-2015, 2018, Balabit
+ 2011-2014, Gergely Nagy <algernon@balabit.hu>
+License: LGPL-2.1+
+
+Files: lib/tests/test_clone_logmsg.c
+  lib/tests/test_findcrlf.c
+  lib/tests/test_matcher.c
+  lib/tests/test_serialize.c
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: lib/tests/test_dnscache.c
+  lib/tests/test_msgparse.c
+  lib/tests/test_zone.c
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: lib/tests/test_dynamic_window.c
+Copyright: 2019-2022, One Identity
+License: LGPL-2.1+
+
+Files: lib/tests/test_generic_number.c
+Copyright: 2020-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: lib/tests/test_hostid.c
+  lib/tests/test_ringbuffer.c
+Copyright: 2016, Balabit
+ 2014, Laszlo Budai
+License: GPL-2
+
+Files: lib/tests/test_lexer.c
+Copyright: 2011-2014, Gergely Nagy <algernon@balabit.hu>
+ 2011-2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/tests/test_logqueue.c
+Copyright: 2019, One Identity
+ 2008-2016, Balabit
+License: LGPL-2.1+
+
+Files: lib/tests/test_logscheduler.c
+Copyright: 2019, 2021, 2022, Balázs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: lib/tests/test_logsource.c
+Copyright: 2019, 2020, One Identity
+ 2019, 2020, László Várady
+License: LGPL-2.1+
+
+Files: lib/tests/test_logwriter.c
+Copyright: 2009-2016, Balabit
+ 2009-2014, Viktor Juhasz
+License: GPL-2
+
+Files: lib/tests/test_parse_number.c
+Copyright: 2018, Kokan <kokaipeter@gmail.com>
+ 2013-2018, Balabit
+ 2013, Gergely Nagy <algernon@balabit.hu>
+License: LGPL-2.1+
+
+Files: lib/tests/test_pathutils.c
+Copyright: 2014, Viktor Tusa <tusa@balabit.hu>
+ 2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/tests/test_persist_state.c
+Copyright: 2023, One Identity LLC.
+ 2020, One Identity
+ 2014, Viktor Tusa
+ 2010-2016, Balabit
+ 2010-2014, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/tests/test_pragma.c
+Copyright: 2019, 2021, Kokan <kokaipeter@gmail.com>
+ 2019, 2021, Balabit
+License: LGPL-2.1+
+
+Files: lib/tests/test_rcptid.c
+  lib/tests/test_runid.c
+Copyright: 2013, Viktor Tusa
+ 2013, Viktor Juhasz
+ 2002-2018, Balabit
+License: LGPL-2.1+
+
+Files: lib/tests/test_str_format.c
+Copyright: 2018, Balabit
+ 2014, Viktor Tusa <tusa@balabit.hu>
+ 2014, Balázs Scheidler <bazsi@balabit.hu>
+License: LGPL-2.1+
+
+Files: lib/tests/test_string_list.c
+  lib/tests/test_userdb.c
+  lib/tests/test_utf8utils.c
+Copyright: 2002-2019, Balabit
+ 1998-2019, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/tests/test_thread_wakeup.c
+Copyright: 2010-2017, Balázs Scheidler
+ 2010-2017, Balabit
+License: GPL-2
+
+Files: lib/timeutils/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/timeutils/tests/*
+Copyright: 2002-2019, Balabit
+ 1998-2019, BalÃ¡zs Scheidler
+License: LGPL-2.1+
+
+Files: lib/timeutils/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/timeutils/tests/test_scan-timestamp.c
+Copyright: 2009-2016, 2018, BalÃ¡zs Scheidler
+ 2009-2016, 2018, Balabit
+License: LGPL-2.1+
+
+Files: lib/timeutils/timeutils.c
+Copyright: 2021, 2022, Balazs Scheidler <bazsi77@gmail.com>
+ 2002-2018, Balabit
+ 1998-2018, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: lib/timeutils/timeutils.h
+  lib/timeutils/zonecache.c
+  lib/timeutils/zonecache.h
+Copyright: 2019, 2021, 2022, Balázs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: lib/timeutils/wallclocktime.c
+Copyright: 2002-2018, Balabit
+ 1998-2018, Balázs Scheidler
+ 1997, 1998, 2005, 2008 The NetBSD Foundation, Inc.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/transport/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/transport/multitransport.c
+  lib/transport/multitransport.h
+  lib/transport/transport-factory-id.c
+  lib/transport/transport-factory-id.h
+  lib/transport/transport-factory-registry.c
+  lib/transport/transport-factory-registry.h
+  lib/transport/transport-factory-socket.c
+  lib/transport/transport-factory-socket.h
+  lib/transport/transport-factory-tls.c
+  lib/transport/transport-factory-tls.h
+  lib/transport/transport-factory.h
+Copyright: 2018, 2019, Laszlo Budai <laszlo.budai@balabit.com>
+ 2002-2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/transport/tests/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: lib/transport/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/transport/tests/test_aux_data.c
+Copyright: 2002-2019, Balabit
+ 1998-2019, BalÃ¡zs Scheidler
+License: LGPL-2.1+
+
+Files: lib/uuid.c
+  lib/uuid.h
+Copyright: 2012, 2013, Gergely Nagy <algernon@balabit.hu>
+ 2010-2013, Balázs Scheidler
+ 2010-2013, Balabit
+License: LGPL-2.1+
+
+Files: lib/value-pairs/*
+Copyright: 2011-2015, 2018, Balabit
+ 2011-2014, Gergely Nagy <algernon@balabit.hu>
+License: LGPL-2.1+
+
+Files: lib/value-pairs/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/value-pairs/internals.h
+  lib/value-pairs/transforms.c
+  lib/value-pairs/transforms.h
+  lib/value-pairs/value-pairs.h
+Copyright: 2011-2014, Gergely Nagy <algernon@balabit.hu>
+ 2011-2014, Balabit
+License: LGPL-2.1+
+
+Files: lib/value-pairs/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: lib/value-pairs/tests/test_value_pairs.c
+Copyright: 2014, 2016, 2017, 2019, Laszlo Budai
+ 2002-2019, Balabit
+License: LGPL-2.1+
+
+Files: lib/value-pairs/tests/test_value_pairs_walk.c
+Copyright: 2014, Viktor Tusa
+ 2014, Balabit
+License: LGPL-2.1+
+
+Files: libtest/*
+Copyright: 2002-2019, Balabit
+ 1998-2019, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: libtest/Makefile.am
+  libtest/syslog-ng-test.pc.in
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: libtest/config_parse_lib.c
+  libtest/config_parse_lib.h
+Copyright: 2014, Viktor Tusa <viktor.tusa@balabit.com>
+ 2014, Viktor Juhász <viktor.juhasz@balabit.com>
+ 2014, Balabit
+License: LGPL-2.1+
+
+Files: libtest/fake-time.c
+  libtest/fake-time.h
+  libtest/libtest.c
+  libtest/mock-transport.c
+  libtest/mock-transport.h
+Copyright: 2010-2016, 2019, Balázs Scheidler
+ 2010-2016, 2019, Balabit
+License: LGPL-2.1+
+
+Files: libtest/grab-logging.c
+  libtest/grab-logging.h
+Copyright: 2012-2018, Balabit
+ 2012, Peter Gyorko
+ 2012, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: libtest/mock-cfg-parser.c
+  libtest/mock-cfg-parser.h
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: libtest/mock-logpipe.c
+  libtest/mock-logpipe.h
+Copyright: 2019, 2021, 2022, Balázs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: libtest/persist_lib.c
+  libtest/persist_lib.h
+Copyright: 2014, Viktor Tusa
+ 2014, Balabit
+License: LGPL-2.1+
+
+Files: libtest/queue_utils_lib.c
+  libtest/queue_utils_lib.h
+Copyright: 2010-2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2002-2016, Balabit
+License: LGPL-2.1+
+
+Files: libtest/stopwatch.c
+  libtest/stopwatch.h
+Copyright: 2012, 2016, Peter Gyorko
+ 2012, 2016, Balázs Scheidler
+ 2012, 2016, Balabit
+License: LGPL-2.1+
+
+Files: libtest/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: libtest/tests/test_mock_transport.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: m4/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: m4/_ax_valgrind_check.m4
+Copyright: 2014, 2015, Philip Withnall <philip.withnall@collabora.co.uk>
+License: FSFAP
+
+Files: m4/ax_require_defined.m4
+Copyright: 2014, Mike Frysinger <vapier@gentoo.org>
+License: FSFAP
+
+Files: modules/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/add-contextual-data/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/add-contextual-data/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/add-contextual-data/add-contextual-data-glob-selector.c
+  modules/add-contextual-data/add-contextual-data-glob-selector.h
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/add-contextual-data/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/add-contextual-data/tests/test_glob_selector.c
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/afamqp/*
+Copyright: 2012, Nagy, Attila <bra@fsn.hu>
+ 2012, 2014, Gergely Nagy <algernon@balabit.hu>
+ 2012, 2014, Balabit
+License: GPL-2
+
+Files: modules/afamqp/Makefile.am
+Copyright: Copyright (C) Nagy, Attila <bra@fsn.hu>
+ Copyright (C) Gergely Nagy
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/afamqp/afamqp-plugin.c
+Copyright: 2018, 2020, Kokan
+ 2018, 2020, Balabit
+License: GPL-2
+
+Files: modules/afamqp/afamqp.c
+Copyright: 2012-2014, Gergely Nagy <algernon@balabit.hu>
+ 2012-2014, Balabit
+ 2012, Nagy, Attila <bra@fsn.hu>
+License: GPL-2
+
+Files: modules/afamqp/compat/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/affile/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/affile/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/affile/affile-dest.c
+  modules/affile/affile-dest.h
+  modules/affile/affile-parser.c
+  modules/affile/affile-parser.h
+  modules/affile/affile-plugin.c
+  modules/affile/affile-source.c
+  modules/affile/affile-source.h
+  modules/affile/file-opener.c
+  modules/affile/file-opener.h
+  modules/affile/logproto-file-writer.c
+  modules/affile/logproto-file-writer.h
+  modules/affile/poll-file-changes.c
+  modules/affile/poll-file-changes.h
+  modules/affile/transport-prockmsg.c
+  modules/affile/transport-prockmsg.h
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/affile/file-specializations.h
+  modules/affile/linux-kmsg.c
+  modules/affile/logproto-file-reader.c
+  modules/affile/logproto-file-reader.h
+  modules/affile/named-pipe.c
+  modules/affile/named-pipe.h
+  modules/affile/regular-files.c
+  modules/affile/stdin.c
+  modules/affile/stdin.h
+Copyright: 2010-2017, Balázs Scheidler
+ 2010-2017, Balabit
+License: GPL-2
+
+Files: modules/affile/poll-multiline-file-changes.c
+  modules/affile/poll-multiline-file-changes.h
+Copyright: 2019, One Identity
+ 2019, László Várady
+License: GPL-2
+
+Files: modules/affile/stdout.c
+  modules/affile/stdout.h
+Copyright: 2023, Balazs Scheidler <balazs.scheidler@axoflow.com>
+License: GPL-2
+
+Files: modules/affile/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/affile/tests/test_file_opener.c
+Copyright: 2013, Laszlo Budai
+ 2013, Balabit
+License: GPL-2
+
+Files: modules/affile/tests/test_file_writer.c
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/afmongodb/*
+Copyright: 2010-2019, Balabit
+ 2010-2014, Gergely Nagy <algernon@balabit.hu>
+License: GPL-2
+
+Files: modules/afmongodb/Makefile.am
+Copyright: Copyright (c) BalaBit IT Ltd.
+ Copyright (C) Gergely Nagy
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/afmongodb/afmongodb-parser.h
+Copyright: 2010-2014, Gergely Nagy <algernon@balabit.hu>
+ 2010-2014, Balabit
+License: GPL-2
+
+Files: modules/afmongodb/afmongodb-private.h
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/afmongodb/afmongodb-worker.c
+  modules/afmongodb/afmongodb-worker.h
+Copyright: 2021, László Várady
+ 2010-2021, One Identity
+ 2010-2014, Gergely Nagy <algernon@balabit.hu>
+License: GPL-2
+
+Files: modules/afmongodb/tests/*
+Copyright: Copyright (c) BalaBit IT Ltd.
+ Copyright (C) Gergely Nagy
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/afmongodb/tests/test-mongodb-config.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: modules/afprog/*
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/afprog/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/afsmtp/*
+Copyright: 2010-2014, Gergely Nagy <algernon@balabit.hu>
+ 2010-2014, Balabit
+License: GPL-2
+
+Files: modules/afsmtp/Makefile.am
+Copyright: Copyright (c) BalaBit IT Ltd.
+ Copyright (C) Gergely Nagy
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/afsnmp/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/afsnmp/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/afsnmp/afsnmp-parser.c
+  modules/afsnmp/afsnmp-parser.h
+  modules/afsnmp/afsnmp-plugin.c
+  modules/afsnmp/afsnmpdest.c
+  modules/afsnmp/afsnmpdest.h
+Copyright: 2017, 2019, Balabit
+ 2002-2011, BalaBit IT Ltd, Budapest, Hungary
+License: GPL-2
+
+Files: modules/afsnmp/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/afsocket/*
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/afsocket/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/afsocket/afinet-dest-failover.c
+  modules/afsocket/afinet-dest-failover.h
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/afsocket/afsocket-signals.h
+Copyright: 2020-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: modules/afsocket/afsocket-systemd-override.h
+  modules/afsocket/systemd-syslog-source.c
+Copyright: 2013-2015, Tibor Benke
+ 2002-2015, Balabit
+License: GPL-2
+
+Files: modules/afsocket/compat-unix-creds.c
+  modules/afsocket/compat-unix-creds.h
+Copyright: 2013-2015, Gergely Nagy
+ 2013-2015, Balabit
+License: GPL-2
+
+Files: modules/afsocket/socket-options-unix.c
+  modules/afsocket/socket-options-unix.h
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/afsocket/systemd-syslog-source.h
+Copyright: 2013, 2014, Tibor Benke
+ 2002-2014, Balabit
+ 1998-2014, Balázs Scheidler
+License: GPL-2
+
+Files: modules/afsocket/tests/*
+Copyright: 2002-2018, Balabit
+ 1998-2015, BalÃ¡zs Scheidler
+License: GPL-2
+
+Files: modules/afsocket/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/afsocket/tests/test-transport-mapper-inet.c
+Copyright: 2013, 2015, BalÃ¡zs Scheidler <balazs.scheidler@balabit.com>
+ 2013, 2015, Balabit
+License: GPL-2
+
+Files: modules/afsocket/tests/transport-mapper-lib.c
+  modules/afsocket/tests/transport-mapper-lib.h
+Copyright: 2013, BalÃ¡zs Scheidler
+ 2013, Balabit
+License: GPL-2
+
+Files: modules/afsocket/transport-unix-socket.c
+Copyright: 2013, 2014, Gergely Nagy
+ 2002-2014, Balabit
+ 1998-2013, Balázs Scheidler
+License: GPL-2
+
+Files: modules/afsql/*
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/afsql/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/afstomp/*
+Copyright: Copyright (C) Viktor Tusa
+ Copyright (C) Nagy, Attila <bra@fsn.hu>
+ Copyright (C) BalaBit IT Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/afstomp/afstomp-parser.c
+  modules/afstomp/afstomp-parser.h
+Copyright: 2013, Viktor Tusa <tusa@balabit.hu>
+ 2013, Balabit
+ 2012, Nagy, Attila <bra@fsn.hu>
+License: GPL-2
+
+Files: modules/afstomp/afstomp.c
+Copyright: 2014, Gergely Nagy <algernon@balabit.hu>
+ 2014, Balabit
+ 2013, Viktor Tusa <tusa@balabit.hu>
+ 2012, Nagy, Attila <bra@fsn.hu>
+License: GPL-2
+
+Files: modules/afstomp/afstomp.h
+Copyright: 2014, Balabit
+ 2013, Viktor Tusa <tusa@balabit.hu>
+ 2012, Nagy, Attila <bra@fsn.hu>
+License: GPL-2
+
+Files: modules/afstomp/stomp.c
+  modules/afstomp/stomp.h
+Copyright: 2013, 2014, Viktor Tusa <tusa@balabit.hu>
+ 2013, 2014, Balabit
+License: GPL-2
+
+Files: modules/afstomp/tests/test_stomp_proto.c
+Copyright: 2013, 2014, Viktor Tusa <tusa@balabit.hu>
+ 2013, 2014, Balabit
+License: GPL-2
+
+Files: modules/afstreams/*
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/afstreams/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/afuser/*
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/afuser/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/appmodel/*
+Copyright: 2015-2018, Balazs Scheidler <balazs.scheidler@balabit.com>
+ 2015-2018, Balabit
+License: LGPL-2.1+
+
+Files: modules/appmodel/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/appmodel/application.c
+  modules/appmodel/application.h
+  modules/appmodel/appmodel-parser.c
+  modules/appmodel/appmodel-parser.h
+  modules/appmodel/appmodel-plugin.c
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/appmodel/appmodel-context.h
+  modules/appmodel/appmodel.h
+Copyright: 2015, 2017, Balazs Scheidler <balazs.scheidler@balabit.com>
+ 2015, 2017, Balabit
+License: GPL-2
+
+Files: modules/appmodel/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/azure-auth-header/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: modules/azure-auth-header/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/basicfuncs/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: modules/basicfuncs/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/basicfuncs/basic-funcs.c
+  modules/basicfuncs/fname-funcs.c
+  modules/basicfuncs/list-funcs.c
+Copyright: 2010-2017, Balázs Scheidler
+ 2010-2017, Balabit
+License: GPL-2
+
+Files: modules/basicfuncs/cond-funcs.c
+Copyright: 2013, 2014, Gergely Nagy
+ 2002-2014, Balabit
+ 1998-2013, Balázs Scheidler
+License: GPL-2
+
+Files: modules/basicfuncs/context-funcs.c
+  modules/basicfuncs/misc-funcs.c
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/basicfuncs/ip-funcs.c
+  modules/basicfuncs/numeric-funcs.c
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/basicfuncs/str-funcs.c
+Copyright: 2014, Viktor Tusa <tusavik@gmail.com>
+ 2002-2014, Balabit
+ 1998-2012, Balázs Scheidler
+License: GPL-2
+
+Files: modules/basicfuncs/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/basicfuncs/tests/test_basicfuncs.c
+Copyright: 2002-2018, Balabit
+ 1998-2015, BalÃ¡zs Scheidler
+License: GPL-2
+
+Files: modules/basicfuncs/tf-template.c
+Copyright: 2002-2019, Balabit
+ 1998-2019, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: modules/basicfuncs/vp-funcs.c
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/cef/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/cef/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/cef/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/cef/tests/test-format-cef-extension.c
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/confgen/confgen-plugin.c
+  modules/confgen/confgen.h
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/confgen/tests/confgentest.sh
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/confgen/tests/test_confgen.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: modules/correlation/*
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/correlation/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/correlation/group-lines.c
+Copyright: 2023, One Identity LLC.
+ 2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/correlation/group-lines.h
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/correlation/grouping-parser.c
+  modules/correlation/grouping-parser.h
+Copyright: 2023, Balazs Scheidler <bazsi77@gmail.com>
+ 2015, BalaBit
+License: GPL-2
+
+Files: modules/correlation/groupingby.c
+Copyright: 2023, OneIdentity LLC.
+ 2015, BalaBit
+License: GPL-2
+
+Files: modules/correlation/groupingby.h
+Copyright: 2015, BalaBit
+License: GPL-2
+
+Files: modules/correlation/id-counter.c
+  modules/correlation/id-counter.h
+Copyright: 2023, OneIdentity LLC.
+License: GPL-2
+
+Files: modules/correlation/patternize.c
+  modules/correlation/patternize.h
+Copyright: 2010-2012, Balabit
+ 2009-2011, Péter Gyöngyösi
+License: GPL-2
+
+Files: modules/correlation/pdb-error.c
+  modules/correlation/pdb-error.h
+  modules/correlation/synthetic-context.c
+  modules/correlation/synthetic-context.h
+Copyright: 2010-2017, Balázs Scheidler
+ 2010-2017, Balabit
+License: GPL-2
+
+Files: modules/correlation/pdb-lookup-params.c
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/correlation/pdbtool/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/correlation/pdbtool/pdbtool.c
+Copyright: 2002-2018, Balabit
+ 1998-2015, BalÃ¡zs Scheidler
+License: GPL-2
+
+Files: modules/correlation/tests/*
+Copyright: 2008-2018, Balabit
+ 2008-2015, BalÃ¡zs Scheidler <balazs.scheidler@balabit.com>
+License: GPL-2
+
+Files: modules/correlation/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/correlation/tests/test_grouping_by.c
+Copyright: 2019, 2020, Kokan <kokaipeter@gmail.com>
+ 2019, 2020, Balabit
+License: GPL-2
+
+Files: modules/correlation/tests/test_radix.c
+Copyright: 2009, Marton Illes
+ 2008-2018, Balabit
+ 2008-2015, BalÃ¡zs Scheidler <balazs.scheidler@balabit.com>
+License: GPL-2
+
+Files: modules/cryptofuncs/*
+Copyright: 2008-2018, Balabit
+ 2008-2015, BalÃ¡zs Scheidler <balazs.scheidler@balabit.com>
+License: GPL-2
+
+Files: modules/cryptofuncs/Makefile.am
+Copyright: Copyright (c) BalaBit IT Ltd.
+ Copyright (C) Peter Gyongyosi
+ Copyright (C) Gergely Nagy
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/cryptofuncs/cryptofuncs.c
+Copyright: 2012, Peter Gyongyosi <gyp@balabit.hu>
+ 2012, Gergely Nagy <algernon@balabit.hu>
+ 2012, Balabit
+License: GPL-2
+
+Files: modules/cryptofuncs/tests/Makefile.am
+Copyright: Copyright (c) BalaBit IT Ltd.
+ Copyright (C) Peter Gyongyosi
+ Copyright (C) Gergely Nagy
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/csvparser/*
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/csvparser/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/csvparser/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/csvparser/tests/test_csvparser.c
+Copyright: 2008-2018, Balabit
+ 2008-2015, BalÃ¡zs Scheidler <balazs.scheidler@balabit.com>
+License: GPL-2
+
+Files: modules/csvparser/tests/test_csvparser_from_config.c
+Copyright: 2021, Balazs Scheidler <bazsi77@gmail.com>
+ 2014, Viktor Tusa <viktor.tusa@balabit.com>
+ 2014, Balabit
+License: LGPL-2.1+
+
+Files: modules/csvparser/tests/test_csvparser_perf.c
+Copyright: 2013, 2015, BalÃ¡zs Scheidler <balazs.scheidler@balabit.com>
+ 2013, 2015, Balabit
+License: GPL-2
+
+Files: modules/csvparser/tests/test_csvparser_statistics.c
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/diskq/*
+Copyright: 2010-2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2002-2016, Balabit
+License: GPL-2
+
+Files: modules/diskq/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/diskq/diskq-config.c
+  modules/diskq/diskq-config.h
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: modules/diskq/diskq-global-metrics.c
+  modules/diskq/diskq-global-metrics.h
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: modules/diskq/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/diskq/tests/test_diskq_counters.c
+  modules/diskq/tests/test_logqueue_disk.c
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: modules/diskq/tests/test_diskq_truncate.c
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/diskq/tests/test_qdisk.c
+Copyright: 2022, One Identity
+ 2022, LÃ¡szlÃ³ VÃ¡rady
+License: GPL-2
+
+Files: modules/ebpf/*
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/ebpf/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/examples/destinations/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/examples/destinations/example_destination/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/examples/destinations/example_destination/example_destination_worker.c
+Copyright: 2022, 2023, One Identity LLC.
+ 2016, 2020, Balabit
+License: GPL-2
+
+Files: modules/examples/example-plugins.c
+Copyright: 2018, László Várady <laszlo.varady@balabit.com>
+ 2018, Balabit
+License: GPL-2
+
+Files: modules/examples/inner-destinations/*
+Copyright: 2020, One Identity
+ 2020, Laszlo Budai <laszlo.budai@outlook.com>
+License: GPL-2
+
+Files: modules/examples/inner-destinations/http-test-slots/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/examples/inner-destinations/tls-test-validation/*
+Copyright: 2023, Ricardo Filipe <ricardo.l.filipe@tecnico.ulisboa.pt>
+License: GPL-2
+
+Files: modules/examples/inner-destinations/tls-test-validation/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/examples/sources/msg-generator/msg-generator-parser.c
+  modules/examples/sources/msg-generator/msg-generator-parser.h
+  modules/examples/sources/msg-generator/msg-generator-source-options.h
+  modules/examples/sources/msg-generator/msg-generator-source.c
+  modules/examples/sources/msg-generator/msg-generator-source.h
+  modules/examples/sources/msg-generator/msg-generator.c
+  modules/examples/sources/msg-generator/msg-generator.h
+Copyright: 2018, LÃ¡szlÃ³ VÃ¡rady <laszlo.varady@balabit.com>
+ 2018, Balabit
+License: GPL-2
+
+Files: modules/examples/sources/random-choice-generator/*
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: modules/examples/sources/random-choice-generator/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/examples/sources/threaded-diskq-source/threaded-diskq-source-parser.c
+  modules/examples/sources/threaded-diskq-source/threaded-diskq-source-parser.h
+  modules/examples/sources/threaded-diskq-source/threaded-diskq-source.c
+  modules/examples/sources/threaded-diskq-source/threaded-diskq-source.h
+Copyright: 2018, LÃ¡szlÃ³ VÃ¡rady <laszlo.varady@balabit.com>
+ 2018, Balabit
+License: GPL-2
+
+Files: modules/examples/sources/threaded-random-generator/threaded-random-generator-parser.c
+  modules/examples/sources/threaded-random-generator/threaded-random-generator-parser.h
+  modules/examples/sources/threaded-random-generator/threaded-random-generator.c
+  modules/examples/sources/threaded-random-generator/threaded-random-generator.h
+Copyright: 2018, LÃ¡szlÃ³ VÃ¡rady <laszlo.varady@balabit.com>
+ 2018, Balabit
+License: GPL-2
+
+Files: modules/geoip2/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/geoip2/Makefile.am
+Copyright: Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/geoip2/tests/Makefile.am
+Copyright: Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/getent/*
+Copyright: 2010-2014, Gergely Nagy <algernon@balabit.hu>
+ 2010-2014, Balabit
+License: GPL-2
+
+Files: modules/getent/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/graphite/*
+Copyright: 2013, 2014, Viktor Tusa <tusa@balabit.hu>
+ 2013, 2014, Balabit
+License: GPL-2
+
+Files: modules/graphite/Makefile.am
+Copyright: Copyright (C) Viktor Tusa
+ Copyright (C) BalaBit IT Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/graphite/tests/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/graphite/tests/Makefile.am
+Copyright: Copyright (C) Viktor Tusa
+ Copyright (C) BalaBit IT Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/grpc/credentials/*
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: modules/grpc/credentials/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/grpc/loki/*
+Copyright: 2023, LÃ¡szlÃ³ VÃ¡rady
+License: GPL-2
+
+Files: modules/grpc/loki/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/grpc/otel/*
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: modules/grpc/otel/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/grpc/otel/otel-servicecall.hpp
+  modules/grpc/otel/otel-source-services.hpp
+Copyright: 2023, LÃ¡szlÃ³ VÃ¡rady
+ 2023, Attila Szakacs
+License: GPL-2
+
+Files: modules/grpc/otel/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/hook-commands/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/hook-commands/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/hook-commands/hook-commands-parser.c
+Copyright: 2010-2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2002-2016, Balabit
+License: GPL-2
+
+Files: modules/http/autodetect-ca-location.c
+  modules/http/autodetect-ca-location.h
+Copyright: 2020, One Identity
+ 2020, Antal Nemes
+License: GPL-2
+
+Files: modules/http/compression.c
+  modules/http/compression.h
+Copyright: 2022, One Identity LLC.
+License: LGPL-2.1+
+
+Files: modules/http/http-curl-header-list.c
+  modules/http/http-curl-header-list.h
+Copyright: 2016, 2019, Laszlo Budai <laszlo.budai@balabit.com>
+ 2002-2019, Balabit
+License: GPL-2
+
+Files: modules/http/http-loadbalancer.c
+  modules/http/http-loadbalancer.h
+Copyright: 2018, 2019, Balazs Scheidler
+ 2018, 2019, Balabit
+License: GPL-2
+
+Files: modules/http/http-parser.c
+  modules/http/http.c
+Copyright: 2022, One Identity LLC.
+ 2016, Marc Falzon
+License: GPL-2
+
+Files: modules/http/http-parser.h
+  modules/http/http-plugin.c
+Copyright: 2016, Marc Falzon
+License: GPL-2
+
+Files: modules/http/http-signals.h
+Copyright: 2019, Laszlo Budai <laszlo.budai@oneidentity.com>
+ 2002-2019, One Identity
+License: LGPL-2.1+
+
+Files: modules/http/http-worker.c
+  modules/http/http-worker.h
+  modules/http/http.h
+Copyright: 2018-2022, One Identity LLC.
+ 2018, Balazs Scheidler
+ 2016, Marc Falzon
+License: GPL-2
+
+Files: modules/http/response-handler.c
+  modules/http/response-handler.h
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/http/tests/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/http/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/http/tests/test_compression.c
+Copyright: 2023, One Identity LLC.
+License: GPL-2
+
+Files: modules/http/tests/test_http-loadbalancer.c
+Copyright: 2018, 2019, Balazs Scheidler
+ 2018, 2019, Balabit
+License: GPL-2
+
+Files: modules/java-modules/*
+Copyright: 2010-2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2002-2016, Balabit
+License: GPL-2
+
+Files: modules/java-modules/Makefile.am
+Copyright: Copyright (C) Viktor Juhasz
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/java-modules/common/*
+Copyright: Copyright (C) Viktor Juhasz
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/java-modules/common/src/*
+Copyright: 2010-2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2002-2016, Balabit
+License: LGPL-2.1+
+
+Files: modules/java-modules/common/src/main/java/org/syslog_ng/logging/CustomConfigurationFactory.java
+Copyright: 2019, 2021, Kokan <kokaipeter@gmail.com>
+ 2019, 2021, Balabit
+License: LGPL-2.1+
+
+Files: modules/java-modules/elastic-v2/src/main/java/org/syslog_ng/elasticsearch_v2/ElasticSearchOptions.java
+Copyright: 2016, Viktor Tusa <tusavik@gmail.com>
+ 2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2016, Laszlo Budai <laszlo.budai@balabit.com>
+ 2016, Balabit
+License: GPL-2
+
+Files: modules/java-modules/elastic-v2/src/main/java/org/syslog_ng/elasticsearch_v2/client/ESClient.java
+Copyright: 2016, 2019, Laszlo Budai <laszlo.budai@balabit.com>
+ 2002-2019, Balabit
+License: GPL-2
+
+Files: modules/java-modules/elastic-v2/src/main/java/org/syslog_ng/elasticsearch_v2/client/esnative/ESTransportSearchGuardClient.java
+Copyright: 2016, Zoltan Pallagi <zoltan.pallagi@balabit.com>
+ 2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2016, Balabit
+License: GPL-2
+
+Files: modules/java-modules/elastic-v2/src/main/java/org/syslog_ng/elasticsearch_v2/client/http/*
+Copyright: 2016, 2019, Laszlo Budai <laszlo.budai@balabit.com>
+ 2002-2019, Balabit
+License: GPL-2
+
+Files: modules/java-modules/elastic-v2/src/main/java/org/syslog_ng/elasticsearch_v2/client/http/ESHttpsClient.java
+Copyright: 2017, Laszlo Budai <laszlo.budai@balabit.com>
+ 2017, Fabien Wernli <git@faxmodem.org>
+ 2017, Balabit
+License: GPL-2
+
+Files: modules/java-modules/elastic-v2/src/main/java/org/syslog_ng/elasticsearch_v2/messageprocessor/ESIndex.java
+  modules/java-modules/elastic-v2/src/main/java/org/syslog_ng/elasticsearch_v2/messageprocessor/ESMessageProcessor.java
+Copyright: 2016, 2019, Laszlo Budai <laszlo.budai@balabit.com>
+ 2002-2019, Balabit
+License: GPL-2
+
+Files: modules/java-modules/elastic-v2/src/main/java/org/syslog_ng/elasticsearch_v2/messageprocessor/http/*
+Copyright: 2016, Viktor Tusa <tusavik@gmail.com>
+ 2016, Laszlo Budai <laszlo.budai@balabit.com>
+ 2016, Balabit
+License: GPL-2
+
+Files: modules/java-modules/hdfs/*
+Copyright: 2015, 2017, Zoltan Pallagi <zoltan.pallagi@balabit.com>
+ 2015, 2017, Balabit
+License: GPL-2
+
+Files: modules/java-modules/hdfs/src/main/java/org/syslog_ng/hdfs/HdfsOptions.java
+Copyright: 2010-2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2002-2016, Balabit
+License: GPL-2
+
+Files: modules/java-modules/http/*
+Copyright: 2015, Balabit
+ 2015, Adam Arsenault <adam.arsenault@balabit.com>
+License: GPL-2
+
+Files: modules/java-modules/kafka/*
+Copyright: 2013-2015, Tibor Benke
+ 2002-2015, Balabit
+License: GPL-2
+
+Files: modules/java/*
+Copyright: Copyright (C) Viktor Juhasz
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/java/native/*
+Copyright: 2010-2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2002-2016, Balabit
+License: LGPL-2.1+
+
+Files: modules/java/native/java-config.c
+  modules/java/native/java-config.h
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: modules/java/proxies/*
+Copyright: 2010-2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2002-2016, Balabit
+License: LGPL-2.1+
+
+Files: modules/java/src/*
+Copyright: 2010-2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2002-2016, Balabit
+License: LGPL-2.1+
+
+Files: modules/json/*
+Copyright: 2010-2014, Gergely Nagy <algernon@balabit.hu>
+ 2010-2014, Balabit
+License: GPL-2
+
+Files: modules/json/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/json/dot-notation.c
+  modules/json/dot-notation.h
+Copyright: 2014, Balazs Scheidler <bazsi@balabit.hu>
+ 2014, Balabit
+License: GPL-2
+
+Files: modules/json/format-json.c
+Copyright: 2011-2014, Gergely Nagy <algernon@balabit.hu>
+ 2011-2014, Balabit
+ 2011, Balint Kovacs <blint@balabit.hu>
+License: GPL-2
+
+Files: modules/json/tests/*
+Copyright: 2018, Balabit
+ 2014, Balazs Scheidler <bazsi@balabit.hu>
+License: GPL-2
+
+Files: modules/json/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/json/tests/test_format_json.c
+Copyright: 2010-2019, Balabit
+ 2010-2014, Gergely Nagy <algernon@balabit.hu>
+License: GPL-2
+
+Files: modules/kafka/kafka-dest-driver.c
+Copyright: 2019, Balazs Scheidler
+ 2014, Pierre-Yves Ritschard <pyr@spootnik.org>
+ 2013-2019, Balabit
+ 2013, Tihamer Petrovics <tihameri@gmail.com>
+License: GPL-2
+
+Files: modules/kafka/kafka-dest-driver.h
+Copyright: 2019, Balazs Scheidler
+ 2014, Pierre-Yves Ritschard <pyr@spootnik.org>
+ 2013-2019, Balabit
+License: GPL-2
+
+Files: modules/kafka/kafka-dest-worker.c
+  modules/kafka/kafka-dest-worker.h
+Copyright: 2019, Balazs Scheidler
+ 2019, Balabit
+ 2014, Pierre-Yves Ritschard <pyr@spootnik.org>
+ 2013, Tihamer Petrovics <tihameri@gmail.com>
+License: GPL-2
+
+Files: modules/kafka/kafka-internal.h
+Copyright: 2020, Vivin Peris
+ 2020, Balazs Scheidler
+ 2020, Balabit
+License: GPL-2
+
+Files: modules/kafka/kafka-parser.c
+Copyright: 2019, Balazs Scheidler
+ 2019, Balabit
+ 2014, Pierre-Yves Ritschard <pyr@spootnik.org>
+License: GPL-2
+
+Files: modules/kafka/kafka-parser.h
+  modules/kafka/kafka-props.c
+  modules/kafka/kafka-props.h
+Copyright: 2019, Balazs Scheidler
+ 2019, Balabit
+ 2018, Kokan <kokaipeter@gmail.com>
+ 2014, Pierre-Yves Ritschard <pyr@spootnik.org>
+License: GPL-2
+
+Files: modules/kafka/kafka-plugin.c
+Copyright: 2019, Balazs Scheidler
+ 2019, Balabit
+ 2018, Kokan
+License: GPL-2
+
+Files: modules/kafka/tests/test_kafka-props.c
+Copyright: 2018, 2019, Balazs Scheidler
+ 2018, 2019, Balabit
+License: GPL-2
+
+Files: modules/kafka/tests/test_kafka_config.c
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: modules/kafka/tests/test_kafka_topic.c
+Copyright: 2020, Vivin Peris
+ 2020, Balazs Scheidler
+ 2020, Balabit
+License: GPL-2
+
+Files: modules/kvformat/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/kvformat/Makefile.am
+Copyright: Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/kvformat/tests/Makefile.am
+Copyright: Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/kvformat/tests/test_format_welf.c
+Copyright: 2010-2019, Balabit
+ 2010-2014, Gergely Nagy <algernon@balabit.hu>
+License: GPL-2
+
+Files: modules/linux-kmsg-format/*
+Copyright: 2010-2014, Gergely Nagy <algernon@balabit.hu>
+ 2010-2014, Balabit
+License: GPL-2
+
+Files: modules/linux-kmsg-format/Makefile.am
+Copyright: Copyright (c) BalaBit IT Ltd.
+ Copyright (C) Gergely Nagy
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/linux-kmsg-format/tests/*
+Copyright: Copyright (c) BalaBit IT Ltd.
+ Copyright (C) Gergely Nagy
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/linux-kmsg-format/tests/test_linux_format_kmsg.c
+Copyright: 2010-2019, Balabit
+ 2010-2014, Gergely Nagy <algernon@balabit.hu>
+License: GPL-2
+
+Files: modules/map-value-pairs/*
+Copyright: 2015, 2017, Balazs Scheidler <balazs.scheidler@balabit.com>
+ 2015, 2017, Balabit
+License: GPL-2
+
+Files: modules/map-value-pairs/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/metrics-probe/*
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: modules/metrics-probe/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/metrics-probe/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/metrics-probe/tests/test_metrics_probe.c
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: modules/mqtt/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: modules/mqtt/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/mqtt/destination/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/mqtt/source/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/native/*
+Copyright: 2015, Tibor Benke
+ 2015, BalaBit
+License: LGPL-2.1+
+
+Files: modules/native/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/openbsd/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/openbsd/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/pacctformat/*
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/pacctformat/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/pseudofile/*
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/pseudofile/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/python-modules/setup.py
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/python-modules/syslogng/*
+Copyright: 2020-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: modules/python-modules/syslogng/__init__.py
+  modules/python-modules/syslogng/persist.py
+Copyright: 2020-2022, Balazs Scheidler <bazsi77@gmail.com>
+ 2002-2013, 2015, 2016, 2020, Balabit
+License: LGPL-2.1+
+
+Files: modules/python-modules/syslogng/debuggercli/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/python-modules/syslogng/debuggercli/editline.py
+Copyright: 2020, One Identity
+ 2020, Laszlo Budai <laszlo.budai@outlook.com>
+License: GPL-2
+
+Files: modules/python-modules/syslogng/modules/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/python-modules/syslogng/modules/example/*
+Copyright: 2022, Balazs Scheidler
+License: GPL-2
+
+Files: modules/python-modules/syslogng/modules/hypr/__init__.py
+Copyright: 2023, Attila Szakacs
+ 2022, novaSOC
+ 2022, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/python-modules/syslogng/modules/hypr/tests/*
+Copyright: 2023, Attila Szakacs
+ 2022, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/python-modules/syslogng/modules/kubernetes/*
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/python-modules/syslogng/modules/kubernetes/__init__.py
+Copyright: 2022, Attila Szakacs <szakacs.attila96@gmail.com>
+License: GPL-2
+
+Files: modules/python-modules/syslogng/modules/s3/*
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: modules/python-modules/syslogng/reloc.py
+Copyright: 2023, Attila Szakacs
+License: LGPL-2.1+
+
+Files: modules/python-modules/syslogng/source.py
+Copyright: 2023, One Identity LLC.
+ 2022, Balazs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: modules/python-modules/test_pymodules.sh
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/python/*
+Copyright: 2015-2018, Balazs Scheidler <balazs.scheidler@balabit.com>
+ 2015-2018, Balabit
+License: LGPL-2.1+
+
+Files: modules/python/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/python/compat/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: modules/python/python-ack-tracker.c
+  modules/python/python-ack-tracker.h
+  modules/python/python-bookmark.c
+  modules/python/python-bookmark.h
+Copyright: 2019, 2020, One Identity
+ 2019, 2020, László Várady
+License: LGPL-2.1+
+
+Files: modules/python/python-binding.c
+  modules/python/python-binding.h
+Copyright: 2023, Balazs Scheidler <balazs.scheidler@axoflow.com>
+License: GPL-2
+
+Files: modules/python/python-confgen.c
+  modules/python/python-confgen.h
+Copyright: 2020-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: modules/python/python-config.h
+  modules/python/python-main.h
+  modules/python/python-tf.h
+Copyright: 2015, 2017, Balazs Scheidler <balazs.scheidler@balabit.com>
+ 2015, 2017, Balabit
+License: GPL-2
+
+Files: modules/python/python-dest.c
+  modules/python/python-parser.c
+  modules/python/python-parser.h
+  modules/python/python-plugin.c
+  modules/python/python-value-pairs.h
+Copyright: 2015, Balazs Scheidler <balazs.scheidler@balabit.com>
+ 2014, Gergely Nagy <algernon@balabit.hu>
+ 2014, 2015, Balabit
+License: GPL-2
+
+Files: modules/python/python-dest.h
+Copyright: 2014, Gergely Nagy <algernon@balabit.hu>
+ 2014, 2015, Balazs Scheidler <balazs.scheidler@balabit.com>
+ 2014, 2015, Balabit
+License: GPL-2
+
+Files: modules/python/python-fetcher.c
+  modules/python/python-fetcher.h
+  modules/python/python-source.c
+  modules/python/python-source.h
+Copyright: 2018, László Várady <laszlo.varady@balabit.com>
+ 2018, Balabit
+License: GPL-2
+
+Files: modules/python/python-flags.c
+  modules/python/python-flags.h
+  modules/python/python-options.c
+  modules/python/python-options.h
+  modules/python/python-reloc.c
+  modules/python/python-reloc.h
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: modules/python/python-global.c
+  modules/python/python-global.h
+  modules/python/python-startup.c
+  modules/python/python-startup.h
+Copyright: 2023, Balazs Scheidler <balazs.scheidler@axoflow.com>
+ 2015, Balazs Scheidler <balazs.scheidler@balabit.com>
+ 2015, Balabit
+License: LGPL-2.1+
+
+Files: modules/python/python-http-header.c
+  modules/python/python-http-header.h
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: modules/python/python-integerpointer.c
+  modules/python/python-integerpointer.h
+  modules/python/python-logtemplate-options.c
+  modules/python/python-logtemplate-options.h
+  modules/python/python-logtemplate.c
+  modules/python/python-logtemplate.h
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: modules/python/python-logger.c
+  modules/python/python-logger.h
+Copyright: 2018, 2019, Kokan
+ 2018, 2019, Balabit
+License: LGPL-2.1+
+
+Files: modules/python/python-logparser.c
+  modules/python/python-logparser.h
+  modules/python/python-persist.c
+  modules/python/python-persist.h
+  modules/python/sngexample.py
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/python/python-types.c
+  modules/python/python-types.h
+Copyright: 2019-2022, One Identity
+License: LGPL-2.1+
+
+Files: modules/python/python-value-pairs.c
+Copyright: 2015, Balazs Scheidler <balazs.scheidler@balabit.com>
+ 2015, Balabit
+ 2014, Gergely Nagy <algernon@balabit.hu>
+License: LGPL-2.1+
+
+Files: modules/python/tests/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/python/tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/python/tests/test_python_ack_tracker.c
+  modules/python/tests/test_python_bookmark.c
+Copyright: 2020, LÃ¡szlÃ³ VÃ¡rady
+ 2020, Balabit
+License: GPL-2
+
+Files: modules/python/tests/test_python_options.c
+  modules/python/tests/test_python_reloc.c
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: modules/python/tests/test_python_tf.c
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: modules/rate-limit-filter/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: modules/rate-limit-filter/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/redis/*
+Copyright: 2013, Tihamer Petrovics <tihameri@gmail.com>
+ 2013, Balabit
+License: GPL-2
+
+Files: modules/redis/Makefile.am
+Copyright: Copyright (C) Tihamer Petrovics <tihameri@gmail.com>
+ Copyright (C) BalaBit IT Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/redis/redis-worker.c
+  modules/redis/redis-worker.h
+Copyright: 2021, Szilárd Parrag
+ 2014, Gergely Nagy <algernon@balabit.hu>
+ 2014, Balabit
+ 2013, Tihamer Petrovics <tihameri@gmail.com>
+License: GPL-2
+
+Files: modules/redis/redis.c
+Copyright: 2014, Gergely Nagy <algernon@balabit.hu>
+ 2014, Balabit
+ 2013, Tihamer Petrovics <tihameri@gmail.com>
+License: GPL-2
+
+Files: modules/redis/redis.h
+Copyright: 2014, Balabit
+ 2013, Tihamer Petrovics <tihameri@gmail.com>
+License: GPL-2
+
+Files: modules/regexp-parser/*
+Copyright: 2021, Xiaoyu Qiu
+ 2020, 2021, One Identity
+License: GPL-2
+
+Files: modules/regexp-parser/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/regexp-parser/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/regexp-parser/tests/test_regexp_parser.c
+Copyright: 2021, Xiaoyu Qiu
+ 2020, 2021, One Identity
+License: GPL-2
+
+Files: modules/riemann/*
+Copyright: 2010-2014, Gergely Nagy <algernon@balabit.hu>
+ 2010-2014, Balabit
+License: GPL-2
+
+Files: modules/riemann/Makefile.am
+Copyright: Copyright (c) BalaBit IT Ltd.
+ Copyright (C) Gergely Nagy
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/riemann/riemann-parser.c
+Copyright: 2013, Balabit
+ 2013, 2015, Gergely Nagy
+License: GPL-2
+
+Files: modules/riemann/riemann-worker.c
+  modules/riemann/riemann-worker.h
+Copyright: 2018, One Identity
+ 2013-2015, Gergely Nagy
+ 2013-2015, Balabit
+License: GPL-2
+
+Files: modules/riemann/riemann.c
+  modules/riemann/riemann.h
+Copyright: 2013-2015, Gergely Nagy
+ 2013-2015, Balabit
+License: GPL-2
+
+Files: modules/secure-logging/secure-logging.c
+  modules/secure-logging/slog.c
+  modules/secure-logging/slog.h
+Copyright: 2019, Airbus Commercial Aircraft
+License: LGPL-2.1+
+
+Files: modules/secure-logging/slogencrypt/slogencrypt.c
+Copyright: 2019, Airbus Commercial Aircraft
+License: LGPL-2.1+
+
+Files: modules/secure-logging/slogkey/slogkey.c
+Copyright: 2019, Airbus Commercial Aircraft
+License: LGPL-2.1+
+
+Files: modules/secure-logging/slogverify/slogverify.c
+Copyright: 2019, Airbus Commercial Aircraft
+License: LGPL-2.1+
+
+Files: modules/secure-logging/tests/test_secure_logging.c
+Copyright: 2019, Airbus Commercial Aircraft
+License: LGPL-2.1+
+
+Files: modules/stardate/stardate-plugin.c
+  modules/stardate/stardate.c
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/stardate/tests/test_stardate.c
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/syslogformat/*
+Copyright: 2010-2017, Balázs Scheidler
+ 2010-2017, Balabit
+License: GPL-2
+
+Files: modules/syslogformat/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/syslogformat/sdata-parser.c
+  modules/syslogformat/sdata-parser.h
+Copyright: 2023, Balázs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/syslogformat/syslog-format-plugin.c
+  modules/syslogformat/syslog-format.c
+  modules/syslogformat/syslog-format.h
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/syslogformat/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/syslogformat/tests/test_syslog_format.c
+Copyright: 2022, One Identity
+ 2022, LÃ¡szlÃ³ VÃ¡rady
+License: GPL-2
+
+Files: modules/system-source/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/system-source/Makefile.am
+Copyright: Copyright (c) BalaBit IT Ltd.
+ Copyright (C) Gergely Nagy
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/system-source/system-source.c
+Copyright: 2010-2014, Gergely Nagy <algernon@balabit.hu>
+ 2010-2014, Balabit
+License: GPL-2
+
+Files: modules/systemd-journal/*
+Copyright: 2010-2016, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2002-2016, Balabit
+License: GPL-2
+
+Files: modules/systemd-journal/Makefile.am
+Copyright: Copyright (C) Viktor Juhasz
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/systemd-journal/journal-reader.c
+Copyright: 2023, One Identity LLC.
+ 2010-2014, Viktor Juhasz <viktor.juhasz@balabit.com>
+ 2010-2014, Balabit
+License: GPL-2
+
+Files: modules/systemd-journal/tests/Makefile.am
+Copyright: Copyright (C) Viktor Juhasz
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/tagsparser/*
+Copyright: 2002-2017, Balabit
+ 1998-2017, Balázs Scheidler
+License: GPL-2
+
+Files: modules/tagsparser/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/tagsparser/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/tagsparser/tests/test_tagsparser.c
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/timestamp/date-parser.c
+  modules/timestamp/date-parser.h
+  modules/timestamp/timestamp-parser.c
+  modules/timestamp/timestamp-parser.h
+  modules/timestamp/timestamp-plugin.c
+Copyright: 2015, Vincent Bernat <Vincent.Bernat@exoscale.ch>
+ 2015, Balabit
+License: GPL-2
+
+Files: modules/timestamp/rewrite-fix-timezone.c
+  modules/timestamp/rewrite-fix-timezone.h
+  modules/timestamp/rewrite-guess-timezone.c
+  modules/timestamp/rewrite-guess-timezone.h
+  modules/timestamp/rewrite-set-timezone.c
+  modules/timestamp/rewrite-set-timezone.h
+  modules/timestamp/tf-format-date.c
+  modules/timestamp/tf-format-date.h
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/timestamp/tests/test_date.c
+Copyright: 2015, Vincent Bernat <Vincent.Bernat@exoscale.ch>
+ 2015, BalÃ¡zs Scheidler <balazs.scheidler@balabit.com>
+ 2015, Balabit
+License: GPL-2
+
+Files: modules/timestamp/tests/test_format_date.c
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: modules/xml/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: modules/xml/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/xml/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: modules/xml/tests/test_xml_parser.c
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: news/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: news/create-newsfile.py
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: news/next-pr-id.py
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: packaging/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: packaging/package-indexer/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: packaging/package-indexer/Dockerfile
+  packaging/package-indexer/pyproject.toml
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: persist-tool/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: persist-tool/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: persist-tool/persist-tool.c
+  persist-tool/persist-tool.h
+Copyright: 2002-2019, Balabit
+ 1998-2019, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: scl/*
+Copyright: Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: scl/graphite/*
+Copyright: Copyright (C) Gergely Nagy
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: scl/loadbalancer/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: scl/nodejs/*
+Copyright: Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: scripts/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: scripts/Makefile.am
+  scripts/update-patterndb.in
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: scripts/build-python-venv.sh
+  scripts/syslog-ng-update-virtualenv.in
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: scripts/test-grep.sh
+Copyright: 2019, 2020, Kokan <kokaipeter@gmail.com>
+ 2019, 2020, Balabit
+License: GPL-2
+
+Files: scripts/version.sh
+Copyright: 2019, Balabit
+ 2018, Kokan <kokaipeter@gmail.com>
+License: GPL-2
+
+Files: syslog-ng-ctl/*
+Copyright: 2002-2019, Balabit
+ 1998-2019, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: syslog-ng-ctl/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: syslog-ng-ctl/commands/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: syslog-ng-ctl/commands/healthcheck.c
+  syslog-ng-ctl/commands/healthcheck.h
+Copyright: 2023, László Várady <laszlo.varady93@gmail.com>
+License: LGPL-2.1+
+
+Files: syslog-ng-ctl/commands/log-level.c
+  syslog-ng-ctl/commands/log-level.h
+Copyright: 2020-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: LGPL-2.1+
+
+Files: syslog-ng/*
+Copyright: 2002-2019, Balabit
+ 1998-2019, Balázs Scheidler
+License: LGPL-2.1+
+
+Files: syslog-ng/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: LGPL-2.1+ with OpenSSL exception
+
+Files: tests/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: tests/copyright/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: tests/copyright/check.sh
+Copyright: 2022, 2023, One Identity LLC.
+ 2016, 2020, Balabit
+License: GPL-2
+
+Files: tests/functional/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: tests/functional/rnd.in
+Copyright: É¥n°
+License: GPL-2+ with OpenSSL exception
+
+Files: tests/light/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: tests/light/functional_tests/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: tests/light/functional_tests/config_change/test_python_custom_options.py
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: tests/light/functional_tests/destination_drivers/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/functional_tests/destination_drivers/example_destination/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: tests/light/functional_tests/filters/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/functional_tests/logpath/__init__.py
+  tests/light/functional_tests/logpath/test_named_logpaths.py
+  tests/light/functional_tests/logpath/test_named_logpaths_with_catchall_flag.py
+  tests/light/functional_tests/logpath/test_named_logpaths_with_fallback_flag.py
+  tests/light/functional_tests/logpath/test_named_logpaths_with_final_flag.py
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: tests/light/functional_tests/logpath/test_conditionals.py
+  tests/light/functional_tests/logpath/test_midpoint_destinations.py
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: tests/light/functional_tests/parsers/checkpoint/*
+Copyright: 2018, 2020, Kokan
+ 2018, 2020, Balabit
+License: GPL-2
+
+Files: tests/light/functional_tests/parsers/cisco-parser/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/functional_tests/parsers/csv-parser/*
+Copyright: 2021, Xiaoyu Qiu
+ 2020, 2021, One Identity
+License: GPL-2
+
+Files: tests/light/functional_tests/parsers/group-lines-parser/*
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: tests/light/functional_tests/parsers/mariadb-parser/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/functional_tests/parsers/regexp-parser/*
+Copyright: 2021, Xiaoyu Qiu
+ 2020, 2021, One Identity
+License: GPL-2
+
+Files: tests/light/functional_tests/parsers/sdata-parser/*
+Copyright: 2019, 2021-2023, Balazs Scheidler <bazsi77@gmail.com>
+License: GPL-2
+
+Files: tests/light/functional_tests/rewrites/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/functional_tests/rewrites/set-tag/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: tests/light/functional_tests/source_drivers/file_source/test_no_header_flag.py
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/functional_tests/source_drivers/network_source/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/functional_tests/source_options/*
+Copyright: 2020, Nobles
+ 2020, Balabit
+License: GPL-2
+
+Files: tests/light/functional_tests/template_functions/slog/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/functional_tests/tools/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/functional_tests/value-pairs/*
+Copyright: 2023, Balazs Scheidler <balazs.scheidler@axoflow.com>
+License: GPL-2
+
+Files: tests/light/src/Makefile.am
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: tests/light/src/common/asynchronous.py
+  tests/light/src/common/network.py
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/src/driver_io/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/src/driver_io/file/*
+Copyright: 2002-2021, Balabit
+License: GPL-2
+
+Files: tests/light/src/helpers/*
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/src/syslog_ng_config/statements/destinations/network_destination.py
+  tests/light/src/syslog_ng_config/statements/destinations/unix_dgram_destination.py
+  tests/light/src/syslog_ng_config/statements/destinations/unix_stream_destination.py
+Copyright: 2020-2022, One Identity
+License: GPL-2
+
+Files: tests/light/src/syslog_ng_ctl/prometheus_stats_handler.py
+Copyright: 2023, Attila Szakacs
+License: GPL-2
+
+Files: tests/loggen/*
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: tests/loggen/Makefile.am
+  tests/loggen/loggen.md
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: tests/loggen/socket_plugin/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: tests/loggen/socket_plugin/socket_plugin.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: tests/loggen/ssl_plugin/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: tests/loggen/ssl_plugin/ssl_plugin.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+Files: tests/loggen/tests/*
+Copyright: Copyright (C) Balázs Scheidler
+ Copyright (C) BalaBit IT Security Ltd.
+License: GPL-2+ with OpenSSL exception
+
+Files: tests/loggen/tests/test_loggen_filereader.c
+Copyright: 2002-2023, Balabit
+License: LGPL-2.1+
+
+License: BSD-3-clause
+ The BSD License
+ .
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are
+ met:
+ .
+   * Redistributions of source code must retain the above copyright
+     notice, this list of conditions and the following disclaimer.
+ .
+   * Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in the
+     documentation and/or other materials provided with the distribution. 
+ .
+   * Neither the name of the copyright holder nor the names of its
+     contributors may be used to endorse or promote products derived from
+     this software without specific prior written permission. 
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-4-Clause-UC
+ Please fill license BSD-4-Clause-UC and/or GPL-2 and/or LGPL-2.1+ or GPL-2+ with OpenSSL exception from header of 
+
+License: FSFAP
+  Copying and distribution of this file, with or without modification, are
+  permitted in any medium without royalty provided the copyright notice
+  and this notice are preserved.  This file is offered as-is, without any
+  warranty.
+
+License: GPL
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 1, or (at your option)
+ any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA  02110-1301 USA.
+
+License: GPL-2
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; version 2 dated June, 1991.
+ On Debian systems, the complete text of version 2 of the GNU General
+ Public License can be found in '/usr/share/common-licenses/GPL-2'.
 
 License: GPL-2+
  This program is free software; you can redistribute it and/or modify it
@@ -262,6 +3494,21 @@ License: GPL-2+ with OpenSSL exception
  .
  On Debian systems, the complete text of the GNU General Public
  License can be found in the file `/usr/share/common-licenses/GPL-2'.
+
+License: GPL-3
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; version 3 dated June, 2007.
+ On Debian systems, the complete text of version 3 of the GNU General
+ Public License can be found in '/usr/share/common-licenses/GPL-3'.
+
+License: LGPL-2.1+
+ This program is free software; you can redistribute it and/or modify it
+ under the terms of the GNU Lesser General Public License as published by the
+ Free Software Foundation; version 2.1 of the License, or (at
+ your option) any later version.
+ On Debian systems, the complete text of version 2.1 of the GNU Lesser
+ General Public License can be found in '/usr/share/common-licenses/LGPL-2.1'.
 
 License: LGPL-2.1+ with OpenSSL exception
  This library is free software; you can redistribute it and/or

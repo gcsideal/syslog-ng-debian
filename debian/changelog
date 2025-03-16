@@ -1,10 +1,11 @@
-syslog-ng (4.8.1-4) UNRELEASED; urgency=medium
+syslog-ng (4.8.1-4) unstable; urgency=medium
 
   [ SZALAY Attila ]
   * Install smart-multi-line.fsm to enable smart multi line support
     (closes: #1091616).
   * Extending autopkgtest tests about config warnings.
   * Update configuration and eliminate warnings.
+  * Incorporate latest changes into the copyright file.
 
  -- Laszlo Boszormenyi (GCS) <gcs@debian.org>  Sun, 16 Mar 2025 08:59:59 +0100
 
