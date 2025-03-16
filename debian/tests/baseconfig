@@ -1,6 +1,6 @@
 systemctl stop syslog-ng
 /usr/sbin/syslog-ng --syntax-only --cfgfile /etc/syslog-ng/syslog-ng.conf
-/usr/sbin/syslog-ng --no-caps --process-mode=background --cfgfile /etc/syslog-ng/syslog-ng.conf --persist-file=/tmp/persist_file --pidfile=/tmp/syslog-ng.pid --control=/tmp/syslog-ng.control
+/usr/sbin/syslog-ng --no-caps --process-mode=background --cfgfile /etc/syslog-ng/syslog-ng.conf --persist-file=/tmp/persist_file --pidfile=/tmp/syslog-ng.pid --control=/tmp/syslog-ng.control >/tmp/syslog_output 2>&1
 
 sleep 2
 
@@ -13,5 +13,16 @@ then
   echo "syslog-ng could not start"
   exit 1
 fi
+
+if [ -s /tmp/syslog_output ]
+then
+  echo "syslog-ng generated warnings about the config file\n"
+  echo "The content of the warnings:"
+  cat /tmp/syslog_output
+  echo
+  exit 1
+fi
+
+echo "Syslog-ng was able to start without warnings"
 
 kill $PID
