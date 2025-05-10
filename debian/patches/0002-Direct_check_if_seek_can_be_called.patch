@@ -1,8 +1,7 @@
-From 2cd1f3abaf077aa0f14de967db55993c06bdad06 Mon Sep 17 00:00:00 2001
 From: Hofi <hofione@gmail.com>
 Date: Fri, 8 Nov 2024 15:46:00 +0100
-Subject: [PATCH] file-reader: added a more detailed, direct check if seek can
- be called on the file descriptor
+Subject: [PATCH] file-reader: added a more detailed,
+ direct check if seek can be called on the file descriptor
 
 Signed-off-by: Hofi <hofione@gmail.com>
 ---
@@ -10,7 +9,7 @@ Signed-off-by: Hofi <hofione@gmail.com>
  1 file changed, 19 insertions(+), 3 deletions(-)
 
 diff --git a/modules/affile/file-reader.c b/modules/affile/file-reader.c
-index 712bac5c91a..203c2086d35 100644
+index 712bac5..203c208 100644
 --- a/modules/affile/file-reader.c
 +++ b/modules/affile/file-reader.c
 @@ -163,10 +163,26 @@ _recover_state(LogPipe *s, GlobalConfig *cfg, LogProtoServer *proto)
