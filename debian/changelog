@@ -1,13 +1,11 @@
-syslog-ng (4.8.1-5~1.gbpb38902) UNRELEASED; urgency=medium
+syslog-ng (4.8.1-5) unstable; urgency=medium
 
-  ** SNAPSHOT build @b38902d5617a516a0399d43c68658e683e942720 **
-
-  * Fix transport accepting incorrect wildcards.
-    This patch cherrí-picked from upstream until they fix it in an official release.
-    It can also be used as a baseline to fix the same issue in other releases.
+  * Fix transport accepting incorrect wildcards
+    This patch cherry-picked from upstream until they fix it in an official release.
+    It can also be used as a baseline to fix the same issue in older releases.
     CVE-ID: CVE-2024-47619 (Closes: #1104890)
 
- -- SZALAY Attila <sasa@debian.org>  Sat, 10 May 2025 12:08:08 +0100
+ -- SZALAY Attila <sasa@debian.org>  Sat, 10 May 2025 12:12:49 +0100
 
 syslog-ng (4.8.1-4) unstable; urgency=medium
 
