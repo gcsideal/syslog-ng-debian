@@ -1,6 +1,7 @@
-syslog-ng (4.8.1-6) UNRELEASED; urgency=medium
+syslog-ng (4.8.1-6) unstable; urgency=medium
 
   * Turn off writing log statistics (closes: #1110329).
+  * Explicitly disable the MQTT destination plugin.
 
  -- Laszlo Boszormenyi (GCS) <gcs@debian.org>  Fri, 08 Aug 2025 18:47:18 +0200
 
