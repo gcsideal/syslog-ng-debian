@@ -1,0 +1,44 @@
+From: Hofi <hofione@gmail.com>
+Date: Wed, 27 Aug 2025 14:02:26 +0200
+Subject: afmongodb: use v1/v2 headers correctly
+
+Signed-off-by: Hofi <hofione@gmail.com>
+---
+ modules/afmongodb/afmongodb-private.h | 6 +++++-
+ modules/afmongodb/afmongodb-worker.h  | 6 +++++-
+ 2 files changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/modules/afmongodb/afmongodb-private.h b/modules/afmongodb/afmongodb-private.h
+index 7de550f..77df2fd 100644
+--- a/modules/afmongodb/afmongodb-private.h
++++ b/modules/afmongodb/afmongodb-private.h
+@@ -24,7 +24,11 @@
+ #define AFMONGODB_PRIVATE_H_
+ 
+ #include "syslog-ng.h"
+-#include "mongoc.h"
++#ifdef SYSLOG_NG_HAVE_MONGOC_V2
++# include "mongoc/mongoc.h"
++#else
++# include "mongoc.h"
++#endif
+ #include "logthrdest/logthrdestdrv.h"
+ #include "template/templates.h"
+ #include "value-pairs/value-pairs.h"
+diff --git a/modules/afmongodb/afmongodb-worker.h b/modules/afmongodb/afmongodb-worker.h
+index a566389..5c61c15 100644
+--- a/modules/afmongodb/afmongodb-worker.h
++++ b/modules/afmongodb/afmongodb-worker.h
+@@ -26,7 +26,11 @@
+ #define AFMONGODB_WORKER_H_INCLUDED
+ 
+ #include "syslog-ng.h"
+-#include "mongoc.h"
++#ifdef SYSLOG_NG_HAVE_MONGOC_V2
++# include "mongoc/mongoc.h"
++#else
++# include "mongoc.h"
++#endif
+ #include "logthrdest/logthrdestdrv.h"
+ 
+ typedef struct MongoDBDestWorker

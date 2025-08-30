@@ -1,3 +1,5 @@
 0001-Update-control-file-path.patch
 0002-Direct_check_if_seek_can_be_called.patch
 0003-Fix-transport-accepting-incorrect-wildcards.patch
+0004-mongo-c-add-v1-v2-detection-to-autotools.patch
+0005-afmongodb-use-v1-v2-headers-correctly.patch
