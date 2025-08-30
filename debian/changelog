@@ -1,3 +1,11 @@
+syslog-ng (4.8.1-7) UNRELEASED; urgency=medium
+
+  * Rediff patches.
+    Add 0004-mongo-c-add-v1-v2-detection-to-autotools.patch
+    Add 0005-afmongodb-use-v1-v2-headers-correctly.patch
+
+ -- SZALAY Attila <sasa@debian.org>  Sat, 30 Aug 2025 16:51:59 +0100
+
 syslog-ng (4.8.1-6) unstable; urgency=medium
 
   * Turn off writing log statistics (closes: #1110329).
