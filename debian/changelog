@@ -1,4 +1,4 @@
-syslog-ng (4.8.1-7) UNRELEASED; urgency=medium
+syslog-ng (4.8.1-7) unstable; urgency=medium
 
   * Rediff patches.
     Add 0004-mongo-c-add-v1-v2-detection-to-autotools.patch
