@@ -37,6 +37,220 @@ AC_CONFIG_SRCDIR([syslog-ng/main.c])
 AC_CONFIG_MACRO_DIR([m4])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
+dnl ============================================================
+dnl Check for tput and if it is working, to be able to use
+dnl colored output in the configure script
+dnl ============================================================
+AC_PATH_PROG([TPUT], [tput])
+AC_MSG_CHECKING([whether tput is available and working])
+if test -n "$TPUT" && "$TPUT" setaf 1 >/dev/null 2>&1; then
+    TPUT_WORKING=yes
+    AC_MSG_RESULT([yes])
+else
+    TPUT_WORKING=no
+    AC_MSG_RESULT([no])
+fi
+
+# ANSI color codes
+AC_CONFIG_COMMANDS_PRE([
+if test "x$TPUT_WORKING" = "xyes"; then
+    color_red=$($TPUT setaf 1 2>/dev/null || true)
+    color_green=$($TPUT setaf 2 2>/dev/null || true)
+    color_yellow=$($TPUT setaf 3 2>/dev/null || true)
+    color_blue=$($TPUT setaf 4 2>/dev/null || true)
+    color_reset=$($TPUT sgr0 2>/dev/null || true)
+else
+    ESC=$(printf '\033')          # ASCII ESC
+    LBRACKET=$(printf '\133')     # ASCII square bracket (portable octal)
+    color_red="${ESC}${LBRACKET}31m"
+    color_green="${ESC}${LBRACKET}32m"
+    color_yellow="${ESC}${LBRACKET}33m"
+    color_blue="${ESC}${LBRACKET}34m"
+    color_reset="${ESC}${LBRACKET}0m"
+fi
+export color_red color_green color_yellow color_blue color_reset
+])
+
+dnl ***************************************************************************
+dnl Helper macros
+dnl
+dnl FIXME: Moving these to separate m4 files (e.g. m4/safe_c_check.m4) fails during configure
+dnl             ../configure: line 29338: SAFE_C_CHECK_END: command not found
+dnl ============================================================
+
+dnl ============================================================
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE - if needed
+dnl Save compiler/linker flags
+dnl ============================================================
+m4_define([SAFE_C_CHECK_BEGIN], [dnl
+   CFLAGS_SAVE="$CFLAGS"
+   CPPFLAGS_SAVE="$CPPFLAGS"
+   LIBS_SAVE="$LIBS"
+   LDFLAGS_SAVE="$LDFLAGS"
+   AC_LANG_PUSH([C])
+])dnl
+
+dnl ============================================================
+dnl Restore compiler/linker flags
+dnl ============================================================
+m4_define([SAFE_C_CHECK_END], [dnl
+  AC_LANG_POP([C])
+  CFLAGS="$CFLAGS_SAVE"
+  CPPFLAGS="$CPPFLAGS_SAVE"
+  LIBS="$LIBS_SAVE"
+  LDFLAGS="$LDFLAGS_SAVE"
+])dnl
+
+dnl ============================================================
+dnl Generic HAVE checker to have a one step AC_CHECK_XXX check and
+dnl AC_DEFINE HAVE_ 1, AC_DEFINE HAVE_ 0
+dnl functionalyty
+dnl Usage CHECK_AND_DEFINE([checker_func], [target_to_check], [HAVE_XXX_name_override])
+dnl     $1 = checker func [AC_CHECK_HEADERS or AC_CHECK_FUNCS] (mandatory)
+dnl     $2 = target (header/func to check, mandatory)
+dnl     $3 = override macro name (optional)
+dnl ============================================================
+AC_DEFUN([CHECK_AND_DEFINE],
+[
+    dnl AC_MSG_NOTICE([Checking $target_kind $2 $3])
+
+    dnl Figure out what we are checking
+    m4_case([$1],
+        [AC_CHECK_HEADERS], [target_kind="header"; cachevar=ac_cv_header_[]AS_TR_SH([$2])],
+        [AC_CHECK_FUNCS],   [target_kind="function"; cachevar=ac_cv_func_[]AS_TR_SH([$2])],
+        [m4_fatal([Unsupported checker macro $1 passed to CHECK_AND_DEFINE])])
+
+    $1([$2])
+
+    dnl Safely copy the cached result into shell var "cacheval"
+    AS_VAR_COPY([cacheval], [$cachevar])
+    dnl AC_MSG_NOTICE([ -> cache var: $cachevar = $cacheval])
+
+    m4_ifval([$3],
+        [
+            dnl override define name provided
+            AS_IF([test "x$cacheval" = "xyes"],
+                [
+                  AC_DEFINE([$3], [1], [Define if $2 is present])
+                  eval $3=1
+                ],
+                [
+                  AC_DEFINE([$3], [0], [Define if $2 is present])
+                  eval $3=0
+                ])
+            dnl AC_MSG_NOTICE([ -> define (override): $3] [= ${$3}])
+        ],
+        [
+            dnl default define name
+            define_name=HAVE_[]AS_TR_CPP([$2])
+            AS_IF([test "x$cacheval" = "xyes"],
+                [
+                  AC_DEFINE(HAVE_[]AS_TR_CPP([$2]), [1], [Define if $2 is present])
+                  eval $define_name=1
+                ],
+                [
+                  AC_DEFINE(HAVE_[]AS_TR_CPP([$2]), [0], [Define if $2 is present])
+                  eval $define_name=0
+                ])
+            dnl AC_MSG_NOTICE([ -> define (default): HAVE_]AS_TR_CPP([$2]) [= ${HAVE_[]AS_TR_CPP([$2])]})
+        ])
+])
+
+dnl ============================================================
+dnl
+dnl NOTE: This one is crazy
+dnl       Take care: Never use AC_CHECK_HEADER or AC_CHECK_HEADERS alone.
+dnl       The first one will NOT propagate the cached results to AX_PREFIX_CONFIG_H at all,
+dnl       while the latter does, but defines it in the produced config.h only if its value is 1.
+dnl       Otherwise, it just leaves a comment like:
+dnl            /* Define to 1 if you have the <door.h> header file. */
+dnl            /* #undef HAVE_DOOR_H */
+dnl
+dnl       So, if for any reason AC_CHECK_HEADER must be used, then an additional AC_DEFINE is required,
+dnl       for example:
+dnl            AC_CHECK_HEADER(dlfcn.h)
+dnl            AS_IF([test "x$ac_cv_header_dlfcn_h" = "xyes"],
+dnl                [AC_DEFINE([HAVE_DLFCN_H], [1], [Define if dlfcn.h is present])],
+dnl                [AC_DEFINE([HAVE_DLFCN_H], [0], [Define if dlfcn.h is present])])
+dnl
+dnl       This is necessary because we do not use the standard config.h. Instead, we use:
+dnl            AC_CONFIG_HEADERS(config.h)
+dnl            AX_PREFIX_CONFIG_H(syslog-ng-config.h, "SYSLOG_NG")
+dnl       The latter adds the SYSLOG_NG_ prefix to all HAVE_XXX macro names. However,
+dnl       in this case, only the macro names with explicit AC_DEFINE pairs are processed.
+dnl
+dnl       In CMake builds, the middle steps are missing: there is no config.h produced.
+dnl       As mentioned above, we use syslog-ng-config.h, which is the only one we have
+dnl       in those builds.
+dnl
+dnl       So, to build consistently with both build systems:
+dnl           - use AC_CHECK_HEADERS, not AC_CHECK_HEADER, for values that should go into
+dnl             syslog-ng-config.h and can be used in any source file
+dnl           - add AC_DEFINE for BOTH cases of the required HAVE_XXX macro names
+dnl           - use syslog-ng-config.h, never config.h directly (especially since we have
+dnl             other config.h files that could cause additional confusion)
+dnl           - DO NOT use HAVE_XXX, always use the SYSLOG_NG_HAVE_XXX variants
+dnl           - use only cmakedefine01 (YES/NO) SYSLOG_NG_HAVE_XXX defines for boolean switches
+dnl             in syslog-ng-config.h.in, never the plain cmakedefine version
+dnl           - use #if SYSLOG_NG_HAVE_XXX instead of #ifdef SYSLOG_NG_HAVE_XXX
+dnl             (as the latter will always fail if not defined correctly somewhere)
+dnl
+dnl       These rules will guarantee proper switch defines in both the Autotools and CMake builds.
+dnl
+dnl ============================================================
+dnl DO NOT USE AC_CHECK_HEADERS or AC_CHECK_HEADER alone if not needed
+dnl
+dnl Use: CHECK_HEADER_AND_DEFINE or CHECK_HEADERS_AND_DEFINE imstead
+dnl ============================================================
+dnl
+dnl One step AC_CHECK_HEADERS and AC_DEFINE HAVE_ 1, AC_DEFINE HAVE_ 0
+dnl for the given header
+dnl Usage CHECK_AND_DEFINE([target_to_check], [HAVE_XXX_name_override])
+dnl ============================================================
+AC_DEFUN([CHECK_HEADER_AND_DEFINE],
+[
+    CHECK_AND_DEFINE([AC_CHECK_HEADERS], [$1], [$2])
+])
+
+dnl ============================================================
+dnl Calls CHECK_HEADER_AND_DEFINE for each header
+dnl Usage CHECK_HEADERS_AND_DEFINE([header1 header2 …])
+dnl ============================================================
+dnl FIXME: trim correclty the whitespaces, \n, etc. if it is multi line list
+AC_DEFUN([CHECK_HEADERS_AND_DEFINE],
+[
+    m4_foreach([_hdr], m4_split(m4_normalize([$1])), [
+        CHECK_HEADER_AND_DEFINE(_hdr)
+    ])
+])
+
+dnl NOTE: Same is true here like above described for CHECK_HEADER_AND_DEFINE
+dnl ============================================================
+dnl DO NOT USE AC_CHECK_FUNCS or AC_CHECK_FUNC alone if not needed
+dnl
+dnl Use: CHECK_FUNC_AND_DEFINE or CHECK_FUNCS_AND_DEFINE imstead
+dnl ============================================================
+dnl One step AC_CHECK_FUNCS and AC_DEFINE HAVE_ 1, AC_DEFINE HAVE_ 0
+dnl for the given func
+dnl Usage CHECK_FUNC_AND_DEFINE([target_to_check], [HAVE_XXX_name_override])
+dnl ============================================================
+AC_DEFUN([CHECK_FUNC_AND_DEFINE],
+[
+    CHECK_AND_DEFINE([AC_CHECK_FUNCS], [$1], [$2])
+])
+
+dnl ============================================================
+dnl Calls CHECK_FUNC_AND_DEFINE for each function
+dnl Usage CHECK_FUNCS_AND_DEFINE([function1 function2 …])
+dnl ============================================================
+dnl FIXME: trim correclty the whitespaces, \n, etc. if it is multi line list
+AC_DEFUN([CHECK_FUNCS_AND_DEFINE],
+[
+    m4_foreach([_func], m4_split(m4_normalize([$1])), [
+        CHECK_FUNC_AND_DEFINE(_func)
+    ])
+])
+
 dnl ***************************************************************************
 dnl dependencies
 
@@ -49,7 +263,8 @@ IVYKIS_MIN_VERSION="0.36.1"
 IVYKIS_UPDATED_VERSION="0.39"
 JSON_C_MIN_VERSION="0.13"
 PCRE2_MIN_VERSION="10.0"
-LMC_MIN_VERSION="1.0.0"
+LMC_1_MIN_VERSION="1.0.0"
+LMC_MIN_VERSION="2.0.0"
 LRMQ_MIN_VERSION="0.0.1"
 LRC_MIN_VERSION="1.6.0"
 LIBBPF_MIN_VERSION="1.0.1"
@@ -149,283 +364,323 @@ dnl ***************************************************************************
 dnl Arguments
 
 AC_ARG_WITH(libnet,
-   [  --with-libnet=path      use path to libnet-config script],
-   ,
-   [with_libnet=""])
+    AS_HELP_STRING([--with-libnet=path], [use path to libnet-config script]),
+    , [with_libnet=""])
 
 AC_ARG_WITH(net-snmp,
-   [  --with-net-snmp=path      use path to net-snmp-config script],
-   ,
-   [with_net_snmp=""])
+    AS_HELP_STRING([--with-net-snmp=path], [use path to net-snmp-config script]),
+    , [with_net_snmp=""])
 
 AC_ARG_WITH(pidfile-dir,
-   [  --with-pidfile-dir=path   Use path as the directory for storing pidfiles],
-   pidfiledir=$with_pidfile_dir)
+    AS_HELP_STRING([--with-pidfile-dir=path], [Use path as the directory for storing pidfiles]),
+    pidfiledir=$with_pidfile_dir)
 
 AC_ARG_WITH(module-dir,
-   [  --with-module-dir=path   Use path as the directory to install modules into],
-   moduledir=$with_module_dir)
+    AS_HELP_STRING([--with-module-dir=path], [Use path as the directory to install modules into]),
+    moduledir=$with_module_dir)
 
 AC_ARG_WITH(loggen-plugin-dir,
-   [  --with-loggen-plugin-dir=path   Use path as the directory to install loggen plugins into],
-   loggenplugindir=$with_loggen_plugin_dir)
+    AS_HELP_STRING([--with-loggen-plugin-dir=path], [Use path as the directory to install loggen plugins into]),
+    loggenplugindir=$with_loggen_plugin_dir)
 
 AC_ARG_WITH(python-venv-dir,
-   [  --with-python-venv-dir=path   Use path as the directory to install the Python venv into],
-   python_venvdir=$with_python_venv_dir)
+    AS_HELP_STRING([--with-python-venv-dir=path], [Use path as the directory to install the Python venv into]),
+    python_venvdir=$with_python_venv_dir)
 
 AC_ARG_WITH(module-path,
-   [  --with-module-path=path   Use path as the list of ':' separated directories looked up when searching for modules],
-   module_path=$with_module_path)
+    AS_HELP_STRING([--with-module-path=path], [Use path as the list of ':' separated directories looked up when searching for modules]),
+    module_path=$with_module_path)
 
 AC_ARG_WITH(timezone-dir,
-   [  --with-timezone-dir=path   Use path as the directory to get the timezone files],
-   timezonedir=$with_timezone_dir)
+    AS_HELP_STRING([--with-timezone-dir=path], [Use path as the directory to get the timezone files]),
+    timezonedir=$with_timezone_dir)
 
 AC_ARG_WITH(ld-library-path,
-   [  --with-ld-library-path=path  Set LD_LIBRARY_PATH during runtime to the value given],
-   env_ld_library_path=$with_ld_library_path)
+    AS_HELP_STRING([--with-ld-library-path=path], [Set LD_LIBRARY_PATH during runtime to the value given]),
+    env_ld_library_path=$with_ld_library_path)
 
-AC_ARG_WITH([systemdsystemunitdir],
-   AS_HELP_STRING([--with-systemdsystemunitdir=DIR], [Directory for systemd service files]))
+AC_ARG_WITH(systemdsystemunitdir,
+    AS_HELP_STRING([--with-systemdsystemunitdir=DIR], [Directory for systemd service files]))
 
 AC_ARG_WITH(package_name,
-   [  --with-package-name=package name Package name is printed out when syslog-ng started with --version],
-   PACKAGE_NAME=$with_package_name)
+    AS_HELP_STRING([--with-package-name=package name], [Package name is printed out when syslog-ng started with --version]),
+    PACKAGE_NAME=$with_package_name)
 
 AC_ARG_ENABLE(forced_server_mode,
-              [  --enable-forced-server-mode   Enable forced server mode.],, enable_forced_server_mode="yes")
+    AS_HELP_STRING([--enable-forced-server-mode], [Enable forced server mode.]),
+    , enable_forced_server_mode="yes")
 
 AC_ARG_ENABLE(debug,
-              [  --enable-debug      Enable debugging code.],, enable_debug="no")
+    AS_HELP_STRING([--enable-debug], [Enable debugging code.]),
+    , enable_debug="no")
 
 AC_ARG_ENABLE(example-modules,
-              [  --enable-example-modules Enable example modules.],, enable_example_modules="yes")
+    AS_HELP_STRING([--enable-example-modules], [Enable example modules.]),
+    , enable_example_modules="yes")
 
 AC_ARG_ENABLE(force_gnu99,
-              [  --enable-force-gnu99      Enforce C99 with gnu extensions.],, force_gnu99="no")
+    AS_HELP_STRING([--enable-force-gnu99], [Enforce C99 with gnu extensions.]),
+    , force_gnu99="no")
 
 AC_ARG_ENABLE(extra-warnings,
-              [  --enable-extra-warnings      Enable extra compiler warnings (recommended).],, enable_extra_warnings="no")
+    AS_HELP_STRING([--enable-extra-warnings], [Enable extra compiler warnings (recommended).]),
+    , enable_extra_warnings="no")
 
 AC_ARG_ENABLE(env-wrapper,
-              [  --enable-env-wrapper    Enable wrapper program to set up various environment variables],, enable_env_wrapper=auto)
+    AS_HELP_STRING([--enable-env-wrapper], [Enable wrapper program to set up various environment variables]),
+    , enable_env_wrapper=auto)
 
 AC_ARG_ENABLE(gprof,
-              [  --enable-gprof      Enable gcc profiling.],, enable_gprof="no")
+    AS_HELP_STRING([--enable-gprof], [Enable gcc profiling.]),
+    , enable_gprof="no")
 
 AC_ARG_ENABLE(memtrace,
-              [  --enable-memtrace   Enable alternative leak debugging code.])
+    AS_HELP_STRING([--enable-memtrace], [Enable alternative leak debugging code.]))
 
 AC_ARG_WITH(sanitizer,
-              [  --with-sanitizer=[address/undefined/etc...]
-                                         Enables compiler sanitizer supports (default: no)]
-              ,,with_sanitizer="no")
-
-AC_ARG_ENABLE(dynamic-linking,
-              [  --enable-dynamic-linking        Link everything dynamically.],,enable_dynamic_linking="auto")
-
-AC_ARG_ENABLE(mixed-linking,
-              [  --enable-mixed-linking          Link 3rd party libraries statically, system libraries dynamically],,enable_mixed_linking="auto")
+    AS_HELP_STRING([--with-sanitizer=[address/undefined/etc...]], [Enables compiler sanitizer supports (default: no)]),
+    , with_sanitizer="no")
 
 AC_ARG_ENABLE(force-classic-linking,
-              [  --enable-force-classic-linking  Link using ld-classic (default: no)],, enable_force_classic_linking="no")
+    AS_HELP_STRING([--enable-force-classic-linking], [Link using ld-classic (default: no)]),
+    , enable_force_classic_linking="no")
 
 AC_ARG_ENABLE(ipv6,
-              [  --enable-ipv6           Enable support for IPv6.],,enable_ipv6="auto")
+    AS_HELP_STRING([--enable-ipv6], [Enable support for IPv6.]),
+    , enable_ipv6="auto")
 
 AC_ARG_ENABLE(tcp-wrapper,
-              [  --enable-tcp-wrapper    Enable support for TCP wrappers.],,enable_tcp_wrapper="auto")
+    AS_HELP_STRING([--enable-tcp-wrapper], [Enable support for TCP wrappers.]),
+    , enable_tcp_wrapper="auto")
+
+AC_ARG_ENABLE(jemalloc,
+    AS_HELP_STRING([--enable-jemalloc], [Enable support for jemalloc memory allocator (default: no)]),
+    , enable_jemalloc="no")
 
 AC_ARG_ENABLE(spoof-source,
-              [  --enable-spoof-source   Enable support for spoofed source addresses.]
-              ,,enable_spoof_source="auto")
+    AS_HELP_STRING([--enable-spoof-source], [Enable support for spoofed source addresses.]),
+    , enable_spoof_source="auto")
 
 AC_ARG_ENABLE(sun-streams,
-              [  --enable-sun-streams    Enable support for Solaris /dev/log STREAMS device.]
-              ,,enable_sun_streams="auto")
+    AS_HELP_STRING([--enable-sun-streams], [Enable support for Solaris /dev/log STREAMS device.]),
+    , enable_sun_streams="auto")
 
 AC_ARG_ENABLE(darwin-osl,
-              [  --enable-darwin-osl    Enable support for Darwin OS Log source. (default: auto)]
-              ,,enable_darwin_osl="auto")
+    AS_HELP_STRING([--enable-darwin-osl], [Enable support for Darwin OS Log source. (default: auto)]),
+    , enable_darwin_osl="auto")
 
 AC_ARG_ENABLE(openbsd-system-source,
-              [  --enable-openbsd-system-source    Enable support for OpenBSD /dev/klog device.]
-              ,,enable_openbsd_system_source="auto")
+    AS_HELP_STRING([--enable-openbsd-system-source], [Enable support for OpenBSD /dev/klog device.]),
+    , enable_openbsd_system_source="auto")
 
 AC_ARG_ENABLE(sql,
-	      [  --enable-sql            Enable support for SQL destinations. (default: auto)]
-	      ,,enable_sql="auto")
+    AS_HELP_STRING([--enable-sql], [Enable support for SQL destinations. (default: auto)]),
+    , enable_sql="auto")
 
 AC_ARG_ENABLE(pacct,
-              [  --enable-pacct          Enable support for reading Process Accounting files (EXPERIMENTAL, Linux only).]
-              ,,enable_pacct="no")
+    AS_HELP_STRING([--enable-pacct], [Enable support for reading Process Accounting files (EXPERIMENTAL, Linux only).]),
+    , enable_pacct="no")
 
 AC_ARG_ENABLE(linux-caps,
-              [  --enable-linux-caps     Enable support for managing Linux capabilities (default: auto)]
-              ,,enable_linux_caps="auto")
+    AS_HELP_STRING([--enable-linux-caps], [Enable support for managing Linux capabilities (default: auto)]),
+    , enable_linux_caps="auto")
 
 AC_ARG_ENABLE(ebpf,
-              [  --enable-ebpf           Enable support for loading of eBPF programs (default: no)]
-              ,,enable_ebpf="no")
+    AS_HELP_STRING([--enable-ebpf], [Enable support for loading of eBPF programs (default: no)]),
+    , enable_ebpf="no")
+
+AC_ARG_ENABLE(slog,
+    AS_HELP_STRING([--enable-slog], [Enable secure logging (slog) module and CLI tools from Airbus (default: no)]),
+    , enable_slog="no")
 
 AC_ARG_ENABLE(gcov,
-              [  --enable-gcov           Enable coverage profiling (default: no)]
-              ,,enable_gcov="no")
+    AS_HELP_STRING([--enable-gcov], [Enable coverage profiling (default: no)]),
+    , enable_gcov="no")
 
 AC_ARG_ENABLE(mongodb,
-	      [  --enable-mongodb        Enable mongodb destination (default: auto)]
-              ,,enable_mongodb="auto")
+    AS_HELP_STRING([--enable-mongodb], [Enable support for mongodb destination (default: auto)]),
+    , enable_mongodb="auto")
 
 AC_ARG_WITH(jsonc,
-              [  --with-jsonc=[yes/no]
-                                         Link against the system supplied jsonc library or explicitly disable it. (default: yes)]
-              ,,with_jsonc="yes")
+    AS_HELP_STRING([--with-jsonc=[yes/no]], [Link against the system supplied jsonc library or explicitly disable it. (default: yes)]),
+    , with_jsonc="yes")
 
 AC_ARG_ENABLE(json,
-             [ --enable-json=[yes/no]            Enable JSON support (default: yes)]
-              ,[if test "x$enableval" != "xno"; then with_jsonc="system"; else with_jsonc="no"; fi],)
+    AS_HELP_STRING([--enable-json=[yes/no]], [Enable JSON support (default: yes)]),
+    [if test "x$enableval" != "xno"; then with_jsonc="system"; else with_jsonc="no"; fi])
 
 AC_ARG_ENABLE(amqp,
-          [  --enable-amqp        Enable amqp destination (default: auto)]
-              ,,enable_amqp="auto")
+    AS_HELP_STRING([--enable-amqp], [Enable amqp destination (default: auto)]),
+    , enable_amqp="auto")
 
 AC_ARG_ENABLE(stomp,
-          [  --enable-stomp        Enable stomp destination (default: yes)]
-              ,,enable_stomp="yes")
+    AS_HELP_STRING([--enable-stomp], [Enable stomp destination (default: yes)]),
+    , enable_stomp="yes")
 
 AC_ARG_WITH(ivykis,
-              [  --with-ivykis=[system/internal]
-                                         Link against the system supplied or the built-in ivykis library. (default: internal)]
-              ,,with_ivykis="internal")
+    AS_HELP_STRING([--with-ivykis=[system/internal]], [Link against the system supplied or the built-in ivykis library. (default: internal)]),
+    , with_ivykis="internal")
 
 AC_ARG_ENABLE(smtp,
-              [  --disable-smtp          Disable SMTP support (default: auto)]
-              ,,enable_smtp="auto")
+    AS_HELP_STRING([--disable-smtp], [Disable SMTP support (default: auto)]),
+    , enable_smtp="auto")
 
 AC_ARG_WITH(libesmtp,
-             AC_HELP_STRING([--with-libesmtp=DIR],
-                            [use libesmtp library from (prefix) directory DIR]),,)
+    AS_HELP_STRING([--with-libesmtp=DIR], [use libesmtp library from (prefix) directory DIR]))
 
 AC_ARG_ENABLE(mqtt,
-              [  --disable-mqtt          Disable MQTT support (default: auto)]
-              ,,enable_mqtt="auto")
+    AS_HELP_STRING([--disable-mqtt], [Disable MQTT support (default: auto)]),
+    , enable_mqtt="auto")
 
 AC_ARG_WITH(libpaho-mqtt,
-             AC_HELP_STRING([--with-libpaho-mqtt=DIR],
-                            [use libpaho-mqtt library from (prefix) directory DIR]),,)
+    AS_HELP_STRING([--with-libpaho-mqtt=DIR], [use libpaho-mqtt library from (prefix) directory DIR]))
 
 AC_ARG_ENABLE(grpc,
-              [  --enable-grpc           Enable GRPC based modules support (OpenTelemetry, Loki, BigQuery) (default: auto)]
-              ,,enable_grpc="auto")
+    AS_HELP_STRING([--enable-grpc], [Enable GRPC based modules support (OpenTelemetry, Loki, BigQuery, Pub/Sub, ClickHouse) (requires C++20) (default: auto)]),
+    , enable_grpc="auto")
 
 AC_ARG_WITH(protoc,
-            AC_HELP_STRING([--with-protoc=PATH],
-                           [use protoc binary at PATH]),,)
+    AS_HELP_STRING([--with-protoc=PATH], [use protoc binary at PATH]))
 
 AC_ARG_WITH(protoc_gen_grpc_cpp_plugin,
-            AC_HELP_STRING([--with-protoc-gen-grpc-cpp-plugin=PATH],
-                           [use protoc-gen-grpc-cpp plugin at PATH]),,)
+    AS_HELP_STRING([--with-protoc-gen-grpc-cpp-plugin=PATH], [use protoc-gen-grpc-cpp plugin at PATH]))
 
 AC_ARG_ENABLE(cloud_auth,
-              [  --enable-cloud-auth     Enable cloud authentication methods (GCP) (default: auto)]
-              ,,enable_cloud_auth="auto")
+    AS_HELP_STRING([--enable-cloud-auth], [Enable cloud authentication methods (GCP) (default: auto)]),
+    , enable_cloud_auth="auto")
 
 AC_ARG_ENABLE(cpp,
-              [  --enable-cpp           Enable C++ support (default: auto)]
-              ,,enable_cpp="auto")
+    AS_HELP_STRING([--enable-cpp], [Enable C++ support (default: auto)]),
+    , enable_cpp="auto")
 
 AC_ARG_ENABLE(http,
-              [  --disable-http          Disable http support (default: auto)]
-              ,,enable_http="auto")
+    AS_HELP_STRING([--disable-http], [Disable http support (default: auto)]),
+    , enable_http="auto")
 
 AC_ARG_WITH(libcurl,
-             AC_HELP_STRING([--with-libcurl=DIR],
-                            [use libcurl library from (prefix) directory DIR]),,)
+    AS_HELP_STRING([--with-libcurl=DIR], [use libcurl library from (prefix) directory DIR]))
 
 AC_ARG_ENABLE(redis,
-              [  --disable-redis          Disable REDIS support (default: auto)]
-              ,,enable_redis="auto")
+    AS_HELP_STRING([--disable-redis], [Disable REDIS support (default: auto)]),
+    , enable_redis="auto")
 
 AC_ARG_WITH(libhiredis,
-             AC_HELP_STRING([--with-libhiredis=DIR],
-                            [use libhiredis library from (prefix) directory DIR]),,)
+    AS_HELP_STRING([--with-libhiredis=DIR], [use libhiredis library from (prefix) directory DIR]))
 
 AC_ARG_ENABLE(systemd,
-              [  --enable-systemd        Enable systemd support (default: auto)]
-              ,,enable_systemd="auto")
+    AS_HELP_STRING([--enable-systemd], [Enable systemd support (default: auto)]),
+    , enable_systemd="auto")
 
 AC_ARG_ENABLE(geoip2,
-              [  --enable-geoip2          Enable GeoIP2 support (default: auto)]
-              ,,enable_geoip2="auto")
+    AS_HELP_STRING([--enable-geoip2], [Enable GeoIP2 support (default: auto)]),
+    , enable_geoip2="auto")
 
 AC_ARG_ENABLE(riemann,
-              [  --disable-riemann       Disable riemann destination]
-              ,,enable_riemann="auto")
+    AS_HELP_STRING([--disable-riemann], [Disable riemann destination]),
+    , enable_riemann="auto")
 
 AC_ARG_WITH(compile-date,
-	      [  --without-compile-date  Do not include the compile date in the binary]
-	      ,wcmp_date="${withval}", wcmp_date="yes")
+    AS_HELP_STRING([--without-compile-date], [Do not include the compile date in the binary]),
+    wcmp_date="${withval}", wcmp_date="yes")
 
 AC_ARG_WITH(systemd-journal,
-              [  --with-systemd-journal=[system/optional/auto]
-                                         Link against the system supplied or the wrapper library. (default: auto)]
-              ,,with_systemd_journal="auto")
+    AS_HELP_STRING([--with-systemd-journal=[system/optional/auto]], [Link against the system supplied or the wrapper library. (default: auto)]),
+    , with_systemd_journal="auto")
 
 AC_ARG_ENABLE(kafka,
-              [  --enable-kafka         Enable rdkafka support]
-              ,,enable_kafka="auto")
+    AS_HELP_STRING([--enable-kafka], [Enable rdkafka support]),
+    , enable_kafka="auto")
 
 AC_ARG_ENABLE(python,
-              [  --disable-python       Disable Python module]
-              ,,enable_python="auto")
+    AS_HELP_STRING([--disable-python], [Disable Python module]),
+    , enable_python="auto")
 
 AC_ARG_ENABLE(python-modules,
-              [  --disable-python-modules  Disable Python based syslog-ng addons while installing the core Python modules]
-              ,,enable_python_modules="auto")
+    AS_HELP_STRING([--disable-python-modules], [Disable Python based syslog-ng addons while installing the core Python modules]),
+    , enable_python_modules="auto")
 
 AC_ARG_WITH(python,
-              [  --with-python=VERSION    Build with a specific version of python]
-              ,,with_python="auto")
+    AS_HELP_STRING([--with-python=VERSION], [Build with a specific version of python]),
+    , with_python="auto")
 
 AC_ARG_WITH(python-packages,
-              [  --with-python-packages=[system|venv|none]    Use Python packages from the system or a private virtualenv or skip their installation (default: venv)]
-              ,,with_python_packages="venv")
+    AS_HELP_STRING([--with-python-packages=[system|venv|none]], [Use Python packages from the system or a private virtualenv or skip their installation (default: venv)]),
+    , with_python_packages="venv")
 
 AC_ARG_WITH(python3-home,
-              [  --with-python3-home=path Use path as a hard-coded Python home directory that can not be overwritten by the PYTHONHOME environment variable],
-              python3_home_dir=$with_python3_home)
+    AS_HELP_STRING([--with-python3-home=path], [Use path as a hard-coded Python home directory that can not be overwritten by the PYTHONHOME environment variable]),
+    python3_home_dir=$with_python3_home)
 
 AC_ARG_WITH(pylint,
-              [  --with-pylint=ABSOLUTE_PATH    Specify pylint location])
+    AS_HELP_STRING([--with-pylint=ABSOLUTE_PATH], [Specify pylint location]))
 
-AC_ARG_WITH(docbook,
-            [  --with-docbook=FILE    Compiling manpages using docbook in the specified path, if not set, it will be searched on the system, or online version will be used from http://docbook.sourceforge.net/release/xsl/current/manpages/docbook.xsl]
-            ,,with_docbook="auto")
+AC_ARG_WITH(manpages,
+    AS_HELP_STRING([--with-manpages=[local|remote]], [Use the local or remote manpages for installation, if remote set, it will download the latest manpages from the online documentation https://syslog-ng.github.io/admin-guide/190_The_syslog-ng_manual_pages/README (default: local)]),
+    , with_manpages="local")
 
-AC_ARG_ENABLE(manpages, AC_HELP_STRING([ --enable-manpages], [ Enable generation of manpages (default: no)]), , [enable_manpages="no"; XSL_STYLESHEET=""])
-AC_ARG_ENABLE(manpages-install, AC_HELP_STRING([ --enable-manpages-install], [ Enable installation of manpages (default: auto)]), , [enable_manpages_install="auto"])
+AC_ARG_ENABLE(manpages,
+    AS_HELP_STRING([--enable-manpages], [Enable generation of manpages (default: no)]),
+    , enable_manpages="no")
 
-AC_ARG_ENABLE(java, [ --enable-java  Enable java destination (default: auto)],, enable_java="auto")
+AC_ARG_ENABLE(manpages-install,
+    AS_HELP_STRING([--enable-manpages-install], [Enable installation of manpages (default: auto)]),
+    , enable_manpages_install="auto")
 
-AC_ARG_ENABLE(java-modules, [ --enable-java-modules  Compile all Java modules (default: auto)],, enable_java_modules="auto")
+AC_ARG_ENABLE(java,
+    AS_HELP_STRING([--enable-java], [Enable java destination (default: auto)]),
+    , enable_java="auto")
+
+AC_ARG_ENABLE(java-modules,
+    AS_HELP_STRING([--enable-java-modules], [Compile all Java modules (default: auto)]),
+    , enable_java_modules="auto")
 
 AC_ARG_ENABLE(native,
-              [  --enable-native        Enable native bindings (default: auto)]
-              ,,enable_native="auto")
+    AS_HELP_STRING([--enable-native], [Enable native bindings (default: auto)]),
+    , enable_native="auto")
 
-AC_ARG_ENABLE(afsnmp, [ --enable-afsnmp Enable afsnmp module (default: auto)],, enable_afsnmp="auto")
+AC_ARG_ENABLE(afsnmp,
+    AS_HELP_STRING([--enable-afsnmp], [Enable afsnmp module (default: auto)]),
+    , enable_afsnmp="auto")
+
+AC_ARG_ENABLE([colored-log],
+    AS_HELP_STRING([--enable-colored-log], [Enable colorized output in configure summary (default: no)]),
+    , enable_colored_log="no")
+
+AC_ARG_ENABLE(tests,
+    AS_HELP_STRING([--enable-tests], [Enable unit tests (default: auto)]),
+    , enable_tests="auto")
+
+dnl Determine default based on OS
+osname=`uname -s 2>/dev/null` || osname=unknown
+case "$osname" in
+    Linux*|linux*|Darwin*|darwin*|FreeBSD*)
+        stackdump_default="auto"
+        ;;
+    *)
+        stackdump_default="no"
+        ;;
+esac
+AC_ARG_ENABLE(stackdump,
+    AS_HELP_STRING([--enable-stackdump], [Enable stackdump support (Linux, macOS, FreeBSD only) (default: $stackdump_default)]),
+    , enable_stackdump="$stackdump_default")
 
 AC_ARG_ENABLE(all-modules,
-              [  --enable-all-modules    Forcibly enable all modules. (default: auto)]
-              ,,enable_all_modules="auto")
+    AS_HELP_STRING([--enable-all-modules], [Forcibly enable all modules. (default: auto)]),
+    , enable_all_modules="auto")
+
+AC_ARG_ENABLE([scl-syslogconf-awk],
+  [AS_HELP_STRING([--disable-scl-syslogconf-awk],
+                  [Do not install scl/syslogconf/convert-syslogconf.awk])],
+  [],
+  [enable_scl_syslogconf_awk=yes])
 
 if test "x$enable_all_modules" != "xauto"; then
    state="$enable_all_modules"
 
+   # TODO: atomate collection of modules somehow
    MODULES="spoof_source sun_streams sql pacct mongodb json amqp stomp \
             redis systemd geoip2 riemann ipv6 smtp native python python_modules java java_modules \
-            http afsnmp kafka mqtt grpc"
+            http afsnmp kafka mqtt grpc ebpf slog"
    for mod in ${MODULES}; do
        modstate=$(eval echo \$enable_${mod})
        if test "x$modstate" = "xauto"; then
@@ -467,16 +722,13 @@ dnl Checks for programs.
 #       -------------------------------
 #
 AC_PROG_CC
-AC_PROG_CC_C99
 AM_PROG_CC_C_O
-if test "x$ac_cv_prog_cc_c99" = "xno"; then
-	AC_MSG_ERROR([C99 standard compliant C compiler required. Try GCC 3.x or later.])
-fi
-# Turned out that even the latest gcc has no proper support of the required ObjC version
-# Once gcc was able to compile our ObjC modules properly this could be reverted to AC_PROG_OBJC([$OBJC $CC])
+
+dnl Turned out that even the latest gcc has no proper support of the required ObjC version
+dnl Once gcc is able to compile our ObjC modules properly this could be reverted to AC_PROG_OBJC([$OBJC $CC])
 AC_PROG_OBJC([$OBJC clang])
 AC_PROG_YACC
-AM_PROG_LEX
+AM_PROG_LEX([noyywrap])
 AM_MISSING_PROG([GPERF], [gperf])
 AC_PROG_MAKE_SET
 PKG_PROG_PKG_CONFIG
@@ -490,32 +742,43 @@ fi
 if test "${PYTHON}" = ":"; then
        AC_MSG_WARN([Python interpreter is missing.])
 fi
-
 AM_CONDITIONAL([HAVE_PYTHON_INTERPRETER], [test "$PYTHON" != :])
 
 dnl ***************************************************************************
-dnl C++
-
-# This one is useful for checking the available compilers
-# AC_MSG_RESULT(gcc = $(which gcc) - g++ = $(which g++) - clang = $(which clang))
-# AC_MSG_RESULT(Paths: gcc = $(ls -Al $(which gcc)) - g++ = $(ls -Al $(which g++)) - clang = $(ls -Al $(which clang)))
-# AC_MSG_RESULT($(gcc -v))
-# AC_MSG_RESULT($(g++ -v))
-# AC_MSG_RESULT($(clang -v))
-# AC_MSG_RESULT(C++ compilers to be used $CPP_COMPILER)
+dnl C++ support
+dnl NOTE: on macOS brew has an old autoconf-archive -> ax_cxx_compile_stdcxx.m4 version, which cannot detect
+dnl       correctly the c++14 and c++20 support of clang currently, you might want to get the latest one from the git repo
+dnl       wget -O ./m4/ax_cxx_compile_stdcxx.m4 https://raw.githubusercontent.com/autoconf-archive/autoconf-archive/master/m4/ax_cxx_compile_stdcxx.m4
 AC_PROG_CXX([$CPP_COMPILER])
 
 if test "x$enable_cpp" = "xyes"; then
-        AX_CXX_COMPILE_STDCXX(14,, mandatory)
-        AX_CXX_COMPILE_STDCXX(17,, optional)
+    # Require at least C++14 (fail if not available)
+    AX_CXX_COMPILE_STDCXX([14], [noext], [mandatory])
+    # Try to upgrade to C++17 if the compiler supports it
+    AX_CXX_COMPILE_STDCXX([17], [noext], [optional])
+    dnl AX_CXX_COMPILE_STDCXX([20]) requires autoconf-archive serial >= 14 (released 2022-02-11).
+    dnl Older system installs lack the [20] dispatch branch and call m4_fatal at macro-expansion
+    dnl time — before any configure shell code runs, so [optional] cannot save us.
+    dnl _AX_CXX_COMPILE_STDCXX_testbody_20 is defined only in serial >= 14, so we use it as a
+    dnl compile-time guard to skip the probe entirely on platforms with an old m4 install.
+    m4_ifdef([_AX_CXX_COMPILE_STDCXX_testbody_20], [
+        AX_CXX_COMPILE_STDCXX([20], [noext], [optional])
+    ])
+
 elif test "x$enable_cpp" = "xauto"; then
-        AX_CXX_COMPILE_STDCXX(14,, optional)
-        if test "x$HAVE_CXX14" = "x1"; then
-                enable_cpp=yes
-        else
-                enable_cpp=no
-        fi
-        AX_CXX_COMPILE_STDCXX(17,, optional)
+    # Prefer C++14, but don't fail if it's missing
+    AX_CXX_COMPILE_STDCXX([14], [noext], [optional])
+    if test "x$HAVE_CXX14" = "x1"; then
+        enable_cpp=yes
+        # Try to upgrade to C++17 if available
+        AX_CXX_COMPILE_STDCXX([17], [noext], [optional])
+        dnl See comment above: guard C++20 probe against old autoconf-archive installs.
+        m4_ifdef([_AX_CXX_COMPILE_STDCXX_testbody_20], [
+            AX_CXX_COMPILE_STDCXX([20], [noext], [optional])
+        ])
+    else
+        enable_cpp=no
+    fi
 fi
 
 dnl ***************************************************************************
@@ -580,23 +843,40 @@ else
   fi;
 fi
 
-old_LDFLAGS="$LDFLAGS"
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
+
 LDFLAGS="$LDFLAGS $no_pie_ldflags"
 
-AC_LINK_IFELSE([AC_LANG_SOURCE([int main(void) {return 0;}])],
-	[no_pie_option_available=yes],
-	[no_pie_option_available=no])
-
-LDFLAGS="$old_LDFLAGS"
-
-if test "$no_pie_option_available" = "yes"; then
-  NO_PIE_LDFLAG="$no_pie_ldflags"
+AC_MSG_CHECKING([whether linker supports $no_pie_ldflags])
+tmpdir="${TMPDIR:-/tmp}/conftest-nopie-$$"
+rm -rf "$tmpdir" 2>/dev/null || :
+mkdir -p "$tmpdir"
+cat > "$tmpdir/conftest.c" << EOF
+int main(void) {return 0;}
+EOF
+$CC $CFLAGS $LDFLAGS "$tmpdir/conftest.c" -o "$tmpdir/conftest" > "$tmpdir/conftest.out" 2>&1
+compile_result=$?
+if test "$compile_result" -eq 0; then
+  if grep -q -i "warning.*\(-no.pie\|-no_pie\).*\(ignored\)" "$tmpdir/conftest.out" 2>/dev/null; then
+    NO_PIE_LDFLAG=""
+    AC_MSG_RESULT([no (deprecated or ignored)])
+  else
+    NO_PIE_LDFLAG="$no_pie_ldflags"
+    AC_MSG_RESULT([yes])
+  fi
+else
+  NO_PIE_LDFLAG=""
+  AC_MSG_RESULT([no])
 fi
+rm -rf "$tmpdir" 2>/dev/null || :
+
+SAFE_C_CHECK_END
+
 AC_SUBST([NO_PIE_LDFLAG])
 
 dnl ***************************************************************************
 dnl Set up CFLAGS
-
 
 dnl The rest of CFLAGS. We produce
 dnl -g/-O2/-pg/-fprofile-arcs/-ftest-coverage combinations, the rest is
@@ -639,8 +919,8 @@ dnl We are checking for the postive warning flag, as gcc handles the
 dnl -Wno-XXX version oddly, so if no other warnings are present, it is not
 dnl reported at all, causing it to be unusable for detection purposes.
 
-AX_CFLAGS_GCC_OPTION(-Winitializer-overrides, CFLAGS_W_INITIALIZER_OVERRIDES, CFLAGS_W_NO_INITIALIZER_OVERRIDES="-Wno-initializer-overrides")
-AX_CFLAGS_GCC_OPTION(-Wold-style-declaration, CFLAGS_W_OLD_STYLE_DECLARATION)
+AX_CHECK_COMPILE_FLAG([-Winitializer-overrides], [CFLAGS_W_NO_INITIALIZER_OVERRIDES="-Wno-initializer-overrides"],,"-Werror")
+AX_CHECK_COMPILE_FLAG([-Wold-style-declaration], [CFLAGS_W_OLD_STYLE_DECLARATION="-Wold-style-declaration"],,"-Werror")
 AC_SUBST(CFLAGS_W_NO_INITIALIZER_OVERRIDES)
 AC_SUBST(CFLAGS_W_OLD_STYLE_DECLARATION)
 
@@ -653,7 +933,29 @@ AC_SUBST(TEST_NO_INSTALL_FLAG)
 
 AC_SYS_LARGEFILE
 
-# FIXME: skip tests on unsupported platforms/architectures...
+dnl ***************************************************************************
+dnl Criterion headers/libraries
+dnl ***************************************************************************
+
+if test "x$enable_tests" != "xno"; then
+
+    PKG_CHECK_MODULES(CRITERION, criterion >= $CRITERION_MIN_VERSION,
+    [with_criterion="system"],
+    [if test "x$enable_tests" = "xyes"; then
+        AC_MSG_ERROR([Criterion >= $CRITERION_MIN_VERSION is required when --enable-tests=yes is specified])
+     else
+        AC_MSG_WARN([pkg-config was not able to find Criterion >= $CRITERION_MIN_VERSION])
+     fi
+     with_criterion="no"])
+
+    if test "$with_criterion" != "no"; then
+        enable_tests=yes
+    else
+        enable_tests=no
+    fi
+fi
+
+AC_DEFINE(HAVE_BROKEN_PREAD, 0, [define if your platform has a broken pread/pwrite (e.g. HP-UX)])
 case "$ostype" in
 	HP-UX)
 		if $CC -v 2>&1 | grep gcc > /dev/null; then
@@ -668,76 +970,36 @@ case "$ostype" in
 			CFLAGS="${CFLAGS} -D_LARGE_FILES=1"
 		fi
 
-                # NOTE: The -brtl option to the linker must be set before calling the
-                # configure script, as otherwise the generated libtool will behave
-                # differently. We need the runtime linker during execution (hence the
-                # -brtl) to load external modules. Also, please note that with -brtl the
-                # linker behaves similarly to what is expected on other UNIX systems,
-                # without it, it refuses to link an .so in if there's no reference from
-                # the main program, even if there is a proper -llibname option.
+        # NOTE: The -brtl option to the linker must be set before calling the
+        # configure script, as otherwise the generated libtool will behave
+        # differently. We need the runtime linker during execution (hence the
+        # -brtl) to load external modules. Also, please note that with -brtl the
+        # linker behaves similarly to what is expected on other UNIX systems,
+        # without it, it refuses to link an .so in if there's no reference from
+        # the main program, even if there is a proper -llibname option.
 		LDFLAGS="$LDFLAGS -Wl,-brtl"
-		MODULE_LDFLAGS="-avoid-version -module"
+		MODULE_LDFLAGS="-avoid-version -module -no-undefined"
 		;;
 	Darwin)
-		MODULE_LDFLAGS="-avoid-version -dylib"
-                TEST_NO_INSTALL_FLAG="-no-fast-install"
-                # This flag might be a security issue, do not use in production code, unfortunately we still need it for criterion tests and the current mocking solution
-                if test "x$enable_tests" = "xyes"; then
-		        LDFLAGS="$LDFLAGS -Wl,-flat_namespace"
-                fi
-                # NOTE: This is now seems to be an Apple/Xcode "only" issue, but probably much better a clang one, so later we might want to add this globally
-                # XCode15 new linker has some issues (e.g. https://developer.apple.com/forums/thread/737707)
-                # switch back to classic linking till not fixed (https://developer.apple.com/documentation/xcode-release-notes/xcode-15-release-notes#Linking)
-                if test "x$enable_force_classic_linking" = "xyes"; then
-                        LDFLAGS="$LDFLAGS -Wl,-ld_classic"
-                fi
+		MODULE_LDFLAGS="-avoid-version -dylib -no-undefined"
+        TEST_NO_INSTALL_FLAG="-no-fast-install"
+        # This flag might be a security issue, do not use in production code, unfortunately we still need it for criterion tests and the current mocking solution
+        if test "x$enable_tests" = "xyes"; then
+            LDFLAGS="$LDFLAGS -Wl,-flat_namespace"
+        fi
+        # NOTE: This is now seems to be an Apple/Xcode "only" issue, but probably much better a clang one, so later we might want to add this globally
+        # XCode15 new linker has some issues (e.g. https://developer.apple.com/forums/thread/737707)
+        # Let the user switch back to classic linking if needed (https://developer.apple.com/documentation/xcode-release-notes/xcode-15-release-notes#Linking)
+        if test "x$enable_force_classic_linking" = "xyes"; then
+            LDFLAGS="$LDFLAGS -Wl,-ld_classic"
+        fi
+        # Expose the modern, RFC 3542 IPv6 socket API instead of the deprecated RFC 2292 one
 		CFLAGS="$CFLAGS -D__APPLE_USE_RFC_3542"
-    ;;
+        ;;
 	OSF1)
 		CFLAGS="${CFLAGS} -D_XOPEN_SOURCE=500 -D_XOPEN_SOURCE_EXTENDED -D_OSF_SOURCE -D_POSIX_C_SOURCE"
 		;;
 esac
-
-if test "$enable_dynamic_linking" = "auto" -a "$enable_mixed_linking" = "auto"; then
-	enable_dynamic_linking="yes"
-	enable_mixed_linking="no"
-fi
-
-linkopts=0
-if test "x$enable_dynamic_linking" = "xyes"; then
-       linkopts=`expr $linkopts + 1`
-fi
-if test "x$enable_mixed_linking" = "xyes"; then
-       linkopts=`expr $linkopts + 1`
-fi
-
-if test "$linkopts" -gt 1; then
-       AC_MSG_ERROR([You cannot specify multiple linking options at the same time (--enable-dynamic-linking, --enable-mixed-linking).])
-fi
-
-if test "x$enable_dynamic_linking" = "xyes"; then
-	enable_dynamic_linking="yes"
-	enable_mixed_linking="no"
-	linking_mode="dynamic"
-elif test "x$enable_mixed_linking" = "xyes"; then
-	enable_dynamic_linking="no"
-	enable_mixed_linking="yes"
-	linking_mode="mixed"
-fi
-
-dnl ***************************************************************************
-dnl Check for --whole-archive flag
-dnl ***************************************************************************
-
-if test $ostype = "Darwin"; then
-  # -all_load loads all members of static archive libraries, it can't be selectively disabled (do not use -noall_load)
-  # use -force_load for each static library if mixed linking needs to be supported on macOS
-  WHOLE_ARCHIVE_OPT="-all_load"
-  NO_WHOLE_ARCHIVE_OPT=""
-else
-  WHOLE_ARCHIVE_OPT="--whole-archive"
-  NO_WHOLE_ARCHIVE_OPT="--no-whole-archive"
-fi
 
 dnl ***************************************************************************
 dnl Is the __thread keyword available?
@@ -778,25 +1040,95 @@ dnl ***************************************************************************
 dnl Miscellanneous headers
 dnl ***************************************************************************
 
-AC_HEADER_STDC
-AC_CHECK_HEADER(dmalloc.h)
-AC_CHECK_HEADER(dlfcn.h)
-AC_CHECK_HEADERS(strings.h	\
-	getopt.h		\
-	stropts.h		\
-	sys/strlog.h		\
-	door.h			\
-	sys/capability.h	\
-	sys/prctl.h		\
-	linux/sock_diag.h	\
-	utmp.h			\
-	utmpx.h)
-AC_CHECK_HEADERS(tcpd.h)
+CHECK_HEADERS_AND_DEFINE([
+    dmalloc.h
+    linux/sock_diag.h
+    tcpd.h
+    strings.h
+    stropts.h
+    sys/capability.h
+    sys/strlog.h
+    utmp.h
+    utmpx.h
+    dlfcn.h
+    getopt.h
+    door.h
+    malloc.h
+])
 
-AC_CHECK_TYPES([struct ucred, struct cmsgcred], [], [], [#define _GNU_SOURCE 1
+dnl ***************************************************************************
+dnl AIX has these, but cannot be linked and used, not supported anymore
+dnl ***************************************************************************
+AC_CACHE_CHECK([for sys/strlog.h and log_ctl struct], [ac_cv_header_sys_strlog_h], [
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+    #include <sys/strlog.h>
+  ]], [[
+    struct strbuf b;
+    struct log_ctl lc;
+    lc.mid = 0;
+    return 0;
+  ]])],
+  [ac_cv_header_sys_strlog_h=yes],
+  [ac_cv_header_sys_strlog_h=no])
+])
+AC_CACHE_CHECK([for stropts.h and I_PUSH], [ac_cv_header_stropts_h], [
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+    #include <stropts.h>
+  ]], [[
+    int x = I_PUSH;
+    return x;
+  ]])],
+  [ac_cv_header_stropts_h=yes],
+  [ac_cv_header_stropts_h=no])
+])
+
+dnl ***************************************************************************
+dnl AIX has issues detecting struct ucred with AC_CHECK_TYPES
+dnl ***************************************************************************
+AC_CACHE_CHECK([for struct ucred], [ac_cv_have_struct_ucred], [
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#define _GNU_SOURCE 1
 #define _DEFAULT_SOURCE 1
 #include <sys/types.h>
-#include <sys/socket.h>])
+#include <sys/socket.h>
+]], [[
+struct ucred cred;
+return sizeof(cred);
+]])],
+  [ac_cv_have_struct_ucred=yes],
+  [ac_cv_have_struct_ucred=no])])
+
+if test "x$ac_cv_have_struct_ucred" = xyes; then
+  AC_DEFINE([HAVE_STRUCT_UCRED], [1],
+            [Define to 1 if struct ucred is available])
+else
+  AC_DEFINE([HAVE_STRUCT_UCRED], [0],
+            [Define to 0 if struct ucred is not available])
+fi
+
+dnl ***************************************************************************
+dnl AIX has issues detecting struct ucred with AC_CHECK_TYPES
+dnl ***************************************************************************
+AC_CACHE_CHECK([for struct cmsgcred], [ac_cv_have_struct_cmsgcred], [
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#define _GNU_SOURCE 1
+#define _DEFAULT_SOURCE 1
+#include <sys/types.h>
+#include <sys/socket.h>
+]], [[
+struct cmsgcred cred;
+return sizeof(cred);
+]])],
+  [ac_cv_have_struct_cmsgcred=yes],
+  [ac_cv_have_struct_cmsgcred=no])])
+
+if test "x$ac_cv_have_struct_cmsgcred" = xyes; then
+  AC_DEFINE([HAVE_STRUCT_CMSGCRED], [1],
+            [Define to 1 if struct cmsgcred is available])
+else
+  AC_DEFINE([HAVE_STRUCT_CMSGCRED], [0],
+            [Define to 0 if struct cmsgcred is not available])
+fi
 
 dnl ***************************************************************************
 dnl Header checks
@@ -805,14 +1137,35 @@ dnl ***************************************************************************
 dnl Checks for typedefs, structures, and compiler characteristics.
 AC_STRUCT_TM
 
-AC_CHECK_MEMBER(struct tm.tm_gmtoff,AC_DEFINE(HAVE_STRUCT_TM_TM_GMTOFF,1,[Whether you have tm_gmtoff field in struct tm]),,[
+dnl ***************************************************************************
+dnl AIX has issues detecting struct tm.tm_gmtoff
+dnl ***************************************************************************
+AC_CACHE_CHECK([for struct tm.tm_gmtoff], [ac_cv_have_struct_tm_tm_gmtoff], [
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #if TM_IN_SYS_TIME
-#include <sys/time.h>
+#  include <sys/time.h>
 #else
-#include <time.h>
-#endif])
+#  include <time.h>
+#endif
+]], [[
+struct tm t;
+return t.tm_gmtoff;
+]])],
+  [ac_cv_have_struct_tm_tm_gmtoff=yes],
+  [ac_cv_have_struct_tm_tm_gmtoff=no])])
 
-AC_CHECK_MEMBER(struct msghdr.msg_control,AC_DEFINE(HAVE_CTRLBUF_IN_MSGHDR,1,[Whether you have msg_control field in msghdr in socket.h]),,[
+if test "x$ac_cv_have_struct_tm_tm_gmtoff" = xyes; then
+  AC_DEFINE([HAVE_STRUCT_TM_TM_GMTOFF], [1],
+            [Define to 1 if struct tm has tm_gmtoff])
+else
+  AC_DEFINE([HAVE_STRUCT_TM_TM_GMTOFF], [0],
+            [Define to 0 if struct tm has no tm_gmtoff])
+fi
+
+AC_CHECK_MEMBER(struct msghdr.msg_control,
+    AC_DEFINE(HAVE_CTRLBUF_IN_MSGHDR,1,[Whether you have msg_control field in msghdr in socket.h]),
+    AC_DEFINE(HAVE_CTRLBUF_IN_MSGHDR,0,[Whether you have msg_control field in msghdr in socket.h]),
+[
 #include <sys/socket.h>
 ])
 
@@ -824,19 +1177,24 @@ I_CONSLOG
 ],
   blb_cv_c_i_conslog=no, blb_cv_c_i_conslog=yes)])
 
-old_CPPFLAGS=$CPPFLAGS
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
+
 CPPFLAGS="-D_GNU_SOURCE -D_DEFAULT_SOURCE"
 AC_CACHE_CHECK(for O_LARGEFILE, blb_cv_c_o_largefile,
-  [AC_EGREP_CPP(O_LARGEFILE,
-[
-#include <fcntl.h>
-O_LARGEFILE
-],
-  blb_cv_c_o_largefile=no, blb_cv_c_o_largefile=yes)])
-CPPFLAGS=$old_CPPFLAGS
+    [AC_EGREP_CPP(O_LARGEFILE,
+    [
+    #include <fcntl.h>
+    O_LARGEFILE
+    ],
+    blb_cv_c_o_largefile=no, blb_cv_c_o_largefile=yes)])
+
+SAFE_C_CHECK_END
 
 if test "x$blb_cv_c_o_largefile" = "xyes"; then
-        AC_DEFINE(HAVE_O_LARGEFILE, 1, [O_LARGEFILE is present])
+    AC_DEFINE(HAVE_O_LARGEFILE, 1, [O_LARGEFILE is present])
+else
+    AC_DEFINE(HAVE_O_LARGEFILE, 0, [O_LARGEFILE is present])
 fi
 
 AC_CACHE_CHECK(for struct sockaddr_storage, blb_cv_c_struct_sockaddr_storage,
@@ -844,6 +1202,8 @@ AC_CACHE_CHECK(for struct sockaddr_storage, blb_cv_c_struct_sockaddr_storage,
 
 if test "$blb_cv_c_struct_sockaddr_storage" = "yes"; then
 	AC_DEFINE(HAVE_STRUCT_SOCKADDR_STORAGE,[1],[struct sockaddr_storage is present on your system])
+else
+	AC_DEFINE(HAVE_STRUCT_SOCKADDR_STORAGE,[0],[struct sockaddr_storage is present on your system])
 fi
 
 AC_CACHE_CHECK(for struct sockaddr_in6, blb_cv_c_struct_sockaddr_in6,
@@ -861,30 +1221,33 @@ PR_SET_KEEPCAPS
 
 if test "x$blb_cv_keepcaps" = "xyes"; then
 	AC_DEFINE(HAVE_PR_SET_KEEPCAPS, 1, [have PR_SET_KEEPCAPS])
+else
+    AC_DEFINE(HAVE_PR_SET_KEEPCAPS, 0, [have PR_SET_KEEPCAPS])
 fi
 
 AC_CACHE_CHECK(for modern utmp,
                blb_cv_c_modern_utmp,
-[AC_TRY_COMPILE([
+[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #ifdef HAVE_UTMPX_H
 #include <utmpx.h>
 #else
 #include <utmp.h>
 #endif
-],
-[
+]], [[
 #ifdef HAVE_UTMPX_H
-        struct utmpx ut;
+struct utmpx ut;
 #else
-        struct utmp ut;
+struct utmp ut;
 #endif
   return sizeof(ut.ut_type) & sizeof(ut.ut_user);
-],
-blb_cv_c_modern_utmp=yes,
-blb_cv_c_modern_utmp=no)])
+]])],
+[blb_cv_c_modern_utmp=yes],
+[blb_cv_c_modern_utmp=no])])
 
 if test "x$blb_cv_c_modern_utmp" = "xyes"; then
 	AC_DEFINE(HAVE_MODERN_UTMP, 1, [have modern utmp/utmpx format])
+else
+	AC_DEFINE(HAVE_MODERN_UTMP, 0, [have modern utmp/utmpx format])
 fi
 
 AC_CHECK_DECLS(SO_MEMINFO,
@@ -902,48 +1265,118 @@ AC_CHECK_FUNC(gethostbyname, [], AC_CHECK_LIB(nsl, gethostbyname, BASE_LIBS="$BA
 AC_CHECK_LIB(regex, regexec, REGEX_LIBS="-lregex")
 AC_CHECK_LIB(resolv, res_init, RESOLV_LIBS="-lresolv")
 
-AC_CHECK_FUNCS(strdup		\
-	strtol			\
-	strtoll			\
-	strtoimax		\
-	inet_aton		\
-	inet_ntoa		\
-	getaddrinfo		\
-	getnameinfo		\
-	getutent		\
-	getutxent		\
-	pread			\
-	pwrite			\
-	posix_fallocate		\
-	strcasestr		\
-	memrchr			\
-	localtime_r		\
-	getprotobynumber_r	\
-	gmtime_r		\
-	strnlen			\
-	getline			\
-	strtok_r)
-old_LIBS=$LIBS
+dnl ***************************************************************************
+dnl jemalloc support
+dnl ***************************************************************************
+
+if test "x$enable_jemalloc" = "xauto" || test "x$enable_jemalloc" = "xyes"; then
+  dnl Check if we are on FreeBSD where jemalloc is built into libc
+  case "${host_os}" in
+    *freebsd*)
+      AC_CHECK_HEADER([malloc_np.h],
+        [
+          AC_MSG_RESULT([FreeBSD built-in jemalloc found (part of libc)])
+          JEMALLOC_LIBS=""
+          enable_jemalloc="yes"
+        ],
+        [
+          if test "x$enable_jemalloc" = "xyes"; then
+            AC_MSG_ERROR([FreeBSD built-in jemalloc not found, but jemalloc support was explicitly enabled.])
+          fi
+          JEMALLOC_LIBS=""
+          enable_jemalloc="no"
+        ])
+      ;;
+    *)
+      dnl On other systems, look for jemalloc as a separate library
+      AC_CHECK_LIB(jemalloc, malloc,
+        [
+          JEMALLOC_LIBS="-ljemalloc"
+          enable_jemalloc="yes"
+        ],
+        [
+          if test "x$enable_jemalloc" = "xyes"; then
+            AC_MSG_ERROR([Could not find libjemalloc, and jemalloc support was explicitly enabled.])
+          fi
+          JEMALLOC_LIBS=""
+          enable_jemalloc="no"
+        ])
+      ;;
+  esac
+else
+  JEMALLOC_LIBS=""
+  enable_jemalloc="no"
+fi
+
+AC_SUBST(JEMALLOC_LIBS)
+
+CHECK_FUNCS_AND_DEFINE([
+    fmemopen
+    getutent
+    memrchr
+    posix_fallocate
+    strtoll
+    strtol
+    strtoimax
+    inet_aton
+    inet_ntoa
+    getaddrinfo
+    getnameinfo
+    getutxent
+    pread
+    pwrite
+    strcasestr
+    localtime_r
+    gmtime_r
+    strnlen
+    getline
+    strtok_r
+    getrandom
+])
+dnl Use only one of them if both are present, like on FreeBSD, where the inotify wrapper started to be distributed.
+dnl Prioritize kqueue, as inotify is just a wrapper around it if both are present.
+AC_CHECK_FUNCS([kqueue inotify_init])
+if test "x$ac_cv_func_kqueue" = xyes; then
+  have_kqueue=yes
+  have_inotify=no
+elif test "x$ac_cv_func_inotify_init" = xyes; then
+  have_kqueue=no
+  have_inotify=yes
+else
+  have_kqueue=no
+  have_inotify=no
+fi
+
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
 LIBS=$BASE_LIBS
-AC_CHECK_FUNCS(clock_gettime)
-LIBS=$old_LIBS
+CHECK_FUNC_AND_DEFINE([clock_gettime])
+SAFE_C_CHECK_END
 
 dnl ***************************************************************************
-dnl check inotify
+dnl AIX has issues detecting getprotobynumber_r
 dnl ***************************************************************************
-AC_CHECK_FUNCS([inotify_init])
+AC_LANG_PUSH([C])
+AC_MSG_CHECKING([for getprotobynumber_r])
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM([#include <netdb.h>],
+                   [struct protoent result;
+                    struct protoent *res = 0;
+                    char buf[1024];
+                    getprotobynumber_r(6, &result, buf, sizeof(buf), &res);
+                    return 0;])],
+  [AC_DEFINE([HAVE_GETPROTOBYNUMBER_R], [1], [Define if getprotobynumber_r exists])
+   AC_MSG_RESULT([yes])],
+  [AC_DEFINE([HAVE_GETPROTOBYNUMBER_R], [0], [Define if getprotobynumber_r exists])
+   AC_MSG_RESULT([no])])
+AC_LANG_POP([C])
 
-dnl ***************************************************************************
-dnl check getrandom
-dnl ***************************************************************************
-AC_CHECK_FUNCS([getrandom])
 
 dnl ***************************************************************************
 dnl libevtlog headers/libraries (remove after relicensing libevtlog)
 dnl ***************************************************************************
 
 EVTLOG_LIBS="\$(top_builddir)/lib/eventlog/src/libevtlog.la"
-EVTLOG_NO_LIBTOOL_LIBS="\$(top_builddir)/lib/eventlog/src/.libs/libevtlog.so"
 EVTLOG_CFLAGS="-I\$(top_srcdir)/lib/eventlog/src -I\$(top_builddir)/lib/eventlog/src"
 
 dnl ***************************************************************************
@@ -951,40 +1384,35 @@ dnl secret storage libraries
 dnl ***************************************************************************
 
 SECRETSTORAGE_LIBS="\$(top_builddir)/lib/secret-storage/libsecret-storage.la"
-SECRETSTORAGE_NO_LIBTOOL_LIBS="\$(top_builddir)/lib/secret-storage/.libs/libsecret-storage.so"
 
 dnl ***************************************************************************
 dnl libwrap headers/libraries
 dnl ***************************************************************************
 
-old_LIBS=$LIBS
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
+
 AC_CACHE_CHECK(for TCP wrapper library,
                 blb_cv_c_lwrap,
-
+[
 for libwrap in "-lwrap" "/usr/local/lib/libwrap.a"; do
-        LIBS="$old_LIBS $libwrap"
-
-        [AC_TRY_LINK(,
-        [
-}
-
+        LIBS="$LIBS_SAVE $libwrap"
+        AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 int allow_severity;
 int deny_severity;
 extern int hosts_access(void);
-
-int foo(void)
-{
+]], [[
         hosts_access();
-],
+]])],
         [blb_cv_c_lwrap=$libwrap
         break],
-        blb_cv_c_lwrap="")
+        [blb_cv_c_lwrap=""])
 done
-
 ])
-LIBS=$old_LIBS
-LIBWRAP_LIBS=$blb_cv_c_lwrap
 
+SAFE_C_CHECK_END
+
+LIBWRAP_LIBS=$blb_cv_c_lwrap
 if test "x$enable_tcp_wrapper" = "xauto"; then
 	AC_MSG_CHECKING(whether to enable TCP wrapper support)
         if test "x$ac_cv_header_tcpd_h" = "xyes" -a "x$blb_cv_c_lwrap" != "x"; then
@@ -1032,37 +1460,22 @@ dnl ***************************************************************************
 dnl GLib headers/libraries
 dnl ***************************************************************************
 
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
+
 GLIB_ADDONS="gmodule-2.0 gthread-2.0"
 PKG_CHECK_MODULES(GLIB, glib-2.0 >= $GLIB_MIN_VERSION $GLIB_ADDONS,,)
 
-if test "$linking_mode" != "dynamic"; then
-	# strip out -ldl & -lrt as it cannot be linked statically
-	GLIB_LIBS=`echo $GLIB_LIBS | tr ' ' '\n' | egrep -v "^(-ldld?)|(-lrt)$" | tr '\n' ' '`
-
-	old_LIBS=$LIBS
-	LIBS="$LD_START_STATIC $GLIB_LIBS $LD_END_STATIC $BASE_LIBS"
-	AC_CHECK_FUNC(g_hash_table_new, blb_cv_static_glib=yes, blb_cv_static_glib=no)
-	LIBS=$old_LIBS
-fi
-
-old_CPPFLAGS=$CPPFLAGS
 CPPFLAGS="$GLIB_CFLAGS"
-old_LDFLAGS=$LDFLAGS
 LDFLAGS="$LDFLAGS $GLIB_LIBS"
-
-old_LIBS=$LIBS
 LIBS="$LIBS $GLIB_LIBS"
-AC_CHECK_FUNCS(g_list_copy_deep \
-  g_ptr_array_find_with_equal_func \
-  g_memdup2 \
-  g_canonicalize_filename)
-LIBS=$old_LIBS
+CHECK_FUNCS_AND_DEFINE([g_list_copy_deep g_ptr_array_find_with_equal_func g_memdup2 g_canonicalize_filename])
 
 if test "x$ac_cv_func_g_memdup2" = "xyes"; then
     dnl only set MIN_REQUIRED to 2.68 if we know that we are at least on that version.
-    dnl On CentOS7/SLES12 we don't have recent enough glib but with compat
-    dnl wrappers we can compile. Bad news is that if we don't set to 2.68 at least,
-    dnl we can't compile on new platforms with clang.
+    dnl On CentOS7/SLES12 we do not have recent enough glib but with compat
+    dnl wrappers we can compile. Bad news is that if we do not set to 2.68 at least,
+    dnl we can not compile on new platforms with clang.
 
     dnl Best of both worlds: we set to 2.68 if we have that version, so we
     dnl get clang to compile our code, otherwise we set it to 2.32.
@@ -1073,29 +1486,22 @@ else
 fi
 
 AC_CACHE_CHECK(sanity checking Glib headers,
-               blb_cv_glib_sane,
-[AC_TRY_RUN([
-#include <glib.h>
+blb_cv_glib_sane,
+[AC_RUN_IFELSE([AC_LANG_PROGRAM([[
+    #include <glib.h>
+]], [[
+    if (sizeof(long) != GLIB_SIZEOF_LONG)
+        return 1;
+    return 0;
+]])],
+[blb_cv_glib_sane=yes],
+[blb_cv_glib_sane=no],
+[blb_cv_glib_sane=yes])])
 
-int main()
-{
-  if (sizeof(long) != GLIB_SIZEOF_LONG)
-    return 1;
-  return 0;
-}
-],
-blb_cv_glib_sane=yes,
-blb_cv_glib_sane=no,
-blb_cv_glib_sane=yes)])
-CPPFLAGS=$old_CPPFLAGS
-LDFLAGS=$old_LDFLAGS
+SAFE_C_CHECK_END
 
 if test "x$blb_cv_glib_sane" = "xno"; then
 	AC_MSG_ERROR([Glib headers inconsistent with current compiler setting. You might be using 32 bit Glib with a 64 bit compiler, check PKG_CONFIG_PATH])
-fi
-
-if test "x$linking_mode" != "xdynamic" -a "x$blb_cv_static_glib" = "xno"; then
-	AC_MSG_ERROR([static GLib libraries not found (a file named libglib-2.0.a), either link GLib dynamically using the --enable-dynamic-linking or install a static GLib])
 fi
 
 dnl ***************************************************************************
@@ -1130,18 +1536,6 @@ dnl ***************************************************************************
 dnl pcre headers/libraries
 dnl ***************************************************************************
 
-if test "x$linking_mode" = "xmixed"; then
-
-	# check if we have a pcre bundled in glib. In case glib is
-        # dynamic it doesn't matter as glib doesn't export those
-        # symbols.  But in case glib is static, linking it through
-        # glib and through libpcre would clash.
-        old_LIBS="$LIBS"
-        LIBS="$LD_START_STATIC $GLIB_LIBS $LD_END_STATIC $LIBS"
-        AC_CHECK_FUNC(pcre_compile2, AC_MSG_ERROR([You cannot use a GLib embedded PCRE in mixed linking mode]))
-        LIBS="$old_LIBS"
-fi
-
 PKG_CHECK_MODULES(PCRE2, libpcre2-8 >= $PCRE2_MIN_VERSION,, PCRE2_LIBS="")
 
 if test -z "$PCRE2_LIBS"; then
@@ -1152,28 +1546,16 @@ dnl ***************************************************************************
 dnl OpenSSL headers/libraries
 dnl ***************************************************************************
 
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
+
 # openssl is needed for:
 #  * TLS support
-
 dnl check OpenSSL static linking
 PKG_CHECK_MODULES(OPENSSL,
-                  openssl >= $OPENSSL_MIN_VERSION,,
-                  AC_MSG_ERROR(Cannot find OpenSSL libraries with version >= $OPENSSL_MIN_VERSION it is a hard dependency from syslog-ng 3.7 onwards))
+                openssl >= $OPENSSL_MIN_VERSION,,
+                AC_MSG_ERROR(Cannot find OpenSSL libraries with version >= $OPENSSL_MIN_VERSION it is a hard dependency from syslog-ng 3.7 onwards))
 
-if test -n "$OPENSSL_LIBS" -a "$linking_mode" != "dynamic"; then
-        dnl required for openssl, but only when linking statically
-        AC_CHECK_LIB(z, inflate, ZLIB_LIBS="-lz")
-
-	dnl Remove -ldl as it cannot be linked statically on some platforms, it'll be present in DL_LIBS
-	OPENSSL_LIBS=`echo $OPENSSL_LIBS | tr ' ' '\n' | egrep -v "^-ldld?$" | tr '\n' ' '`
-
-	old_LIBS=$LIBS
-	LIBS="$LD_START_STATIC $OPENSSL_LIBS $ZLIB_LIBS $LD_END_STATIC $DL_LIBS"
-	AC_CHECK_FUNC(SSL_library_init, blb_cv_static_openssl=yes, blb_cv_static_openssl=no)
-	LIBS=$old_LIBS
-fi
-
-CPPFLAGS_SAVE="$CPPFLAGS"
 CPPFLAGS="$CPPFLAGS $OPENSSL_CFLAGS"
 
 AC_CHECK_DECLS([SSL_CTX_get0_param],[], [], [[#include <openssl/ssl.h>]])
@@ -1192,37 +1574,22 @@ AC_CHECK_DECLS([SSL_add_file_cert_subjects_to_stack],[], [], [[#include <openssl
 AC_CHECK_DECLS([SSL_add_dir_cert_subjects_to_stack],[], [], [[#include <openssl/ssl.h>]])
 AC_CHECK_DECLS([SSL_CTX_set_min_proto_version],[], [], [[#include <openssl/ssl.h>]])
 
-CPPFLAGS="$CPPFLAGS_SAVE"
-
-dnl
-dnl Right now, openssl is never linked statically as it is only used by the
-dnl TLS build of the afsocket plugin which is loaded dynamically anyway.
-dnl
-dnl The static check remains though, because the core may need openssl in the
-dnl future, in which case it becomes relevant again.
-dnl
-
-dnl if test "x$linking_mode" != "xdynamic" -a "x$blb_cv_static_openssl" = "xno"; then
-dnl	AC_MSG_ERROR([static OpenSSL libraries not found (libssl.a, libcrypto.a and their external dependencies like libz.a), either link OpenSSL statically using the --enable-dynamic-linking, or install a static OpenSSL])
-dnl fi
+SAFE_C_CHECK_END
 
 dnl ***************************************************************************
 dnl libnet headers/libraries
 dnl ***************************************************************************
 AC_MSG_CHECKING(for LIBNET)
-if test "x$with_libnet" = "x"; then
-        LIBNET_CONFIG="`which libnet-config`"
-else
-        LIBNET_CONFIG="$with_libnet/libnet-config"
-fi
+AS_IF([test "x$with_libnet" = "x"], [libnet_config_path="$PATH"], [libnet_config_path="$with_libnet"])
+AC_PATH_PROG([LIBNET_CONFIG], [libnet-config], , [$libnet_config_path])
 
 if test -n "$LIBNET_CONFIG" -a -x "$LIBNET_CONFIG"; then
         LIBNET_CFLAGS="`$LIBNET_CONFIG --defines`"
         LIBNET_CFLAGS="$LIBNET_CFLAGS `$LIBNET_CONFIG --cflags`"
         LIBNET_LIBS="`$LIBNET_CONFIG --libs`"
         AC_MSG_RESULT(yes)
-dnl libnet-config does not provide the _DEFAULT_SOURCE define, that can cause warning during build
-dnl as upstream libnet-config does uses _DEFAULT_SOURCE this is just a fix till
+        # libnet-config does not provide the _DEFAULT_SOURCE define, that can cause warning during build
+        # as upstream libnet-config does uses _DEFAULT_SOURCE this is just a fix till
         LIBNET_CFLAGS="$LIBNET_CFLAGS -D_DEFAULT_SOURCE"
 
 else
@@ -1259,11 +1626,8 @@ dnl afsnmp module & net-snmp headers/libraries
 dnl ***************************************************************************
 AC_MSG_CHECKING(whether to enable snmp destination driver)
 
-if test "x$with_net_snmp" = "x"; then
-   NETSNMP_CONFIG="`which net-snmp-config`"
-else
-   NETSNMP_CONFIG="$with_net_snmp/net-snmp-config"
-fi
+AS_IF([test "x$with_net_snmp" = "x"], [netsnmp_config_path="$PATH"], [netsnmp_config_path="$with_net_snmp"])
+AC_PATH_PROG([NETSNMP_CONFIG], [net-snmp-config], , [$netsnmp_config_path])
 
 if test "x$enable_afsnmp" = "xyes"; then
    if test -n "$NETSNMP_CONFIG" -a -x "$NETSNMP_CONFIG"; then
@@ -1296,68 +1660,57 @@ else
 fi
 
 dnl ***************************************************************************
-dnl Criterion headers/libraries
-dnl ***************************************************************************
-
-PKG_CHECK_MODULES(CRITERION, criterion >= $CRITERION_MIN_VERSION,
-  [with_criterion="system"],
-  [AC_MSG_WARN([pkg-config was not able to find Criterion >= $CRITERION_MIN_VERSION]); with_criterion="no"])
-
-if test "$with_criterion" != "no"; then
-   enable_tests=yes
-else
-  enable_tests=no
-fi
-
-dnl ***************************************************************************
 dnl ivykis headers/libraries
 dnl ***************************************************************************
+
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
 
 IVYKIS_INTERNAL_SOURCE_EXISTS="test -f $srcdir/lib/ivykis/src/iv_main_posix.c"
 
 if $IVYKIS_INTERNAL_SOURCE_EXISTS; then
-	AC_CONFIG_SUBDIRS([lib/ivykis])
-	IVYKIS_SUBDIRS=lib/ivykis
+    AC_CONFIG_SUBDIRS([lib/ivykis])
+    IVYKIS_SUBDIRS=lib/ivykis
 fi
-
 
 INTERNAL_IVYKIS_CFLAGS=""
 if test "x$with_ivykis" = "xinternal"; then
-	if $IVYKIS_INTERNAL_SOURCE_EXISTS; then
-		# these can only be used in lib as it assumes
-		# the current directory just one below ivykis
+    if $IVYKIS_INTERNAL_SOURCE_EXISTS; then
+        # these can only be used in lib as it assumes the current directory just one below ivykis
 
-		IVYKIS_LIBS="-Wl,${WHOLE_ARCHIVE_OPT} -L\$(top_builddir)/lib/ivykis/src -livykis -Wl,${NO_WHOLE_ARCHIVE_OPT}"
-		IVYKIS_CFLAGS="-isystem \$(top_srcdir)/lib/ivykis/src/include -isystem \$(top_builddir)/lib/ivykis/src/include"
-                INTERNAL_IVYKIS_CFLAGS="-isystem \${includedir}/syslog-ng/ivykis"
+        IVYKIS_CFLAGS="-isystem \$(top_srcdir)/lib/ivykis/src/include -isystem \$(top_builddir)/lib/ivykis/src/include"
+        # Use libtool convenience library for static library usage to avoid linking against system dylib - libtool will handle it properly without -Wl flags
+        IVYKIS_LIBS="\$(top_builddir)/lib/ivykis/src/libivykis.la"
+        INTERNAL_IVYKIS_CFLAGS="-isystem \${includedir}/syslog-ng/ivykis"
 
-		IVYKIS_VERSION_UPDATED="yes"
+        IVYKIS_VERSION_UPDATED="yes"
 
-		# LIBS to use when libtool is not applicable (when linking the main syslog-ng executable in mixed linking mode)
-		IVYKIS_NO_LIBTOOL_LIBS="-Wl,${WHOLE_ARCHIVE_OPT} -L\$(top_builddir)/lib/ivykis/src/.libs -livykis -Wl,${NO_WHOLE_ARCHIVE_OPT}"
+        # internal ivykis is linked statically, io_uring might be available and linked against too, we have to use it as well
+        AC_SEARCH_LIBS([io_uring_queue_init], [uring], [IO_URING_LIBS="-luring"])
 
-		AC_DEFINE(HAVE_IV_WORK_POOL_SUBMIT_CONTINUATION, 1)
-	else
-		AC_MSG_ERROR([Internal ivykis sources not found in lib/ivykis. This is a hard dependency, unable to build syslog-ng without them.])
-	fi
+        # internal version surely has iv_work_pool_submit_continuation
+        AC_DEFINE(HAVE_IV_WORK_POOL_SUBMIT_CONTINUATION, 1)
+    else
+        AC_MSG_ERROR([Internal ivykis sources not found in lib/ivykis. This is a hard dependency if --with_ivykis=xinternal option is used, unable to build syslog-ng without them.])
+    fi
 else
-	with_ivykis="system"
-	PKG_CHECK_MODULES(IVYKIS, ivykis >= $IVYKIS_MIN_VERSION,,)
-	PKG_CHECK_MODULES(IVYKIS_VERSION_CHECK, ivykis >= $IVYKIS_UPDATED_VERSION, [IVYKIS_VERSION_UPDATED="yes"], [IVYKIS_VERSION_UPDATED="no"])
+    with_ivykis="system"
+    PKG_CHECK_MODULES(IVYKIS, ivykis >= $IVYKIS_MIN_VERSION,,)
+    PKG_CHECK_MODULES(IVYKIS_VERSION_CHECK, ivykis >= $IVYKIS_UPDATED_VERSION, [IVYKIS_VERSION_UPDATED="yes"], [IVYKIS_VERSION_UPDATED="no"])
 
-	# in case we're using a system installed ivykis, we can link against
-	# it even without libtool and without extra linker arguments (as
-	# we're linking dynamically)
-
-	IVYKIS_NO_LIBTOOL_LIBS="$IVYKIS_LIBS"
-
-	dnl check if iv_work_pool_submit_continuation is available in the system ivykis
-	old_LIBS=$LIBS
-	LIBS="$LIBS $IVYKIS_LIBS"
-	AC_CHECK_FUNCS(iv_work_pool_submit_continuation, [], [AC_DEFINE(HAVE_IV_WORK_POOL_SUBMIT_CONTINUATION, 0)])
-	LIBS=$old_LIBS
+    dnl check if iv_work_pool_submit_continuation is available in the system ivykis
+    LIBS="$LIBS $IVYKIS_LIBS"
+    AC_CHECK_FUNC(iv_work_pool_submit_continuation,
+                    [AC_DEFINE([HAVE_IV_WORK_POOL_SUBMIT_CONTINUATION], [1], [Define if iv_work_pool_submit_continuation() exists])],
+                    [AC_DEFINE([HAVE_IV_WORK_POOL_SUBMIT_CONTINUATION], [0], [Define if iv_work_pool_submit_continuation() exists])])
+    LIBS=$LIBS_SAVE
 fi
 
+SAFE_C_CHECK_END
+# Assing it after SAFE_C_CHECK_END only, as that will restore LIBS
+if test "x$IO_URING_LIBS" != "x"; then
+    LIBS="${LIBS} ${IO_URING_LIBS}"
+fi
 
 
 dnl ***************************************************************************
@@ -1383,111 +1736,236 @@ dnl ***************************************************************************
 dnl mongo-c-driver headers/libraries
 dnl ***************************************************************************
 
-PKG_CHECK_MODULES(LIBMONGO, libmongoc-1.0 >= $LMC_MIN_VERSION, with_mongoc="yes", with_mongoc="no")
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
+
+# Try libmongoc-1.0 first
+PKG_CHECK_MODULES(LIBMONGO,
+    libmongoc-1.0 >= $LMC_1_MIN_VERSION,
+    [
+        with_mongoc=yes
+        mongo_version_str="v1"
+        MONGOC_HEADER="<mongoc.h>"
+        AC_DEFINE([HAVE_MONGOC_V2], [0], [Define if using MongoDB C Driver v2.x])
+    ],
+    [   # Try mongoc2 (libmongoc-2.0) if 1.0 not found
+        PKG_CHECK_MODULES(LIBMONGO,
+            mongoc2 >= $LMC_MIN_VERSION,
+            [
+            AC_DEFINE([HAVE_MONGOC_V2], [1], [Define if using MongoDB C Driver v2.x])
+            with_mongoc=yes
+            mongo_version_str="v2"
+            MONGOC_HEADER="<mongoc/mongoc.h>"
+            ],
+            [
+            AC_DEFINE([HAVE_MONGOC_V2], [0], [Define if using MongoDB C Driver v2.x])
+            with_mongoc=no
+            ]
+        )
+    ]
+)
 
 if test "x$with_mongoc" = "xno" && test "x$enable_mongodb" = "xyes"; then
-   AC_MSG_ERROR([Could not find mongo-c-driver, and MongoDB support was explicitly enabled.])
+    AC_MSG_ERROR([Could not find mongo-c-driver, and MongoDB support was explicitly enabled.])
 fi
 
 if test "x$with_mongoc" = "xyes"; then
-CPPFLAGS_SAVE="$CPPFLAGS"
-CPPFLAGS="$CPPFLAGS $LIBMONGO_CFLAGS"
+    CPPFLAGS="$CPPFLAGS $LIBMONGO_CFLAGS"
+    AC_CHECK_DECLS([mongoc_uri_set_option_as_int32], [], [], [[#include $MONGOC_HEADER]])
+    AC_CHECK_DECLS([MONGOC_URI_SERVERSELECTIONTIMEOUTMS], [], [], [[#include $MONGOC_HEADER]])
+    AC_CHECK_DECLS([bson_append_array_unsafe_begin], [], [], [[#include $MONGOC_HEADER
+#include <bson/bson.h>]])
+    CPPFLAGS="$CPPFLAGS_SAVE"
+fi
 
-AC_CHECK_DECLS([mongoc_uri_set_option_as_int32], [], [], [[#include <mongoc.h>]])
-AC_CHECK_DECLS([MONGOC_URI_SERVERSELECTIONTIMEOUTMS], [], [], [[#include <mongoc.h>]])
+SAFE_C_CHECK_END
 
-CPPFLAGS="$CPPFLAGS_SAVE"
+dnl ***************************************************************************
+dnl libunwind headers/libraries
+dnl ***************************************************************************
+if test "x$enable_stackdump" = "xyes"; then
+  case "$host_os" in
+    linux* | freebsd* | darwin*)
+      # currently supported
+      ;;
+    *)
+      AC_MSG_ERROR([--enable-stackdump is only supported on Linux, macOS, or FreeBSD currently])
+      ;;
+  esac
+fi
+if test "x$enable_stackdump" = "xauto" || test "$enable_stackdump" = "yes"; then
+    dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+    SAFE_C_CHECK_BEGIN
+
+    AS_CASE([$host_os],
+    [darwin*], [
+        dnl macOS: system libunwind (no .pc file, headers only)
+        AC_CHECK_HEADER([libunwind.h], [enable_libunwind="yes"], [enable_libunwind="no"])
+    ],
+    [*], [
+        PKG_CHECK_MODULES([LIBUNWIND], [libunwind >= 1.6.2], [enable_libunwind="yes"], [enable_libunwind="no"])
+    ])
+
+    if test "$enable_stackdump" = "yes" && test "$enable_libunwind" = "no"; then
+        AC_MSG_ERROR([Could not find libunwind, and stackdump support was explicitly enabled.])
+    fi
+    SAFE_C_CHECK_END
 fi
 
 dnl ***************************************************************************
 dnl libesmtp headers/libraries
 dnl ***************************************************************************
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
+
 if test "x$enable_smtp" != "xno" && test "x$with_libesmtp" != "xno"; then
-	libesmtp="yes"
-	if test "x$with_libesmtp" != "xyes" && test "x$with_libesmtp" != "x"; then
-		CPPFLAGS_SAVE="$CPPFLAGS"
-		LDFLAGS_SAVE="$LDFLAGS"
-		CPPFLAGS="$CPPFLAGS -I$with_libesmtp/include"
-		LDFLAGS="$LDFLAGS -L$with_libesmtp/lib"
-		AC_CHECK_HEADER(libesmtp.h, [LIBESMTP_CFLAGS="-I$with_libesmtp/include"
-					     LIBESMTP_LIBS="-L$with_libesmtp/lib -lesmtp"], [libesmtp=no])
-		CPPFLAGS="$CPPFLAGS_SAVE"
-		LDFLAGS="$LDFLAGS_SAVE"
-	else
-		PKG_CHECK_MODULES(LIBESMTP, libesmtp-1.0, libesmtp="yes", libesmtp="no")
-		if test "x$libesmtp" = "xno"; then
-			AC_MSG_CHECKING(for libESMTP with libesmtp-config)
-			if libesmtp-config --version >/dev/null 2>&1; then
-				AC_MSG_RESULT(yes)
-				LIBESMTP_CFLAGS="`libesmtp-config --cflags`"
-				LIBESMTP_LIBS="`libesmtp-config --libs`"
-				libesmtp="yes"
-			else
-				AC_MSG_RESULT(no)
-				libesmtp=no
-			fi
+    libesmtp="yes"
+    if test "x$with_libesmtp" != "xyes" && test "x$with_libesmtp" != "x"; then
+        CPPFLAGS="$CPPFLAGS -I$with_libesmtp/include"
+        LDFLAGS="$LDFLAGS -L$with_libesmtp/lib"
+        AC_CHECK_HEADERS(libesmtp.h, [LIBESMTP_CFLAGS="-I$with_libesmtp/include"
+                        LIBESMTP_LIBS="-L$with_libesmtp/lib -lesmtp"], [libesmtp=no])
+        CPPFLAGS="$CPPFLAGS_SAVE"
+        LDFLAGS="$LDFLAGS_SAVE"
+    else
+        PKG_CHECK_MODULES(LIBESMTP, libesmtp-1.0, libesmtp="yes", libesmtp="no")
+        if test "x$libesmtp" = "xno"; then
+            AC_MSG_CHECKING(for libESMTP with libesmtp-config)
+            if libesmtp-config --version >/dev/null 2>&1; then
+                AC_MSG_RESULT(yes)
+                LIBESMTP_CFLAGS="`libesmtp-config --cflags`"
+                LIBESMTP_LIBS="`libesmtp-config --libs`"
+                libesmtp="yes"
+            else
+                AC_MSG_RESULT(no)
+                libesmtp=no
+            fi
                 fi
-	fi
-	if test "x$enable_smtp" = "xyes" && test "x$libesmtp" = "xno"; then
-		AC_MSG_ERROR(libESMTP not found)
-	fi
-	enable_smtp=$libesmtp
+    fi
+    if test "x$enable_smtp" = "xyes" && test "x$libesmtp" = "xno"; then
+        AC_MSG_ERROR(libESMTP not found)
+    fi
+    enable_smtp=$libesmtp
 fi
+
+SAFE_C_CHECK_END
+
 
 dnl ***************************************************************************
 dnl libmqtt headers/libraries
 dnl ***************************************************************************
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
 
 if test "x$enable_mqtt" = "xyes" || test "x$enable_mqtt" = "xauto"; then
-	if test "x$with_libpaho_mqtt" != "x"; then
-		CPPFLAGS_SAVE="$CPPFLAGS"
-		LDFLAGS_SAVE="$LDFLAGS"
-		CPPFLAGS="$CPPFLAGS -I$with_libpaho_mqtt/include"
-		LDFLAGS="$LDFLAGS -L$with_libpaho_mqtt -lpaho-mqtt3cs"
-		AC_CHECK_HEADER(MQTTClient.h, [LIBPAHO_MQTT_CFLAGS="-I$with_libpaho_mqtt/include"
-						LIBPAHO_MQTT_LIBS="-L$with_libpaho_mqtt/lib -lpaho-mqtt3cs"
-						libpaho_mqtt="yes"], [libpaho_mqtt=no])
+    if test "x$with_libpaho_mqtt" != "x"; then
+        CPPFLAGS="$CPPFLAGS -I$with_libpaho_mqtt/include"
+        LDFLAGS="$LDFLAGS -L$with_libpaho_mqtt -lpaho-mqtt3cs"
+        AC_CHECK_HEADERS(MQTTClient.h, [LIBPAHO_MQTT_CFLAGS="-I$with_libpaho_mqtt/include"
+                        LIBPAHO_MQTT_LIBS="-L$with_libpaho_mqtt/lib -lpaho-mqtt3cs"
+                        libpaho_mqtt="yes"], [libpaho_mqtt=no])
+        CPPFLAGS="$CPPFLAGS_SAVE"
+        LDFLAGS="$LDFLAGS_SAVE"
+    else
+        AC_CHECK_LIB(paho-mqtt3cs, MQTTClient_create, LIBPAHO_MQTT_LIBS="-lpaho-mqtt3cs"; libpaho_mqtt="yes", libpaho_mqtt="no")
+    fi
+    if test "x$enable_mqtt" = "xyes" && test "x$libpaho_mqtt" = "xno"; then
+        AC_MSG_ERROR(libPAHO_MQTT not found)
+    fi
 
-		CPPFLAGS="$CPPFLAGS_SAVE"
-		LDFLAGS="$LDFLAGS_SAVE"
-	else
-		AC_CHECK_LIB(paho-mqtt3cs, MQTTClient_create, LIBPAHO_MQTT_LIBS="-lpaho-mqtt3cs"; libpaho_mqtt="yes", libpaho_mqtt="no")
-	fi
-	if test "x$enable_mqtt" = "xyes" && test "x$libpaho_mqtt" = "xno"; then
-		AC_MSG_ERROR(libPAHO_MQTT not found)
-	fi
+    if test "x$libpaho_mqtt" = "xyes"; then
+        CPPFLAGS="$CPPFLAGS $LIBPAHO_MQTT_CFLAGS"
+        LDFLAGS="$LDFLAGS $LIBPAHO_MQTT_LIBS"
+        AC_CHECK_MEMBER([MQTTClient_connectOptions.httpProxy],
+                [have_paho_http_proxy=1],
+                [have_paho_http_proxy=0],
+                [[#include "MQTTClient.h"]])
+        CPPFLAGS="$CPPFLAGS_SAVE"
+        LDFLAGS="$LDFLAGS_SAVE"
 
-	if test "x$libpaho_mqtt" = "xyes"; then
-		CPPFLAGS_SAVE="$CPPFLAGS"
-		LDFLAGS_SAVE="$LDFLAGS"
-		CPPFLAGS="$CPPFLAGS $LIBPAHO_MQTT_CFLAGS"
-		LDFLAGS="$LDFLAGS $LIBPAHO_MQTT_LIBS"
-
-		AC_CHECK_MEMBER([MQTTClient_connectOptions.httpProxy],
-				[have_paho_http_proxy=1],
-				[have_paho_http_proxy=0],
-				[[#include "MQTTClient.h"]])
-
-		CPPFLAGS="$CPPFLAGS_SAVE"
-		LDFLAGS="$LDFLAGS_SAVE"
-
-		AC_DEFINE_UNQUOTED(HAVE_PAHO_HTTP_PROXY, $have_paho_http_proxy, [libpaho-mqtt supports MQTTClient_connectOptions::httpProxy])
-	fi
-
-	enable_mqtt=$libpaho_mqtt
+        AC_DEFINE_UNQUOTED(HAVE_PAHO_HTTP_PROXY, $have_paho_http_proxy, [libpaho-mqtt supports MQTTClient_connectOptions::httpProxy])
+    fi
+    enable_mqtt=$libpaho_mqtt
 fi
+
+SAFE_C_CHECK_END
 
 dnl ***************************************************************************
 dnl GRPC headers/libraries
 dnl ***************************************************************************
 
+# Default gRPC enabed handling
+# Auto resolution
+# Only disable by default on non-Linux hosts with GNU g++
+if test "x$enable_grpc" = "xauto"; then
+  case "$host_os" in
+    linux*) ;;  dnl leave as auto on Linux
+    *)
+      case "$CXX" in
+        g++*|*/g++*)
+          enable_grpc=no
+          grpc_warning_str="auto disabled by using GNU g++ on non-Linux OS, see the configure log above"
+          AC_MSG_NOTICE([GRPC support is disabled by default on non-Linux GNU toolchainsg.
+On systems like macOS or FreeBSD, prebuilt dependencies (Protobuf, gRPC, Abseil, etc.) are usually built with Clang (libc++).
+Using GNU g++ (libstdc++) may cause build, link, or runtime issues due to library and ABI mismatches.
+If you rebuilt all dependencies with GNU g++, it might work.])
+          ;;
+      esac
+      ;;
+  esac
+fi
+
+dnl Warn only if explicitly yes with GNU g++ on non-Linux
+if test "x$enable_grpc" = "xyes"; then
+  case "$host_os" in
+    linux*) ;;  # supported
+    *)
+      case "$CXX" in
+        g++*|*/g++*)
+          grpc_warning_str="WARNING: using GNU g++ on non-Linux may cause ABI/library mismatches, see the configure log above"
+          AC_MSG_WARN([Building gRPC modules with GNU toolchains on non-Linux systems is unsupported.
+On systems like macOS or FreeBSD, prebuilt dependencies (Protobuf, gRPC, Abseil, etc.) are usually built with Clang (libc++).
+Using GNU g++ (libstdc++) may cause build, link, or runtime issues due to library and ABI mismatches.
+If you rebuilt all dependencies with GNU g++, it might work. Proceed only if you understand the potential issues.])
+          ;;
+      esac
+      ;;
+  esac
+fi
+
 # C++
 if ! test "x$enable_grpc" = "xno"; then
     if test "x$enable_cpp" = "xno"; then
         if test "x$enable_grpc" = "xyes"; then
+            # Warn on macOS that AX_CXX_COMPILE_STDCXX might be outdated
+            if test $ostype = "Darwin"; then
+                # AX[]_CXX_COMPILE_STDCXX format is needed to prevent the text treated as a macro
+                AC_MSG_WARN([On macOS, the Homebrew-provided autoconf-archive contains an outdated version of AX[]_CXX_COMPILE_STDCXX,
+which may incorrectly detect C++14 or C++20 support with clang. This can cause GRPC/C++ configuration to fail.
+Recommended fix:
+    wget -O ./m4/ax_cxx_compile_stdcxx.m4 https://raw.githubusercontent.com/autoconf-archive/autoconf-archive/master/m4/ax_cxx_compile_stdcxx.m4])
+            fi
             AC_MSG_ERROR(C++ support is mandatory when the GRPC modules are enabled.)
         else
             enable_grpc=no
+        fi
+    fi
+fi
+
+if ! test "x$enable_grpc" = "xno"; then
+    # gRPC requires C++20 (preferred) or at least C++17 as a fallback.
+    dnl See comment above: guard C++20 probe against old autoconf-archive installs.
+    m4_ifdef([_AX_CXX_COMPILE_STDCXX_testbody_20], [
+        AX_CXX_COMPILE_STDCXX([20], [noext], [optional])
+    ])
+    if test "x$HAVE_CXX20" != "x1"; then
+        AX_CXX_COMPILE_STDCXX([17], [noext], [optional])
+        if test "x$HAVE_CXX17" != "x1"; then
+            if test "x$enable_grpc" = "xyes"; then
+                AC_MSG_ERROR([gRPC modules require at least C++17, but neither C++17 nor C++20 support was found.])
+            else
+                enable_grpc=no
+            fi
         fi
     fi
 fi
@@ -1571,45 +2049,52 @@ fi
 dnl ***************************************************************************
 dnl libcurl headers/libraries
 dnl ***************************************************************************
-if test "x$enable_http" != "xno" && test "x$with_libcurl" != "xno"; then
-	libcurl="yes"
-	if test "x$with_libcurl" != "xyes" && test "x$with_libcurl" != "x"; then
-		CPPFLAGS_SAVE="$CPPFLAGS"
-		LDFLAGS_SAVE="$LDFLAGS"
-		CPPFLAGS="$CPPFLAGS -I$with_libcurl/include"
-		LDFLAGS="$LDFLAGS -L$with_libcurl/lib"
-		AC_CHECK_HEADER(curl/curl.h, [LIBCURL_CFLAGS="-I$with_libcurl/include"
-					     LIBCURL_LIBS="-L$with_libcurl/lib -lcurl"], [libcurl=no])
-		CPPFLAGS="$CPPFLAGS_SAVE"
-		LDFLAGS="$LDFLAGS_SAVE"
-	else
-		AC_MSG_CHECKING(for libcurl)
-		if curl-config --version >/dev/null 2>&1; then
-			AC_MSG_RESULT(yes)
-			LIBCURL_CFLAGS="`curl-config --cflags`"
-			LIBCURL_LIBS="`curl-config --libs`"
-		else
-			AC_MSG_RESULT(no)
-			libcurl=no
-		fi
-	fi
-	if test "x$enable_http" = "xyes" && test "x$libcurl" = "xno"; then
-		AC_MSG_ERROR(libcurl not found)
-	fi
-	enable_http=$libcurl
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
 
-        if test "$enable_http" = "yes"; then
-           old_CFLAGS=$CFLAGS
-           CFLAGS=$LIBCURL_CFLAGS
-           AC_CHECK_DECLS([CURL_SSLVERSION_TLSv1_0, CURL_SSLVERSION_TLSv1_1, CURL_SSLVERSION_TLSv1_2, CURL_SSLVERSION_TLSv1_3, CURLOPT_TLS13_CIPHERS, CURLOPT_SSL_VERIFYSTATUS, CURLOPT_REDIR_PROTOCOLS_STR, curl_url, CURLU_ALLOW_SPACE, CURLUE_BAD_SCHEME, CURLUE_BAD_HOSTNAME, CURLUE_BAD_PORT_NUMBER, CURLUE_BAD_USER, CURLUE_BAD_PASSWORD, CURLUE_MALFORMED_INPUT, CURLUE_LAST, CURLUPART_SCHEME, CURLUPART_HOST, CURLUPART_PORT, CURLUPART_USER, CURLUPART_PASSWORD, CURLUPART_URL],
-                          [], [],
-                          [[#include <curl/curl.h>]])
-           CFLAGS=$old_CFLAGS
-		   AC_CHECK_HEADER(zlib.h, AC_DEFINE(HAVE_ZLIB, , [Define if zlib is available]), AC_MSG_WARN([ZLIB not found.]))
+CHECK_HEADER_AND_DEFINE([zlib.h], [HAVE_ZLIB])
+
+if test "x$enable_http" != "xno" && test "x$with_libcurl" != "xno"; then
+    libcurl="yes"
+    if test "x$with_libcurl" != "xyes" && test "x$with_libcurl" != "x"; then
+        CPPFLAGS="$CPPFLAGS -I$with_libcurl/include"
+        LDFLAGS="$LDFLAGS -L$with_libcurl/lib"
+        AC_CHECK_HEADER(curl/curl.h, [LIBCURL_CFLAGS="-I$with_libcurl/include"
+                        LIBCURL_LIBS="-L$with_libcurl/lib -lcurl"], [libcurl=no])
+        CPPFLAGS="$CPPFLAGS_SAVE"
+        LDFLAGS="$LDFLAGS_SAVE"
+    else
+        AC_MSG_CHECKING(for libcurl)
+        if curl-config --version >/dev/null 2>&1; then
+            AC_MSG_RESULT(yes)
+            LIBCURL_CFLAGS="`curl-config --cflags`"
+            LIBCURL_LIBS="`curl-config --libs`"
+        else
+            AC_MSG_RESULT(no)
+            libcurl=no
         fi
+    fi
+    if test "x$enable_http" = "xyes" && test "x$libcurl" = "xno"; then
+        AC_MSG_ERROR(libcurl not found)
+    fi
+    enable_http=$libcurl
+
+    if test "$enable_http" = "yes"; then
+        CFLAGS=$LIBCURL_CFLAGS
+        AC_CHECK_DECLS([CURL_SSLVERSION_TLSv1_0, CURL_SSLVERSION_TLSv1_1, CURL_SSLVERSION_TLSv1_2, CURL_SSLVERSION_TLSv1_3, CURLOPT_TLS13_CIPHERS, CURLOPT_SSL_VERIFYSTATUS, CURLOPT_REDIR_PROTOCOLS_STR, curl_url, CURLU_ALLOW_SPACE, CURLUE_BAD_SCHEME, CURLUE_BAD_HOSTNAME, CURLUE_BAD_PORT_NUMBER, CURLUE_BAD_USER, CURLUE_BAD_PASSWORD, CURLUE_MALFORMED_INPUT, CURLUE_LAST, CURLUPART_SCHEME, CURLUPART_HOST, CURLUPART_PORT, CURLUPART_USER, CURLUPART_PASSWORD, CURLUPART_URL],
+                        [], [],
+                        [[#include <curl/curl.h>]])
+        CFLAGS=$CFLAGS_SAVE
+
+        if test "x$HAVE_ZLIB" = "x1"; then
+            AC_CHECK_LIB([z], [deflate], [ZLIB_LIBS="-lz"; AC_SUBST([ZLIB_LIBS])], [HAVE_ZLIB=0])
+        fi
+    fi
 else
-	enable_http="no"
+    enable_http="no"
 fi
+
+SAFE_C_CHECK_END
 
 dnl ***************************************************************************
 dnl Cloud Auth
@@ -1635,57 +2120,59 @@ if ! test "x$enable_cloud_auth" = "xno"; then
     enable_cloud_auth=yes
 fi
 
-
 dnl ***************************************************************************
 dnl libhiredis headers/libraries
 dnl ***************************************************************************
+
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
+
 if test "x$enable_redis" != "xno" && test "x$with_redis" != "xno"; then
-       hiredis="yes"
-       if test "x$with_libhiredis" != "xyes" && test "x$with_libhiredis" != "x"; then
-               CFLAGS_SAVE="$CFLAGS"
-               LDFLAGS_SAVE="$LDFLAGS"
-               CFLAGS="$CFLAGS -I$with_libhiredis/include"
-               LDFLAGS="$LDFLAGS -L$with_libhiredis/lib"
-               AC_CHECK_HEADER(hiredis/hiredis.h, [HIREDIS_CFLAGS="-I$with_libhiredis/include"
-                                                   HIREDIS_LIBS="-L$with_libhiredis/lib -lhiredis"], [hiredis=no])
-               CFLAGS="$CFLAGS_SAVE"
-               LDFLAGS="$LDFLAGS_SAVE"
-       else
-               hiredis="yes"
-               PKG_CHECK_MODULES(HIREDIS, hiredis >= $HIREDIS_MIN_VERSION, ,
-                                 [AC_MSG_WARN([pkg-config was not able to find hiredis >= $HIREDIS_MIN_VERSION])
-				  PKG_CHECK_MODULES(HIREDIS, libhiredis >= $HIREDIS_MIN_VERSION,,
-				  [AC_MSG_WARN([pkg-config was not able to find libhiredis >= $HIREDIS_MIN_VERSION])
-				   hiredis=no])])
-       fi
+    hiredis="yes"
+    if test "x$with_libhiredis" != "xyes" && test "x$with_libhiredis" != "x"; then
+            CFLAGS="$CFLAGS -I$with_libhiredis/include"
+            LDFLAGS="$LDFLAGS -L$with_libhiredis/lib"
+            AC_CHECK_HEADER(hiredis/hiredis.h, [HIREDIS_CFLAGS="-I$with_libhiredis/include"
+                                                HIREDIS_LIBS="-L$with_libhiredis/lib -lhiredis"], [hiredis=no])
+            CFLAGS="$CFLAGS_SAVE"
+            LDFLAGS="$LDFLAGS_SAVE"
+    else
+            hiredis="yes"
+            PKG_CHECK_MODULES(HIREDIS, hiredis >= $HIREDIS_MIN_VERSION, ,
+                                [AC_MSG_WARN([pkg-config was not able to find hiredis >= $HIREDIS_MIN_VERSION])
+                PKG_CHECK_MODULES(HIREDIS, libhiredis >= $HIREDIS_MIN_VERSION,,
+                [AC_MSG_WARN([pkg-config was not able to find libhiredis >= $HIREDIS_MIN_VERSION])
+                hiredis=no])])
+    fi
 
-       if test "x$enable_redis" = "xyes" && test "x$hiredis" = "xno"; then
-               AC_MSG_ERROR(libHIREDIS not found)
-       fi
+    if test "x$enable_redis" = "xyes" && test "x$hiredis" = "xno"; then
+            AC_MSG_ERROR(libHIREDIS not found)
+    fi
 
-       enable_redis=$hiredis
+    enable_redis=$hiredis
 fi
+
+SAFE_C_CHECK_END
 
 dnl ***************************************************************************
 dnl rabbitmq-c headers/libraries
 dnl ***************************************************************************
 
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
+
 PKG_CHECK_MODULES(LIBRABBITMQ, librabbitmq >= $LIBRABBITMQ_MIN_VERSION, with_librabbitmq_client="yes", with_librabbitmq_client="no")
 
 if test "$enable_amqp" = "yes" && test "$with_librabbitmq_client" = "no"; then
-       AC_MSG_ERROR([Could not find librabbitmq-c, and AMQP support was explicitly enabled.])
+    AC_MSG_ERROR([Could not find librabbitmq-c, and AMQP support was explicitly enabled.])
 fi
 
-CFLAGS_SAVE="$CFLAGS"
 CFLAGS="$CFLAGS $LIBRABBITMQ_CFLAGS"
-old_LIBS=$LIBS
 LIBS=$LIBRABBITMQ_LIBS
+CHECK_HEADER_AND_DEFINE([rabbitmq-c/tcp_socket.h])
+CHECK_FUNC_AND_DEFINE([amqp_ssl_socket_set_verify_peer])
 
-AC_CHECK_FUNCS(amqp_ssl_socket_set_verify_peer)
-AC_CHECK_HEADERS(rabbitmq-c/tcp_socket.h)
-
-LIBS=$old_LIBS
-CFLAGS="$CFLAGS_SAVE"
+SAFE_C_CHECK_END
 
 dnl ***************************************************************************
 dnl rdkafka headers/libraries
@@ -1697,18 +2184,18 @@ if test "$enable_kafka" = "yes" && test "$with_librdkafka" = "no"; then
        AC_MSG_ERROR([Could not find librdkafka, and Kafka support was explicitly enabled.])
 fi
 
-dnl
 dnl Check if librdkafka has transactional api
 dnl
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
 
-old_LIBS=$LIBS
-old_CFLAGS=$CFLAGS
 LIBS=$LIBRDKAFKA_LIBS
 CFLAGS=$LIBRDKAFKA_CFLAGS
-AC_CHECK_FUNCS(rd_kafka_init_transactions)
-LIBS=$old_LIBS
-CFLAGS=$old_CFLAGS
+CHECK_FUNC_AND_DEFINE([rd_kafka_init_transactions])
+CHECK_FUNC_AND_DEFINE([rd_kafka_seek_partitions])
+CHECK_FUNC_AND_DEFINE([rd_kafka_queue_yield])
 
+SAFE_C_CHECK_END
 
 if test "x$enable_native" = "xyes" -o "x$enable_native" = "xauto"; then
     AC_CONFIG_FILES([syslog-ng-native-connector.pc])
@@ -1717,27 +2204,32 @@ fi
 dnl ***************************************************************************
 dnl riemann-client headers/libraries
 dnl ***************************************************************************
+
+dnl You can always use the saved ones - CFLAGS_SAVE CPPFLAGS_SAVE LIBS_SAVE LDFLAGS_SAVE between SAFE_C_CHECK_BEGIN/SAFE_C_CHECK_END if needed
+SAFE_C_CHECK_BEGIN
+
 if test "$enable_riemann" != "no"; then
- PKG_CHECK_MODULES(RIEMANN_CLIENT, riemann-client >= $LRC_MIN_VERSION,,riemann_found="no")
- if test "$riemann_found" = "no" && test "$enable_riemann" = "yes"; then
-   AC_MSG_ERROR([Dependency for Riemann not found!])
- fi
- if test "$riemann_found" = "no"; then
-   enable_riemann="no";
- else
-   enable_riemann="yes";
- fi
+    PKG_CHECK_MODULES(RIEMANN_CLIENT, riemann-client >= $LRC_MIN_VERSION,,riemann_found="no")
+    if test "$riemann_found" = "no" && test "$enable_riemann" = "yes"; then
+        AC_MSG_ERROR([Dependency for Riemann not found!])
+    fi
+    if test "$riemann_found" = "no"; then
+        enable_riemann="no";
+    else
+        enable_riemann="yes";
+    fi
 
- if test "$enable_riemann" = "yes"; then
-
-    old_CFLAGS=$CFLAGS
-    CFLAGS=`pkg-config --cflags riemann-client`
-    AC_CHECK_DECLS(RIEMANN_EVENT_FIELD_TIME_MICROS,
-                  AC_DEFINE(HAVE_RIEMANN_MICROSECONDS, 1, [Riemann microseconds support]),,
-                  [[#include <riemann/event.h>]])
-    CFLAGS=$old_CFLAGS
- fi
+    if test "$enable_riemann" = "yes"; then
+        CFLAGS=`pkg-config --cflags riemann-client`
+        AC_CHECK_DECLS(RIEMANN_EVENT_FIELD_TIME_MICROS,
+                    AC_DEFINE(HAVE_RIEMANN_MICROSECONDS, 1, [Riemann microseconds support]),
+                    AC_DEFINE(HAVE_RIEMANN_MICROSECONDS, 0, [Riemann microseconds support]),
+                    [[#include <riemann/event.h>]])
+        CFLAGS=$CFLAGS_SAVE
+    fi
 fi
+
+SAFE_C_CHECK_END
 
 dnl ***************************************************************************
 dnl libsystemd headers/libraries
@@ -1804,23 +2296,15 @@ if test "x$enable_python_modules" = "xauto"; then
 fi
 
 dnl ***************************************************************************
-dnl docbook
+dnl manpages
 dnl ***************************************************************************
 
-if test "x$enable_manpages" != "xno"; then
-    if test "x$with_docbook" = "xauto"; then
-        XSL_STYLESHEET=`find /usr/share/{xml,sgml} -path '*/manpages/docbook.xsl' 2>/dev/null | head -n 1`
-        if test -z "$XSL_STYLESHEET"; then
-            XSL_STYLESHEET="http://docbook.sourceforge.net/release/xsl/current/manpages/docbook.xsl"
-        fi
-    else
-        XSL_STYLESHEET=$with_docbook
-    fi
+if test "x$enable_manpages_install" = "xyes" -a "x$enable_manpages" = "xno"; then
+        AC_MSG_ERROR([Manpage generation is disabled whilst installation is requested, please enable manpage generation first. (--enable-manpages)])
 fi
 
 if test "x$enable_manpages_install" = "xauto"; then
-    dnl do we have the generated manpages (part of the tarball but not in git)
-    if test -f doc/man/syslog-ng.8 -o "x$enable_manpages" = "xyes"; then
+    if test "x$enable_manpages" = "xyes"; then
         enable_manpages_install=yes
     else
         enable_manpages_install=no
@@ -1833,18 +2317,18 @@ dnl ***************************************************************************
 
 if test "x$enable_java" = "xauto" || test "x$enable_java" = "xyes"; then
     if test "x$enable_java" = "xauto"; then
-      AC_CHECK_JAVA_VERSION([$JAVA_MIN_VERSION], [enable_java=yes], [enable_java=no])
+      AX_CHECK_JAVA_VERSION([$JAVA_MIN_VERSION], [enable_java=yes], [enable_java=no])
     else
-      AC_CHECK_JAVA_VERSION([$JAVA_MIN_VERSION], [enable_java=yes], [AC_MSG_ERROR([Java not found])])
+      AX_CHECK_JAVA_VERSION([$JAVA_MIN_VERSION], [enable_java=yes], [AC_MSG_ERROR([Java not found])])
     fi
 fi
 
 if test "x$enable_java" = "xyes"; then
     if test "x$enable_java_modules" = "xauto" || test "x$enable_java_modules" = "xyes"; then
         if test "x$enable_java_modules" = "xauto"; then
-          AC_CHECK_GRADLE_VERSION([$GRADLE_MIN_VERSION], [enable_java_modules=yes], [enable_java_modules=no])
+          AX_CHECK_GRADLE_VERSION([$GRADLE_MIN_VERSION], [enable_java_modules=yes], [enable_java_modules=no])
         else
-          AC_CHECK_GRADLE_VERSION([$GRADLE_MIN_VERSION], [enable_java_modules=yes], [AC_MSG_ERROR([Gradle not found])])
+          AX_CHECK_GRADLE_VERSION([$GRADLE_MIN_VERSION], [enable_java_modules=yes], [AC_MSG_ERROR([Gradle not found])])
         fi
     fi
 else
@@ -1868,7 +2352,7 @@ if test "x$enable_darwin_osl" = "xauto" || test "x$enable_darwin_osl" = "xyes"; 
 
                 AC_LANG_PUSH([Objective C])
 
-                # TODO: Once gcc was able to compile our ObjC code correctly we should add here a more sopgisticated check
+                # TODO: Once GCC is able to compile our ObjC code correctly, we should add a more sophisticated check here
                 AC_CHECK_HEADERS([OSLog/OSLog.h], [enable_darwin_osl=yes], [enable_darwin_osl=no])
 
                 AC_LANG_POP([Objective C])
@@ -1941,6 +2425,8 @@ AC_CHECK_DECLS([TCP_KEEPIDLE, TCP_KEEPINTVL, TCP_KEEPCNT], [], [],
 
 if test "x$ac_cv_have_decl_TCP_KEEPIDLE" = "xyes" -a "x$ac_cv_have_decl_TCP_KEEPINTVL" = "xyes" -a "x$ac_cv_have_decl_TCP_KEEPCNT" = "xyes"; then
         AC_DEFINE(HAVE_TCP_KEEPALIVE_TIMERS, 1, [TCP keepalive timers])
+else
+        AC_DEFINE(HAVE_TCP_KEEPALIVE_TIMERS, 0, [TCP keepalive timers])
 fi
 
 if test "x$enable_linux_caps" = "xyes" -o "x$enable_linux_caps" = "xauto"; then
@@ -1991,6 +2477,16 @@ if test "x$enable_kafka" = "xauto"; then
         enable_kafka="no"
     fi
     AC_MSG_RESULT([$enable_kafka])
+fi
+
+if test "x$enable_stackdump" = "xauto"; then
+    AC_MSG_CHECKING(whether to enable stackdump support)
+    if test "x$enable_libunwind" != "xno"; then
+        enable_stackdump="yes"
+    else
+        enable_stackdump="no"
+    fi
+    AC_MSG_RESULT([$enable_stackdump])
 fi
 
 if test "x$enable_systemd" = "xauto"; then
@@ -2066,12 +2562,14 @@ fi
 dnl ***************************************************************************
 dnl check if we have timezone variable in <time.h>
 dnl ***************************************************************************
-AC_VAR_TIMEZONE_EXTERNALS
 
-dnl ***************************************************************************
-dnl check fmemopen
-dnl ***************************************************************************
-AC_CHECK_FUNCS([fmemopen])
+AX_VAR_TIMEZONE_EXTERNALS
+if test "x$ac_cv_func_timezone" = "xyes"; then
+    AC_DEFINE([HAVE_TIMEZONE], [1], [Define if timezone-related externals exist])
+else
+    AC_DEFINE([HAVE_TIMEZONE], [0], [Define if timezone-related externals exist])
+fi
+
 
 dnl ***************************************************************************
 dnl sanitizer
@@ -2100,24 +2598,15 @@ fi
 python_moduledir="$moduledir"/python
 python_sysconf_moduledir="${sysconfdir}/python"
 
-CPPFLAGS="$CPPFLAGS $GLIB_CFLAGS $EVTLOG_CFLAGS $PCRE2_CFLAGS $OPENSSL_CFLAGS $LIBNET_CFLAGS $LIBDBI_CFLAGS $IVYKIS_CFLAGS $JSON_CFLAGS $LIBCAP_CFLAGS -D_GNU_SOURCE -D_DEFAULT_SOURCE -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64"
+CPPFLAGS="$CPPFLAGS $GLIB_CFLAGS $EVTLOG_CFLAGS $PCRE2_CFLAGS $OPENSSL_CFLAGS $LIBNET_CFLAGS $LIBUNWIND_CFLAGS $LIBDBI_CFLAGS $IVYKIS_CFLAGS $JSON_CFLAGS $LIBCAP_CFLAGS -D_GNU_SOURCE -D_DEFAULT_SOURCE -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64"
 
 ########################################################
 ## NOTES: on how syslog-ng is linked
 #
-# There are two major linking modes currently:
-#   1) dynamic: all libraries are linked dynamically, and assumed to be available as dynamic libraries
-#
-#   2) mixed: typical system provided libraries are linked dynamicaly, the
-#      rest is linked statically (Glib etc).  Please note that _only_ the
-#      main syslog-ng executable is linked this way so that it can be
-#      started early during startup, tools and unit tests are linked
-#      dynamically the same way.
-#
 # The following variables are introduced and AC_SUBSTed to be used in Makefiles:
 #
 # SYSLOGNG_DEPS_LIBS:
-#       includes all dependendent libraries used by binary that can be linked in mixed mode (e.g. only the syslog-ng binary).
+#       includes all dependendent libraries used by syslog-ng binary.
 #
 # TOOL_DEPS_LIBS:
 #       executables (e.g. tools & unit test programs) that link against
@@ -2147,34 +2636,23 @@ if test -z "$MODULE_LDFLAGS"; then
 fi
 MODULE_DEPS_LIBS="\$(top_builddir)/lib/libsyslog-ng.la"
 
-if test "x$linking_mode" = "xdynamic"; then
-	SYSLOGNG_DEPS_LIBS="$LIBS $BASE_LIBS $GLIB_LIBS $EVTLOG_LIBS $SECRETSTORAGE_LIBS $RESOLV_LIBS $LIBCAP_LIBS $PCRE2_LIBS $REGEX_LIBS $DL_LIBS"
+SYSLOGNG_DEPS_LIBS="$JEMALLOC_LIBS $LIBS $BASE_LIBS $GLIB_LIBS $EVTLOG_LIBS $SECRETSTORAGE_LIBS $RESOLV_LIBS $LIBCAP_LIBS $PCRE2_LIBS $REGEX_LIBS $DL_LIBS $LIBUNWIND_LIBS $JSON_LIBS $OPENSSL_LIBS"
 
-	if test "x$with_ivykis" = "xinternal"; then
-		# when using the internal ivykis, we're linking it statically into libsyslog-ng.so
-
-		TOOL_DEPS_LIBS="$SYSLOGNG_DEPS_LIBS"
-		CORE_DEPS_LIBS="$SYSLOGNG_DEPS_LIBS $IVYKIS_LIBS $JSON_LIBS"
-	else
-		# otherwise everything needs to link against libivykis.so
-
-		SYSLOGNG_DEPS_LIBS="$SYSLOGNG_DEPS_LIBS $IVYKIS_LIBS"
-
-		TOOL_DEPS_LIBS="$SYSLOGNG_DEPS_LIBS"
-		CORE_DEPS_LIBS="$SYSLOGNG_DEPS_LIBS $JSON_LIBS"
-	fi
-
-	# syslog-ng binary is linked with the default link command (e.g. libtool)
-	SYSLOGNG_LINK='$(LINK)'
+if test "x$with_ivykis" = "xinternal"; then
+    # when using the internal ivykis, we're linking it statically into libsyslog-ng.so
+    TOOL_DEPS_LIBS="$SYSLOGNG_DEPS_LIBS"
+    CORE_DEPS_LIBS="$SYSLOGNG_DEPS_LIBS $IVYKIS_LIBS"
 else
-	SYSLOGNG_DEPS_LIBS="$LIBS $BASE_LIBS $RESOLV_LIBS $EVTLOG_NO_LIBTOOL_LIBS $SECRETSTORAGE_NO_LIBTOOL_LIBS $LD_START_STATIC -Wl,${WHOLE_ARCHIVE_OPT} $GLIB_LIBS $PCRE2_LIBS $REGEX_LIBS  -Wl,${NO_WHOLE_ARCHIVE_OPT} $IVYKIS_NO_LIBTOOL_LIBS $LD_END_STATIC $LIBCAP_LIBS $DL_LIBS"
-	TOOL_DEPS_LIBS="$LIBS $BASE_LIBS $GLIB_LIBS $EVTLOG_LIBS $SECRETSTORAGE_LIBS $RESOLV_LIBS $LIBCAP_LIBS $PCRE2_LIBS $REGEX_LIBS $IVYKIS_LIBS $DL_LIBS"
-	CORE_DEPS_LIBS=""
+    # otherwise everything needs to link against libivykis.so
+    SYSLOGNG_DEPS_LIBS="$SYSLOGNG_DEPS_LIBS $IVYKIS_LIBS"
 
-	# bypass libtool in case we want to do mixed linking because it
-	# doesn't support -Wl,-Bstatic -Wl,-Bdynamic on a per-library basis.
-	SYSLOGNG_LINK='$(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@'
+    TOOL_DEPS_LIBS="$SYSLOGNG_DEPS_LIBS"
+    CORE_DEPS_LIBS="$SYSLOGNG_DEPS_LIBS"
 fi
+
+# syslog-ng binary is linked with the default link command (e.g. libtool)
+SYSLOGNG_LINK='$(LINK)'
+
 YFLAGS="-d"
 
 enable_value()
@@ -2220,10 +2698,10 @@ AC_DEFINE_UNQUOTED(PATH_SCLDIR, "$scldir", [SCL directory])
 AC_DEFINE_UNQUOTED(PATH_XSDDIR, "$xsddir", [XSD directory])
 AC_DEFINE_UNQUOTED(PATH_LIBEXECDIR, "$libexecdir", [libexec directory])
 if test -n "$timezonedir"; then
-        AC_DEFINE_UNQUOTED(PATH_TIMEZONEDIR, "$timezonedir", [timezone base directory])
+    AC_DEFINE_UNQUOTED(PATH_TIMEZONEDIR, "$timezonedir", [timezone base directory])
 fi
 if test -n "$env_ld_library_path"; then
-        AC_DEFINE_UNQUOTED(ENV_LD_LIBRARY_PATH, "$env_ld_library_path", [set LD_LIBRARY_PATH to this value])
+    AC_DEFINE_UNQUOTED(ENV_LD_LIBRARY_PATH, "$env_ld_library_path", [set LD_LIBRARY_PATH to this value])
 fi
 AC_DEFINE_UNQUOTED(PATH_MODULEDIR, "$moduledir", [module installation directory])
 AC_DEFINE_UNQUOTED(PYTHON_MODULE_DIR, "$python_moduledir", [Python module installation directory])
@@ -2245,16 +2723,28 @@ AC_DEFINE_UNQUOTED(ENABLE_MEMTRACE, `enable_value $enable_memtrace`, [Enable mem
 AC_DEFINE_UNQUOTED(ENABLE_SPOOF_SOURCE, `enable_value $enable_spoof_source`, [Enable spoof source support])
 AC_DEFINE_UNQUOTED(ENABLE_IPV6, `enable_value $enable_ipv6`, [Enable IPv6 support])
 AC_DEFINE_UNQUOTED(ENABLE_TCP_WRAPPER, `enable_value $enable_tcp_wrapper`, [Enable TCP wrapper support])
+AC_DEFINE_UNQUOTED(ENABLE_JEMALLOC, `enable_value $enable_jemalloc`, [Enable jemalloc support])
 AC_DEFINE_UNQUOTED(ENABLE_LINUX_CAPS, `enable_value $enable_linux_caps`, [Enable Linux capability management support])
 AC_DEFINE_UNQUOTED(ENABLE_EBPF, `enable_value $enable_ebpf`, [Enable Linux eBPF support])
 AC_DEFINE_UNQUOTED(ENABLE_ENV_WRAPPER, `enable_value $enable_env_wrapper`, [Enable environment wrapper support])
 AC_DEFINE_UNQUOTED(ENABLE_SYSTEMD, `enable_value $enable_systemd`, [Enable systemd support])
 AC_DEFINE_UNQUOTED(ENABLE_KAFKA, `enable_value $enable_kafka`, [Enable kafka support])
 AC_DEFINE_UNQUOTED(ENABLE_CPP, `enable_value $enable_cpp`, [Enable C++ support])
+AC_DEFINE_UNQUOTED(ENABLE_STACKDUMP, `enable_value $enable_stackdump`, [Enable stackdump using libunwind])
 AC_DEFINE_UNQUOTED(SYSTEMD_JOURNAL_MODE, `journald_mode`, [Systemd-journal support mode])
-AC_DEFINE_UNQUOTED(HAVE_INOTIFY, `enable_value $ac_cv_func_inotify_init`, [Have inotify])
-AC_DEFINE_UNQUOTED(HAVE_KQUEUE, `enable_value $ac_cv_func_kqueue`, [Have kqueue])
+AC_DEFINE_UNQUOTED([HAVE_KQUEUE], [`enable_value $have_kqueue`], [Have kqueue])
+AC_DEFINE_UNQUOTED([HAVE_INOTIFY], [`enable_value $have_inotify`], [Have inotify])
 AC_DEFINE_UNQUOTED(USE_CONST_IVYKIS_MOCK, `enable_value $IVYKIS_VERSION_UPDATED`, [ivykis version is greater than $IVYKIS_UPDATED_VERSION])
+
+dnl WARNING
+dnl Same is true for AM_CONDITIONAL like for CHECK_HEADER_AND_DEFINE above
+dnl if you want to use in the compiled source also the SYSLOG_NG_HAVE_XXX pair of the resulting
+dnl HAVE_XXX defines you need both in config.h (for getting work #if SYSLOG_NG_HAVE_XXX)
+dnl So, do not simply use it, if you need to set a macro value that is used at compile time
+dnl use the AC_DEFINE method as well, as described above.
+dnl
+dnl This is used only in the Makefile.am yet
+AM_CONDITIONAL([HAVE_JAVAH], [test -n "$JAVAH_BIN"])
 
 AM_CONDITIONAL(ENABLE_ENV_WRAPPER, [test "$enable_env_wrapper" = "yes"])
 AM_CONDITIONAL(ENABLE_SYSTEMD, [test "$enable_systemd" = "yes"])
@@ -2264,6 +2754,7 @@ AM_CONDITIONAL(ENABLE_SUN_STREAMS, [test "$enable_sun_streams" = "yes"])
 AM_CONDITIONAL(ENABLE_DARWIN_OSL, [test "$enable_darwin_osl" = "yes"])
 AM_CONDITIONAL(ENABLE_OPENBSD_SYSTEM_SOURCE, [test "$enable_openbsd_system_source" = "yes"])
 AM_CONDITIONAL(ENABLE_EBPF, [test "$enable_ebpf" = "yes"])
+AM_CONDITIONAL(ENABLE_SLOG, [test "$enable_slog" = "yes"])
 AM_CONDITIONAL(ENABLE_PACCT, [test "$enable_pacct" = "yes"])
 AM_CONDITIONAL(ENABLE_MONGODB, [test "$enable_mongodb" = "yes"])
 AM_CONDITIONAL(ENABLE_SMTP, [test "$enable_smtp" = "yes"])
@@ -2290,18 +2781,21 @@ AM_CONDITIONAL(ENABLE_JAVA_MODULES, [test "$enable_java_modules" = "yes"])
 AM_CONDITIONAL(ENABLE_AFSNMP, [test "$enable_afsnmp" = "yes"])
 AM_CONDITIONAL(ENABLE_MANPAGES, [test "$enable_manpages" != "no"])
 AM_CONDITIONAL(ENABLE_MANPAGES_INSTALL, [test "$enable_manpages_install" != "no"])
+AM_CONDITIONAL(MANPAGES_REMOTE, [test "x$with_manpages" = "xremote"])
 AM_CONDITIONAL(ENABLE_NATIVE, [test "$enable_native" != "no"])
 AM_CONDITIONAL(ENABLE_EXTRA_WARNINGS, [test "$enable_extra_warnings" = "yes"])
+AM_CONDITIONAL(ENABLE_WERROR, [test "$enable_werror" = "yes"])
 AM_CONDITIONAL(ENABLE_TESTING, [test "$enable_tests" != "no"])
 AM_CONDITIONAL(ENABLE_EXAMPLE_MODULES, [test "$enable_example_modules" = "yes"])
 AM_CONDITIONAL(ENABLE_SANITIZER, [test "$with_sanitizer" != "no"])
 AM_CONDITIONAL(ENABLE_DEBUG, [test "$enable_debug" != "no"])
-AM_CONDITIONAL([HAVE_INOTIFY], [test x$ac_cv_func_inotify_init = xyes])
-AM_CONDITIONAL([HAVE_KQUEUE], [test x$ac_cv_func_kqueue = xyes])
+AM_CONDITIONAL([HAVE_KQUEUE], [test "x$have_kqueue" = xyes])
+AM_CONDITIONAL([HAVE_INOTIFY], [test "x$have_inotify" = xyes])
 AM_CONDITIONAL([HAVE_GETRANDOM], [test x$ac_cv_func_getrandom = xyes])
 AM_CONDITIONAL([HAVE_FMEMOPEN], [test x$ac_cv_func_fmemopen = xyes])
 AM_CONDITIONAL([HAVE_JAVAH], [test -n "$JAVAH_BIN"])
 AM_CONDITIONAL(ENABLE_IPV6, [test $enable_ipv6 = yes])
+AM_CONDITIONAL([ENABLE_SCL_SYSLOGCONF_AWK], [test "x$enable_scl_syslogconf_awk" = "xyes"])
 
 AM_CONDITIONAL(OS_TYPE_MACOS, [test $ostype = "Darwin"])
 AM_CONDITIONAL(OS_TYPE_FREEBSD, [test $ostype = "FreeBSD"])
@@ -2358,7 +2852,7 @@ AC_SUBST(JSON_DEPENDENCY)
 AC_SUBST(IVYKIS_SUBDIRS)
 AC_SUBST(RESOLV_LIBS)
 AC_SUBST(LIBBPF_INCLUDE)
-
+AC_SUBST(with_manpages)
 AC_SUBST(CURRDATE)
 AC_SUBST(RELEASE_TAG)
 AC_SUBST(SNAPSHOT_VERSION)
@@ -2367,89 +2861,162 @@ AC_SUBST(with_ivykis)
 AC_SUBST(INTERNAL_IVYKIS_CFLAGS)
 AC_SUBST(LIBSYSTEMD_JOURNAL_CFLAGS)
 AC_SUBST(LIBSYSTEMD_JOURNAL_LIBS)
-AC_SUBST(XSL_STYLESHEET)
 
 AX_PREFIX_CONFIG_H(syslog-ng-config.h, "SYSLOG_NG")
 AX_VALGRIND_CHECK
 
-AC_OUTPUT(dist.conf
+AC_CONFIG_FILES([dist.conf
           Makefile
 	  syslog-ng.pc
           libtest/syslog-ng-test.pc
 	  scripts/update-patterndb
 	  scripts/syslog-ng-update-virtualenv
-          )
+          ])
+AC_OUTPUT
 
+# Function to print a line with colorized value and optional warning
+# Arguments: 1 = label, 2 = value, 3 = optional warning string
+print_config_line() {
+    local label="$1"
+    local value="$2"
+    local warn_str="$3"
+
+    if test "x$enable_colored_log" = "xyes"; then
+        local color_code=$color_blue
+
+        case "$value" in
+            yes*|YES*|true*|TRUE*) color_code=$color_green ;;
+            no*|NO*|false*|FALSE*) color_code=$color_red ;;
+            # for syntax highlighting do not go crazy
+        esac
+
+        if test -n "$warn_str"; then
+            warn_str=" (${color_yellow}${warn_str}${color_reset})"
+        fi
+
+        printf "  %-30s : %b%s\n" "$label" "${color_code}${value}${color_reset}" "$warn_str"
+    else
+        printf "  %-30s : %s%s\n" "$label" "$value" "$warn_str"
+    fi
+}
+
+
+# Function to centered heading with dashes
+print_heading() {
+    text="$1"
+    total_len=43  # fixed total width
+
+    if test -z "$text"; then
+        # Empty caption: full line of dashes
+        printf '%*s\n' "$total_len" '' | tr ' ' -
+        return
+    fi
+
+    # Caption with one space padding
+    caption=" $text "
+    text_len=${#caption}
+
+    # If caption longer than total_len, print caption as-is
+    if test "$text_len" -ge "$total_len"; then
+        echo "$caption"
+        return
+    fi
+
+    # Compute dashes on left and right
+    dash_total=$(( total_len - text_len ))
+    dash_left=$(( dash_total / 2 ))
+    dash_right=$(( dash_total - dash_left ))
+
+    # Build line
+    line="$(printf '%*s' "$dash_left" '' | tr ' ' -)$caption$(printf '%*s' "$dash_right" '' | tr ' ' -)"
+    echo "$line"
+}
+
+# Print configuration summary
 echo
+print_heading ""
 echo "syslog-ng Open Source Edition $PACKAGE_VERSION configured"
-echo " Edition settings:"
-echo "  Release type                : $RELEASE_TYPE"
-echo "  Pretty version              : $BROCHURE_VERSION"
-echo "  Combined vers.              : $COMBINED_VERSION"
-echo "  Package name                : $PACKAGE_NAME"
-echo " Compiler options:"
-echo "  compiler                    : $CC - $($CC -v 2>&1 | grep -i ' version ') - $(which $CC)"
-echo "  compiler options            : $CFLAGS $CPPFLAGS"
-echo "  ObjC compiler               : $OBJC - $($OBJC -v 2>&1 | grep -i ' version ') - $(which $OBJC)"
-echo "  C++ enabled                 : ${enable_cpp:=no}"
+
+print_heading "Edition settings"
+print_config_line "Release type" "$RELEASE_TYPE"
+print_config_line "Pretty version" "$BROCHURE_VERSION"
+print_config_line "Combined vers." "$COMBINED_VERSION"
+print_config_line "Package name" "$PACKAGE_NAME"
+
+print_heading "Compiler options"
+print_config_line "compiler" "$CC - $($CC -v 2>&1 | grep -i ' version ') - $(command -v $CC)"
+print_config_line "compiler options" "$CFLAGS $CPPFLAGS"
+print_config_line "ObjC compiler" "$OBJC - $($OBJC -v 2>&1 | grep -i ' version ') - $(command -v $OBJC)"
+print_config_line "C++ enabled" "${enable_cpp:=no}"
 if test "x$enable_cpp" = "xyes"; then
-echo "  C++ compiler                : $CXX - $($CXX -v 2>&1 | grep -i ' version ') - $(which $CXX)"
-echo "  C++ compiler options        : $CXXFLAGS"
+    print_config_line "C++ compiler" "$CXX - $($CXX -v 2>&1 | grep -i ' version ') - $(command -v "${CXX%% *}")"
+    print_config_line "C++ compiler options" "$CXXFLAGS"
 fi
-echo "  linker flags                : $LDFLAGS $LIBS"
-echo "  prefix                      : $prefix"
-echo "  linking mode                : $linking_mode"
+print_config_line "linker flags" "$LDFLAGS $LIBS"
 if test $ostype = "Darwin"; then
-echo "  classic linking mode        : ${enable_force_classic_linking:=no}"
+    print_config_line "classic linking mode" "${enable_force_classic_linking:=no}"
 fi
-echo "  embedded crypto             : ${with_embedded_crypto:=no}"
-echo "  __thread keyword            : ${ac_cv_have_tls:=no}"
-echo " Test dependencies:"
-echo "  Criterion                   : ${with_criterion:=no}"
-echo "  Unit tests                  : ${enable_tests:=no}"
-echo " Submodules:"
-echo "  ivykis                      : $with_ivykis"
-echo " Features:"
-echo "  Forced server mode          : ${enable_forced_server_mode:=yes}"
-echo "  Debug symbols               : ${enable_debug:=no}"
-echo "  GCC profiling               : ${enable_gprof:=no}"
-echo "  Memtrace                    : ${enable_memtrace:=no}"
-echo "  IPV6 support                : ${enable_ipv6:=no}"
-echo "  spoof-source support        : ${enable_spoof_source:=no}"
-echo "  tcp-wrapper support         : ${enable_tcp_wrapper:=no}"
-echo "  Linux capability support    : ${has_linux_caps:=no}"
-echo "  Env wrapper support         : ${enable_env_wrapper:=no}"
-echo "  systemd support             : ${enable_systemd:=no} (unit dir: ${systemdsystemunitdir:=none})"
-echo "  systemd-journal support     : ${with_systemd_journal:=no}"
-echo "  JSON support                : $with_jsonc"
-echo " Build options:"
-echo "  Generate manual pages       : ${enable_manpages:=no}"
-echo "  Install manual pages        : ${enable_manpages_install:=no}"
-echo " Modules:"
-echo "  Module search path          : ${module_path}"
-echo "  Sun STREAMS support (module): ${enable_sun_streams:=no}"
-echo "  Darwin OSL support (module) : ${enable_darwin_osl:=no}"
-echo "  OpenBSD syslog (module)     : ${enable_openbsd_system_source:=no}"
-echo "  SQL support (module)        : ${enable_sql:=no}"
-echo "  PACCT module (EXPERIMENTAL) : ${enable_pacct:=no}"
-echo "  MongoDB destination (module): ${enable_mongodb:=no}"
-echo "  JSON support (module)       : ${enable_json:=no}"
-echo "  SMTP support (module)       : ${enable_smtp:=no}"
-echo "  HTTP support (module)       : ${enable_http:=no}"
-echo "  AMQP destination (module)   : ${enable_amqp:=no}"
-echo "  STOMP destination (module)  : ${enable_stomp:=no}"
-echo "  MQTT (module)               : ${enable_mqtt:=no}"
-echo "  GRPC (module)               : ${enable_grpc:=no}"
-echo "  Cloud Auth (module)         : ${enable_cloud_auth:=no}"
-echo "  GEOIP2 support (module)     : ${enable_geoip2:=no}"
-echo "  Redis support (module)      : ${enable_redis:=no}"
-echo "  Kafka support (module)      : ${enable_kafka:=no}"
-echo "  Riemann destination (module): ${enable_riemann:=no}, microseconds: ${riemann_micros:=no}"
-echo "  Python                      : ${enable_python:=no} (pkg-config package: ${with_python:=none}, packages: ${with_python_packages})"
-echo "  Python modules              : ${enable_python_modules:=no}"
-echo "  Java                        : ${enable_java:=no}"
-echo "  Java modules                : ${enable_java_modules:=no}"
-echo "  afsnmp module               : ${enable_afsnmp:=no}"
-echo "  eBPF module                 : ${enable_ebpf:=no}"
-echo "  native bindings             : ${enable_native:=no}"
-echo "  Example modules             : ${enable_example_modules:=yes}"
+print_config_line "embedded crypto" "${with_embedded_crypto:=no}"
+print_config_line "__thread keyword" "${ac_cv_have_tls:=no}"
+print_config_line "prefix" "$prefix"
+
+print_heading "Test dependencies"
+print_config_line "Criterion" "${with_criterion:=no}"
+print_config_line "Unit tests" "${enable_tests:=no}"
+
+print_heading "Submodules"
+print_config_line "ivykis" "$with_ivykis"
+
+print_heading "Features"
+print_config_line "Forced server mode" "${enable_forced_server_mode:=yes}"
+print_config_line "Debug symbols" "${enable_debug:=no}"
+print_config_line "GCC profiling" "${enable_gprof:=no}"
+print_config_line "Memtrace" "${enable_memtrace:=no}"
+print_config_line "IPV6 support" "${enable_ipv6:=no}"
+print_config_line "jemalloc support" "${enable_jemalloc:=no}"
+print_config_line "spoof-source support" "${enable_spoof_source:=no}"
+print_config_line "tcp-wrapper support" "${enable_tcp_wrapper:=no}"
+print_config_line "Linux capability support" "${has_linux_caps:=no}"
+print_config_line "Env wrapper support" "${enable_env_wrapper:=no}"
+print_config_line "systemd support" "${enable_systemd:=no} (unit dir: ${systemdsystemunitdir:=none})"
+print_config_line "systemd-journal support" "${with_systemd_journal:=no}"
+print_config_line "JSON support" "$with_jsonc"
+print_config_line "stackdump support" "${enable_stackdump:=no}"
+
+print_heading "Build options"
+print_config_line "Enable manual pages" "${enable_manpages:=no}"
+print_config_line "Install manual pages" "${enable_manpages_install:=no}"
+if test "x$enable_manpages" = "xyes" -o "x$enable_manpages_install" = "xyes"; then
+    print_config_line "Using manual pages" "$with_manpages"
+fi
+
+print_heading "Modules"
+print_config_line "Module search path" "$module_path"
+print_config_line "afsnmp support (module)" "${enable_afsnmp:=no}"
+print_config_line "AMQP destination (module)" "${enable_amqp:=no}"
+print_config_line "Cloud Auth (module)" "${enable_cloud_auth:=no}"
+print_config_line "eBPF support (module)" "${enable_ebpf:=no}"
+print_config_line "Darwin OSL support (module)" "${enable_darwin_osl:=no}"
+print_config_line "GEOIP2 support (module)" "${enable_geoip2:=no}"
+print_config_line "GRPC (module)" "${enable_grpc:=no}" "$grpc_warning_str"
+print_config_line "HTTP support (module)" "${enable_http:=no}"
+print_config_line "JSON support (module)" "${enable_json:=no}"
+print_config_line "Kafka support (module)" "${enable_kafka:=no}"
+print_config_line "MongoDB destination (module)" "${enable_mongodb:=no} (${mongo_version_str})"
+print_config_line "MQTT support (module)" "${enable_mqtt:=no}"
+print_config_line "OpenBSD syslog (module)" "${enable_openbsd_system_source:=no}"
+print_config_line "PACCT (module) (EXPERIMENTAL)" "${enable_pacct:=no}"
+print_config_line "Redis support (module)" "${enable_redis:=no}"
+print_config_line "Riemann destination (module)" "${enable_riemann:=no}, microseconds: ${riemann_micros:=no}"
+print_config_line "Secure logging - slog (module)" "${enable_slog:=no}"
+print_config_line "SMTP support (module)" "${enable_smtp:=no}"
+print_config_line "SQL support (module)" "${enable_sql:=no}"
+print_config_line "STOMP destination (module)" "${enable_stomp:=no}"
+print_config_line "Sun STREAMS support (module)" "${enable_sun_streams:=no}"
+print_config_line "Python" "${enable_python:=no} (pkg-config package: ${with_python:=none}, packages: ${with_python_packages})"
+print_config_line "Python modules" "${enable_python_modules:=no}"
+print_config_line "Java" "${enable_java:=no}"
+print_config_line "Java modules" "${enable_java_modules:=no}"
+print_config_line "Native bindings" "${enable_native:=no}"
+print_config_line "Example modules" "${enable_example_modules:=yes}"
+print_heading ""

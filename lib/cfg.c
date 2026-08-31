@@ -52,6 +52,7 @@
 #include <stdlib.h>
 #include <iv_work.h>
 #include <openssl/sha.h>
+#include "crypto-utils.h"
 
 #define CONFIG_HASH_LENGTH SHA256_DIGEST_LENGTH
 #define CONFIG_HASH_STR_LENGTH (CONFIG_HASH_LENGTH * 2 + 1)
@@ -163,7 +164,7 @@ cfg_load_forced_modules(GlobalConfig *self)
     return;
 
   int i;
-  for (i=0; i<sizeof(module_list)/sizeof(gchar *); ++i)
+  for (i = 0; i < sizeof(module_list) / sizeof(gchar *); ++i)
     {
       const gchar *name = module_list[i];
 
@@ -583,17 +584,17 @@ cfg_run_parser_with_main_context(GlobalConfig *self, CfgLexer *lexer, CfgParser 
 }
 
 static void
-cfg_dump_processed_config(GString *preprocess_output, gchar *output_filename)
+cfg_dump_processed_config(GlobalConfig *cfg, GString *preprocess_output, gchar *output_filename)
 {
   FILE *output_file;
 
-  if (strcmp(output_filename, "-")==0)
+  if (strcmp(output_filename, "-") == 0)
     {
       fprintf(stdout, "%s", preprocess_output->str);
       return;
     }
 
-  output_file = fopen(output_filename, "w+");
+  output_file = file_perm_options_fopen(&cfg->file_perm_options, output_filename, "w+");
   if (!output_file)
     {
       msg_error("Error opening preprocess-into file",
@@ -662,7 +663,7 @@ cfg_format_id(GlobalConfig *self, GString *id)
 static void
 cfg_hash_config(GlobalConfig *self)
 {
-  SHA256((const guchar *) self->preprocess_config->str, self->preprocess_config->len, self->config_hash);
+  compose_hash(EVP_sha256(), (GString * const *) &self->preprocess_config, 1, self->config_hash);
 }
 
 gboolean
@@ -690,7 +691,7 @@ cfg_read_config(GlobalConfig *self, const gchar *fname, gchar *preprocess_into)
 
       if (preprocess_into)
         {
-          cfg_dump_processed_config(self->preprocess_config, preprocess_into);
+          cfg_dump_processed_config(self, self->preprocess_config, preprocess_into);
         }
 
       if (self->user_version == 0)

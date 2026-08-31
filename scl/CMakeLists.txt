@@ -11,15 +11,16 @@ set(SCL_DIRS
     discord
     elasticsearch
     ewmm
+    freebsd-audit
     fortigate
     google
     graphite
     graylog2
     hdfs
+    stats-exporter
     iptables
     jellyfin
     junos
-    kafka
     linux-audit
     loadbalancer
     loggly
@@ -50,9 +51,20 @@ set(SCL_DIRS
     telegram
     websense
     windowseventlog
+    azure
 )
 
-install(DIRECTORY ${SCL_DIRS} DESTINATION share/syslog-ng/include/scl)
+option(ENABLE_SCL_SYSLOGCONF_AWK "Install scl/syslogconf/convert-syslogconf.awk" ON)
+
+install(DIRECTORY ${SCL_DIRS} DESTINATION share/syslog-ng/include/scl
+        USE_SOURCE_PERMISSIONS
+        PATTERN "convert-syslogconf.awk" EXCLUDE)
+
+if (ENABLE_SCL_SYSLOGCONF_AWK)
+    install(FILES syslogconf/convert-syslogconf.awk
+            DESTINATION share/syslog-ng/include/scl/syslogconf)
+endif()
+
 install(FILES scl.conf DESTINATION share/syslog-ng/include)
 
 if (NOT EXISTS ${CMAKE_INSTALL_PREFIX}/etc/syslog-ng.conf)

@@ -30,6 +30,7 @@
 
 #include <unistd.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <string.h>
 #include <errno.h>
 
@@ -315,4 +316,102 @@ file_perm_options_create_containing_directory(const FilePermOptions *self, const
 finish:
   g_free(_path);
   return result;
+}
+
+static gboolean
+_translate_fopen_mode_to_open_flags(const gchar *mode_str, gint *open_flags_out)
+{
+  if (!mode_str || !mode_str[0])
+    return FALSE;
+
+  gboolean plus = (strchr(mode_str, '+') != NULL);
+  gint flags;
+
+  switch (mode_str[0])
+    {
+    case 'r':
+      flags = plus ? O_RDWR : O_RDONLY;
+      break;
+    case 'w':
+      flags = (plus ? O_RDWR : O_WRONLY) | O_CREAT | O_TRUNC;
+      break;
+    case 'a':
+      flags = (plus ? O_RDWR : O_WRONLY) | O_CREAT | O_APPEND;
+      break;
+    default:
+      return FALSE;
+    }
+
+  *open_flags_out = flags;
+  return TRUE;
+}
+
+/*
+ * Safely open/create a file as a raw fd, applying @self (perm/owner/group)
+ * when the file gets created.
+ *
+ * - O_NOFOLLOW is always added to refuse following symlinks at the final
+ *   path component (mitigates symlink-planting attacks).
+ * - O_CLOEXEC is always added so the descriptor does not leak to child
+ *   processes spawned via fork+exec.
+ * - When the file is created (O_CREAT) it is born with a tight default
+ *   mode (0600) so there is no umask-dependent window of being
+ *   world-readable, then file_perm_options_apply_fd() is invoked to
+ *   honour any explicit perm()/owner()/group() in @self.
+ * - The needed capabilities (cap_chown, cap_fowner) are temporarily
+ *   enabled around the apply_fd() call so the helper works independently
+ *   of the caller's current capability state.
+ *
+ * @self must not be NULL. @mode_str follows fopen(3) semantics ("r",
+ * "r+", "w", "w+", "a", "a+", and the "b" variants which are ignored on POSIX).
+ * Returns -1 on failure with errno preserved.
+ */
+gint
+file_perm_options_open(const FilePermOptions *self, const gchar *path, const gchar *mode_str)
+{
+  gint open_flags;
+  if (!_translate_fopen_mode_to_open_flags(mode_str, &open_flags))
+    {
+      errno = EINVAL;
+      return -1;
+    }
+
+  open_flags |= O_NOFOLLOW | O_CLOEXEC;
+
+  gint create_perm = (self->file_perm >= 0 ? self->file_perm : 0600);
+  gint fd = open(path, open_flags, (mode_t) create_perm);
+  if (fd < 0)
+    return -1;
+
+  if (open_flags & O_CREAT)
+    {
+      cap_t saved_caps = g_process_cap_save();
+      g_process_enable_cap("cap_chown");
+      g_process_enable_cap("cap_fowner");
+      file_perm_options_apply_fd(self, fd);
+      g_process_cap_restore(saved_caps);
+    }
+  return fd;
+}
+
+/*
+ * FILE* wrapper around file_perm_options_open(); see that function for the
+ * semantics. Returns NULL on failure with errno preserved.
+ */
+FILE *
+file_perm_options_fopen(const FilePermOptions *self, const gchar *path, const gchar *mode_str)
+{
+  gint fd = file_perm_options_open(self, path, mode_str);
+  if (fd < 0)
+    return NULL;
+
+  FILE *fp = fdopen(fd, mode_str);
+  if (!fp)
+    {
+      gint saved_errno = errno;
+      close(fd);
+      errno = saved_errno;
+      return NULL;
+    }
+  return fp;
 }

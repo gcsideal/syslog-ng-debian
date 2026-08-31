@@ -42,7 +42,8 @@ typedef struct _filereader_test_param
   const gchar *expected_message;
 } FileReaderTestParam;
 
-ParameterizedTestParameters(loggen, test_filereader)
+static FileReaderTestParam *
+_get_test_filereader_params(gsize *len)
 {
   static FileReaderTestParam parser_params[] =
   {
@@ -298,32 +299,44 @@ ParameterizedTestParameters(loggen, test_filereader)
     }
   };
 
-  return cr_make_param_array(FileReaderTestParam, parser_params, G_N_ELEMENTS(parser_params));
+  *len = G_N_ELEMENTS(parser_params);
+  return parser_params;
 }
 
-ParameterizedTest(FileReaderTestParam *param, loggen, test_filereader)
+/* Keep this as a plain Test + loop (not ParameterizedTest + ParameterizedTestParameters)
+ * the cases are pointer-based iovec entries, and we must avoid pointer payload transport through
+ * Criterion parameterization on macOS.
+ */
+Test(loggen, test_filereader)
 {
-  SyslogMsgElements elements;
+  gsize n_params;
+  FileReaderTestParam *params = _get_test_filereader_params(&n_params);
 
-  parse_line(str_skip_tokens(param->line, param->skip_tokens), &elements);
+  for (gsize i = 0; i < n_params; i++)
+    {
+      FileReaderTestParam *param = &params[i];
+      SyslogMsgElements elements;
 
-  cr_expect_str_eq(elements.pri, param->expected_pri, "Error: pri doesn't match (val=\"%s\", expected=\"%s\")\n",
-                   elements.pri, param->expected_pri);
-  cr_expect_str_eq(elements.ver, param->expected_ver, "Error: ver doesn't match (val=\"%s\", expected=\"%s\")\n",
-                   elements.ver, param->expected_ver);
-  cr_expect_str_eq(elements.time_stamp, param->expected_time_stamp,
-                   "Error: time_stamp doesn't match (val=\"%s\", expected=\"%s\")\n", elements.time_stamp, param->expected_time_stamp);
-  cr_expect_str_eq(elements.host, param->expected_host, "Error: host doesn't match (val=\"%s\", expected=\"%s\")\n",
-                   elements.host, param->expected_host);
-  cr_expect_str_eq(elements.app, param->expected_app, "Error: app doesn't match (val=\"%s\", expected=\"%s\")\n",
-                   elements.app, param->expected_app);
-  cr_expect_str_eq(elements.pid, param->expected_pid, "Error: pid doesn't match (val=\"%s\", expected=\"%s\")\n",
-                   elements.pid, param->expected_pid);
-  cr_expect_str_eq(elements.msgid, param->expected_msgid, "Error: msgid doesn't match (val=\"%s\", expected=\"%s\")\n",
-                   elements.msgid, param->expected_msgid);
-  cr_expect_str_eq(elements.sdata, param->expected_sdata, "Error: sdata doesn't match (val=\"%s\", expected=\"%s\")\n",
-                   elements.sdata, param->expected_sdata);
-  cr_expect_str_eq(elements.message, param->expected_message,
-                   "Error: message doesn't match (val=\"%s\", expected=\"%s\")\n", elements.message, param->expected_message);
+      parse_line(str_skip_tokens(param->line, param->skip_tokens), &elements);
+
+      cr_expect_str_eq(elements.pri, param->expected_pri, "Error: pri doesn't match (val=\"%s\", expected=\"%s\")\n",
+                       elements.pri, param->expected_pri);
+      cr_expect_str_eq(elements.ver, param->expected_ver, "Error: ver doesn't match (val=\"%s\", expected=\"%s\")\n",
+                       elements.ver, param->expected_ver);
+      cr_expect_str_eq(elements.time_stamp, param->expected_time_stamp,
+                       "Error: time_stamp doesn't match (val=\"%s\", expected=\"%s\")\n", elements.time_stamp, param->expected_time_stamp);
+      cr_expect_str_eq(elements.host, param->expected_host, "Error: host doesn't match (val=\"%s\", expected=\"%s\")\n",
+                       elements.host, param->expected_host);
+      cr_expect_str_eq(elements.app, param->expected_app, "Error: app doesn't match (val=\"%s\", expected=\"%s\")\n",
+                       elements.app, param->expected_app);
+      cr_expect_str_eq(elements.pid, param->expected_pid, "Error: pid doesn't match (val=\"%s\", expected=\"%s\")\n",
+                       elements.pid, param->expected_pid);
+      cr_expect_str_eq(elements.msgid, param->expected_msgid, "Error: msgid doesn't match (val=\"%s\", expected=\"%s\")\n",
+                       elements.msgid, param->expected_msgid);
+      cr_expect_str_eq(elements.sdata, param->expected_sdata, "Error: sdata doesn't match (val=\"%s\", expected=\"%s\")\n",
+                       elements.sdata, param->expected_sdata);
+      cr_expect_str_eq(elements.message, param->expected_message,
+                       "Error: message doesn't match (val=\"%s\", expected=\"%s\")\n", elements.message, param->expected_message);
+    }
 }
 

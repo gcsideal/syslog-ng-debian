@@ -271,7 +271,7 @@ _find_index_entry(NVIndexEntry *index_table, gint index_size, NVHandle handle, N
   h = index_size - 1;
   while (l <= h)
     {
-      m = (l+h) >> 1;
+      m = (l + h) >> 1;
       mv = index_table[m].handle;
       if (mv == handle)
         {
@@ -354,7 +354,7 @@ nv_table_set_table_entry(NVTable *self, NVHandle handle, guint32 ofs, NVIndexEnt
   if (G_LIKELY(nv_table_is_handle_static(self, handle)))
     {
       /* this is a statically allocated value, simply store the offset */
-      self->static_entries[handle-1] = ofs;
+      self->static_entries[handle - 1] = ofs;
     }
   else
     {
@@ -651,7 +651,7 @@ nv_table_call_foreach(NVHandle handle, NVEntry *entry, NVIndexEntry *index_entry
   NVTable *self = (NVTable *) ((gpointer *) user_data)[0];
   NVRegistry *registry = (NVRegistry *) ((gpointer *) user_data)[1];
   NVTableForeachFunc func = ((gpointer *) user_data)[2];
-  gpointer func_data = ((gpointer *) user_data)[3];
+  gpointer g_func_data = ((gpointer *) user_data)[3];
   const gchar *value;
   gssize value_len;
   NVType type;
@@ -660,7 +660,7 @@ nv_table_call_foreach(NVHandle handle, NVEntry *entry, NVIndexEntry *index_entry
     return FALSE;
 
   value = nv_table_resolve_entry(self, entry, &value_len, &type);
-  return func(handle, nv_registry_get_handle_name(registry, handle, NULL), value, value_len, type, func_data);
+  return func(handle, nv_registry_get_handle_name(registry, handle, NULL), value, value_len, type, g_func_data);
 }
 
 gboolean

@@ -30,8 +30,6 @@
 #include "kafka-dest-driver.h"
 #include "kafka-internal.h"
 #include "apphook.h"
-#include <librdkafka/rdkafka.h>
-
 
 #define STRING_250_LEN "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
@@ -45,15 +43,25 @@
                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 struct valid_topic_test_params
 {
-  gchar *topic_name;
+  gchar topic_name[256];
 };
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 struct invalid_topic_test_params
 {
-  gchar *topic_name;
-  enum KafkaTopicError type;
+  gchar topic_name[256];
+  KafkaTopicError type;
 };
 
 static void
@@ -101,7 +109,7 @@ ParameterizedTestParameters(kafka_topic, valid_topic_tests)
 ParameterizedTest(struct valid_topic_test_params *param, kafka_topic, valid_topic_tests)
 {
   GError *error = NULL;
-  cr_assert_eq(kafka_dd_validate_topic_name(param->topic_name, &error), TRUE);
+  cr_assert_eq(kafka_validate_topic_name(param->topic_name, &error), TRUE);
   cr_assert_null(error);
 }
 
@@ -134,7 +142,7 @@ ParameterizedTestParameters(kafka_topic, invalid_topic_tests)
 ParameterizedTest(struct invalid_topic_test_params *param, kafka_topic, invalid_topic_tests)
 {
   GError *error = NULL;
-  cr_assert_eq(kafka_dd_validate_topic_name(param->topic_name, &error), FALSE);
+  cr_assert_eq(kafka_validate_topic_name(param->topic_name, &error), FALSE);
   cr_assert_eq(error->domain, TOPIC_NAME_ERROR);
   cr_assert_eq(error->code, param->type);
   cr_assert_not_null(error);

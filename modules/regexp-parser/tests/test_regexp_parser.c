@@ -46,15 +46,23 @@ teardown(void)
 
 TestSuite(regexp_parser, .init = setup, .fini = teardown);
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS.
+ * has_* members preserve NULL-vs-set semantics for optional string fields.
+ */
 typedef struct _RegexpParserTestParam
 {
-  const gchar *msg;
-  const gchar *pattern;
-  const gchar *prefix;
+  gchar msg[64];
+  gchar pattern[128];
+  gchar prefix[32];
   gint flags;
   gboolean expected_result;
-  const gchar *name;
-  const gchar *value;
+  gchar name[32];
+  gchar value[64];
+  gboolean has_name;
+  gboolean has_value;
 } RegexpParserTestParam;
 
 static LogParser *
@@ -77,16 +85,16 @@ ParameterizedTestParameters(regexp_parser, test_regexp_parser)
 {
   static RegexpParserTestParam parser_params[] =
   {
-    {.msg = "foo", .pattern = "(?<key>foo)", .prefix="", .flags = 0, .expected_result = TRUE, .name = "key", .value = "foo"},
-    {.msg = "foo", .pattern = "(?<key>fo*)", .prefix="", .flags = 0, .expected_result = TRUE, .name = "key", .value = "foo"},
-    {.msg = "foo", .pattern = "(?<key>fo*)", .prefix=".reg.", .flags = 0, .expected_result = TRUE, .name = ".reg.key", .value = "foo"},
-    {.msg = "foo", .pattern = "(?<key>fo*)", .prefix=".reg.", .flags = 0, .expected_result = TRUE, .name = "key", .value = ""},
-    {.msg = "foo", .pattern = "(?<key>foo)|(?<key>bar)", .prefix=".reg.", .expected_result = TRUE, .flags = LMF_DUPNAMES, .name = ".reg.key", .value = "foo"},
-    {.msg = "abc", .pattern = "Abc", .prefix="", .flags = 0, .expected_result = FALSE, .name = NULL, .value = NULL},
-    {.msg = "abc", .pattern = "(?<key>Abc)", .prefix="", .flags = LMF_ICASE, .expected_result = TRUE, .name = "key", .value = "abc"},
+    {.msg = "foo", .pattern = "(?<key>foo)", .prefix = "", .flags = 0, .expected_result = TRUE, .name = "key", .value = "foo", .has_name = TRUE, .has_value = TRUE},
+    {.msg = "foo", .pattern = "(?<key>fo*)", .prefix = "", .flags = 0, .expected_result = TRUE, .name = "key", .value = "foo", .has_name = TRUE, .has_value = TRUE},
+    {.msg = "foo", .pattern = "(?<key>fo*)", .prefix = ".reg.", .flags = 0, .expected_result = TRUE, .name = ".reg.key", .value = "foo", .has_name = TRUE, .has_value = TRUE},
+    {.msg = "foo", .pattern = "(?<key>fo*)", .prefix = ".reg.", .flags = 0, .expected_result = TRUE, .name = "key", .value = "", .has_name = TRUE, .has_value = TRUE},
+    {.msg = "foo", .pattern = "(?<key>foo)|(?<key>bar)", .prefix = ".reg.", .expected_result = TRUE, .flags = LMF_DUPNAMES, .name = ".reg.key", .value = "foo", .has_name = TRUE, .has_value = TRUE},
+    {.msg = "abc", .pattern = "Abc", .prefix = "", .flags = 0, .expected_result = FALSE, .name = "", .value = "", .has_name = FALSE, .has_value = FALSE},
+    {.msg = "abc", .pattern = "(?<key>Abc)", .prefix = "", .flags = LMF_ICASE, .expected_result = TRUE, .name = "key", .value = "abc", .has_name = TRUE, .has_value = TRUE},
 
     /* store into a builtin value */
-    {.msg = "abcdef", .pattern = "(?<PID>abc)", .prefix="", .flags = 0, .expected_result = TRUE, .name = "PID", .value = "abc"},
+    {.msg = "abcdef", .pattern = "(?<PID>abc)", .prefix = "", .flags = 0, .expected_result = TRUE, .name = "PID", .value = "abc", .has_name = TRUE, .has_value = TRUE},
   };
   return cr_make_param_array(RegexpParserTestParam, parser_params, G_N_ELEMENTS(parser_params));
 }
@@ -108,10 +116,11 @@ ParameterizedTest(RegexpParserTestParam *parser_param, regexp_parser, test_regex
   cr_assert_not((result && !parser_param->expected_result), "unexpected match; msg=%s\n", parser_param->msg);
   cr_assert_not((!result && parser_param->expected_result), "unexpected non-match; msg=%s\n", parser_param->msg);
 
-  if (parser_param->name)
+  if (parser_param->has_name)
     {
       gssize len = -1;
       const gchar *value = log_msg_get_value_by_name(msg, parser_param->name, &len);
+      cr_assert(parser_param->has_value, "Expected value presence mismatch");
       cr_assert_str_eq(value, parser_param->value, "name: %s | value: %.*s, should be %s",
                        parser_param->name,
                        (gint) len, value,

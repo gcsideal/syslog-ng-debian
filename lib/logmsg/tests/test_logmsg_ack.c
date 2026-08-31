@@ -131,10 +131,15 @@ Test(msg_ack, clone_ack)
   ack_record_free(t);
 }
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 struct nv_pair
 {
-  const gchar *name;
-  const gchar *value;
+  gchar name[32];
+  gchar value[32];
 };
 
 ParameterizedTestParameters(msg_ack, test_cloned_clone)

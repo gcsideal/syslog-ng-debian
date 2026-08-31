@@ -18,6 +18,7 @@ modules/kafka/tests/sample\.properties
 modules/grpc/protos/opentelemetry-proto
 modules/grpc/protos/grafana-loki
 modules/grpc/protos/googleapis-proto
+modules/grpc/protos/clickhouse-proto
 modules/cloud-auth/jwt-cpp
 dev-utils/plugin_skeleton_creator/plugin_template.*
 (lib|modules)/.*\.conf$
@@ -25,6 +26,7 @@ dist\.conf$
 .*/\.gradle
 scl/syslog-ng\.conf$
 docker/syslog-ng\.conf$
+docker/syslog-ng\.(deb|rpm)\.dockerfile$
 tests/copyright/policy$
 (syslog-ng-)?config\.h$
 lib/cfg-lex\.[ch]$
@@ -37,7 +39,6 @@ Mk
 doc/man
 (_configs\.sed|\.project|\.cproject|config\.status)$
 stamp-h1$
-tests/functional/test\.conf$
 scripts/update-patterndb$
 (contrib|debian)
 packaging/debian
@@ -64,6 +65,7 @@ lib/logmsg/tests/messages/syslog-ng-(pe-)?[.0-9]*-msg.h$
 modules/python-modules/requirements\.lock
 scl/darwinosl/darwinosl-metadata-db.csv
 lib/multi-line/smart-multi-line\.fsm$
+.editorconfig
 
 ###########################################################################
 # These files are LGPLd and are external contributions _without_ a Balabit
@@ -82,9 +84,11 @@ lib/compat/cpp-(start|end).\h$
 lib/compat/curl.\h$
 lib/compat/getline.\c$
 lib/compat/json.\h$
+lib/filter/filter-blank\.[ch]$
+lib/filter/tests/test_filter_blank\.c$
 lib/healthcheck
 lib/healthcheck/tests
-lib/cfg-monitor\.[ch]
+lib/file-monitor\.[ch]
 lib/cfg-source\.[ch]
 lib/metrics-pipe\.[ch]
 lib/metrics/label-template\.(c|h)$
@@ -107,17 +111,20 @@ lib/stats/stats-compat\.h
 lib/stats/tests/test_stats_prometheus\.c
 lib/stats/tests/test_stats_cluster_key_builder\.c
 lib/timeutils/timeutils\.h
+lib/stackdump\.[ch]
 lib/logscheduler\.[ch]
 lib/logscheduler-pipe\.[ch]
 lib/logmsg/tests/dump_logmsg\.c
 lib/multi-line/smart-multi-line\.[ch]
 lib/multi-line/tests/test_smart_multi_line\.c
 libtest/mock-logpipe\.[ch]
-libtest/filterx-lib\.[ch]
 lib/generic-number\.[ch]
 lib/tests/test_generic_number\.c
 lib/severity-aliases\.table
+lib/transport/transport-adapter\.[ch]
+lib/transport/transport-globals\.[ch]
 syslog-ng-ctl/commands/log-level.[ch]
+syslog-ng-ctl/commands/attach.[ch]
 modules/afsocket/afsocket-signals.h
 syslog-ng-ctl/commands/healthcheck.[ch]
 modules/python-modules/syslogng/confgen\.py
@@ -129,8 +136,9 @@ modules/python-modules/syslogng/reloc\.py
 modules/python-modules/syslogng/template\.py
 modules/python/python-confgen\.[ch]
 lib/tests/test_logscheduler\.c
-lib/filterx/.*\.[ch]
-lib/filterx/filterx-grammar\.ym
+lib/logproto/logproto-auto-server\.[ch]
+lib/transport/transport-factory-haproxy\.[ch]
+lib/transport/tests/test_transport\.c
 
 ###########################################################################
 # These tests are GPLd even though they reside under lib/ and are excluded
@@ -196,19 +204,22 @@ modules/diskq/tests/test_logqueue_disk\.c$
 modules/metrics-probe/metrics-probe(|-parser|-plugin|-grammar)\.(c|h|ym)$
 modules/metrics-probe/tests/test_metrics_probe\.c$
 modules/darwinosl/darwinosl(|-parser|-plugin|-grammar|-source|-source-oslog|-source-persist)\.(c|h|m|ym)$
+modules/kafka/kafka(|-source-driver|-source-worker|-source-persist)\.(c|h)$
 modules/grpc/otel/otel-(grammar|parser|plugin|source|source-services|servicecall|protobuf-parser|protobuf-formatter|dest|dest-worker|logmsg-handles)\.(c|h|cpp|hpp|ym)$
 modules/grpc/otel/grpc-credentials-builder\.(h|cpp|hpp)$
 modules/grpc/otel/syslog-ng-otlp-(dest|dest-worker)\.(h|cpp|hpp)$
 modules/grpc/otel/tests/test-otel-(protobuf-parser|protobuf-formatter)\.cpp$
 modules/grpc/otel/tests/test-syslog-ng-otlp\.cpp$
-modules/grpc/otel/tests/test-otel-filterx\.cpp$
 modules/grpc/loki
 modules/grpc/bigquery
-modules/grpc/credentials
-modules/grpc/metrics
+modules/grpc/pubsub
+modules/grpc/clickhouse
+modules/grpc/common
 modules/grpc/protos/apphook\.(cpp|h)$
 modules/cloud-auth/cloud-auth(|-grammar|-parser|-plugin)\.(c|h|cpp|hpp|ym)$
 modules/cloud-auth/google-auth\.(h|cpp|hpp)$
+modules/cloud-auth/azure-auth\.(h|cpp|hpp)$
+modules/cloud-auth/oauth2-auth\.(h|cpp|hpp)$
 modules/examples/inner-destinations/tls-test-validation
 modules/examples/sources/random-choice-generator
 modules/python/python-options.(c|h)$
@@ -217,9 +228,6 @@ modules/python/python-binding.(c|h)$
 modules/python/python-flags.(c|h)$
 modules/python/tests/test_python_options.c$
 modules/python/tests/test_python_reloc\.c$
-modules/json/filterx-format-json\.[ch]$
-modules/json/filterx-cache-json-file\.[ch]$
-modules/json/tests/test_filterx_format_json\.c$
 scl/fortigate/.*\.conf$
 scl/cee/.*\.conf$
 scl/elasticsearch/elastic-datastream.conf$
@@ -229,6 +237,7 @@ scl/python/python-modules\.conf$
 scl/darwinosl/plugin\.conf$
 scl/splunk/splunk\.conf$
 scl/google/google-pubsub\.conf$
+scl/azure/azure-monitor\.conf$
 scl/openobserve/.*\.conf$
 scl/pgsql/pgsql\.conf$
 scl/qbittorrent/qbittorrent\.conf$
@@ -240,6 +249,8 @@ modules/ebpf/.*
 modules/python-modules/syslogng/modules/hypr/.*
 modules/python-modules/syslogng/modules/example/.*
 modules/python-modules/syslogng/modules/s3/.*
+modules/python-modules/syslogng/modules/webhook/scl/.*
+modules/python-modules/syslogng/modules/webhook/__init__.py
 modules/python-modules/setup\.py
 scripts/build-python-venv\.sh
 modules/syslogformat/sdata-parser\.[ch]
@@ -257,22 +268,20 @@ tests/light/functional_tests/logpath/test_midpoint_destinations\.py
 tests/light/functional_tests/value-pairs/test_value_pairs\.py
 tests/light/functional_tests/templates/test_template_stmt\.py
 tests/light/functional_tests/filters/test_multiple_filters\.py
-tests/light/functional_tests/filterx/test_filterx\.py
-tests/light/functional_tests/filterx/test_filterx_scope\.py
 tests/light/functional_tests/parsers/metrics-probe/test_metrics_probe\.py
+tests/light/functional_tests/source_drivers/syslog_source/auto/test_auto_proto\.py
 tests/light/src/syslog_ng_ctl/prometheus_stats_handler.py
 tests/light/src/syslog_ng_config/statements/template/template\.py
 tests/light/src/syslog_ng_config/statements/__init__\.py
+tests/light/src/syslog_ng/syslog_ng_docker_executor.py
 modules/correlation/id-counter\.[ch]$
 modules/correlation/group-lines.h
 modules/xml/windows-eventlog-xml-parser\.h
 modules/xml/tests/test_windows_eventlog_xml_parser\.c
-modules/examples/filterx/example-filterx-func/example-filterx-func-plugin\.[ch]
-modules/grpc/otel/filterx
-modules/kvformat/filterx-func-parse-kv\.[ch]
-modules/kvformat/filterx-func-format-kv\.[ch]
-modules/kvformat/tests/test_filterx_func_parse_kv.c
-modules/kvformat/tests/test_filterx_func_format_kv.c
+modules/affile/logrotate\.[ch]
+tests/light/functional_tests/destination_drivers/file_destination/test_logrotate_all_messages_received\.py
+tests/light/functional_tests/destination_drivers/file_destination/test_logrotate_deleting_log_file\.py
+tests/light/functional_tests/destination_drivers/file_destination/test_logrotate_rotation_failure\.py
 
 ###########################################################################
 # These files are GPLd with Balabit origin.
@@ -282,7 +291,6 @@ modules/kvformat/tests/test_filterx_func_format_kv.c
 news/create-newsfile.py
 news/next-pr-id.py
 dev-utils/plugin_skeleton_creator/create_plugin.sh
-tests/functional
 tests/unit
 tests/valgrind
 tests/build-log-cflags-propagation.sh
@@ -291,7 +299,7 @@ tests/commits/check.sh
 tests/copyright/check.sh
 tests/light
 modules/java/(tools|[^/]*$)
-modules/java-modules/(dummy|elastic-v2|hdfs|http|kafka|[^/]*$)
+modules/java-modules/(dummy|hdfs|[^/]*$)
 modules/(afamqp|affile|afmongodb|afprog|afsmtp|afsocket|afsql|afstomp|afstreams|afuser|azure-auth-header|basicfuncs|cef|confgen|cryptofuncs|csvparser|timestamp|diskq|correlation|geoip2|graphite|json|kvformat|linux-kmsg-format|pacctformat|pseudofile|python|python-modules|redis|riemann|syslogformat|systemd-journal|getent|system-source|stardate|snmptrapd-parser|xml|openbsd|examples|kafka|afsnmp|mqtt|regexp-parser|rate-limit-filter|[^/]*$)
 modules/(add-contextual-data|tagsparser|map-value-pairs|hook-commands|appmodel|[^/]*$)
 modules/cryptofuncs/cryptofuncs\.c$
@@ -308,3 +316,6 @@ modules/http/http\.[ch]
 modules/http/http-parser.c
 modules/http/http-grammar.ym
 modules/correlation/group-lines.c
+modules/python-modules/syslogng/modules/webhook/source.py
+docker/entrypoint.sh
+Doxyfile

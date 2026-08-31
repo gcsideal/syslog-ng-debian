@@ -17,7 +17,7 @@ applications or forwarded by systemd) and writes everything to a single
 file:
 
 ``` config
-@version: 4.8
+@version: current
 @include "scl.conf"
 
 log {
@@ -29,7 +29,7 @@ log {
 This one additionally processes logs from the network (TCP/514 by default):
 
 ``` config
-@version: 4.8
+@version: current
 @include "scl.conf"
 
 log {
@@ -43,7 +43,7 @@ log {
 This config is designed for structured/application logging, using local submission via JSON, and outputting in key=value format:
 
 ``` config
-@version: 4.8
+@version: current
 @include "scl.conf"
 
 log {
@@ -138,7 +138,11 @@ The extra effort in contrast with the dbld based build is the need to fetch
 and install all build dependencies of syslog-ng (of which there are a few).
 
 If you don't have a configure script (because of cloning from git, for example),
-run `./autogen.sh` to generate it.
+run
+
+    ./autogen.sh
+
+to generate it.
 
 Some of the functionality of syslog-ng is compiled only if the required
 development libraries are present. The configure script displays a
@@ -155,7 +159,9 @@ various OSes.
 
 Simply invoke the following command as root:
 
-    # apt install syslog-ng
+``` shell
+apt install syslog-ng
+```
 
 The latest versions of syslog-ng are available for a wide range of Debian
 and Ubuntu releases from our APT repository.
@@ -164,41 +170,70 @@ The packages and the APT repository are provided "as is" without warranty of any
 
 #### Supported distributions
 
-syslog-ng packages are released for the following distribution versions (x86-64):
+syslog-ng packages are released for the following distribution versions:
 
-| Distro version | sources.list component name |
-|---|---|
-| Ubuntu 24.04 | ubuntu-noble |
-| Ubuntu 23.10 | ubuntu-mantic |
-| Ubuntu 23.04 | ubuntu-lunar |
-| Ubuntu 22.04 | ubuntu-jammy |
-| Ubuntu 20.04 | ubuntu-focal |
-| Debian 12 | debian-bookworm |
-| Debian 11 | debian-bullseye |
-| Debian Unstable | debian-sid |
-| Debian Testing | debian-testing |
+| Distro version | sources.list component name | Arch | stable | nightly |
+|---|---|---|---|---|
+| Ubuntu 26.04    | ubuntu-resolute       | x86-64 | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/ubuntu-resolute/binary-amd64/)       | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/ubuntu-resolute/binary-amd64/) |
+| Ubuntu 26.04    | ubuntu-resolute-arm64 | arm64  | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/ubuntu-resolute-arm64/binary-arm64/) | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/ubuntu-resolute-arm64/binary-arm64/) |
+| Ubuntu 25.04    | ubuntu-plucky         | x86-64 | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/ubuntu-plucky/binary-amd64/)         | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/ubuntu-plucky/binary-amd64/) |
+| Ubuntu 25.04    | ubuntu-plucky-arm64   | arm64  | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/ubuntu-plucky-arm64/binary-arm64/)   | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/ubuntu-plucky-arm64/binary-arm64/) |
+| Ubuntu 24.04    | ubuntu-noble          | x86-64 | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/ubuntu-noble/binary-amd64/)          | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/ubuntu-noble/binary-amd64/) |
+| Ubuntu 24.04    | ubuntu-noble-arm64    | arm64  | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/ubuntu-noble-arm64/binary-arm64/)    | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/ubuntu-noble-arm64/binary-arm64/) |
+| Ubuntu 22.04    | ubuntu-jammy          | x86-64 | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/ubuntu-jammy/binary-amd64/)          | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/ubuntu-jammy/binary-amd64/) |
+| Debian 13       | debian-trixie         | x86-64 | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/debian-trixie/binary-amd64/)         | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/debian-trixie/binary-amd64/) |
+| Debian 13       | debian-trixie-arm64   | arm64  | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/debian-trixie-arm64/binary-arm64/)   | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/debian-trixie-arm64/binary-arm64/) |
+| Debian 12       | debian-bookworm       | x86-64 | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/debian-bookworm/binary-amd64/)       | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/debian-bookworm/binary-amd64/) |
+| Debian 12       | debian-bookworm-arm64 | arm64  | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/debian-bookworm-arm64/binary-arm64/) | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/debian-bookworm-arm64/binary-arm64/) |
+| Debian 11       | debian-bullseye       | x86-64 | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/debian-bullseye/binary-amd64/)       | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/debian-bullseye/binary-amd64/) |
+| Debian Unstable | debian-sid            | x86-64 | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/debian-sid/binary-amd64/)            | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/debian-sid/binary-amd64/) |
+| Debian Testing  | debian-testing        | x86-64 | [stable](https://ose-repo.syslog-ng.com/apt/dists/stable/debian-testing/binary-amd64/)        | [nightly](https://ose-repo.syslog-ng.com/apt/dists/nightly/debian-testing/binary-amd64/) |
 
 #### Adding the APT repository
 
-1. Download and install the release signing key:
+1. Download and store the release signing key:
 
     ``` shell
     wget -qO - https://ose-repo.syslog-ng.com/apt/syslog-ng-ose-pub.asc | sudo apt-key add -
     ```
 
-2. Add the repository containing the latest build of syslog-ng to the APT sources. For example, stable releases on Ubuntu 22.04:
+   with newer apt (like on Debian 13 - Trixie)
 
     ``` shell
-    echo "deb https://ose-repo.syslog-ng.com/apt/ stable ubuntu-noble" | sudo tee -a /etc/apt/sources.list.d/syslog-ng-ose.list
+    wget -qO - https://ose-repo.syslog-ng.com/apt/syslog-ng-ose-pub.asc | sudo gpg --dearmor -o /etc/apt/keyrings/syslog-ng-ose.gpg
     ```
 
-3. Run `apt update`
+2. Add the repository containing the latest stable build of syslog-ng to your APT sources.
+   For example if you are running Debian 13 on ARM64, you would use `debian-trixie-arm64` (see chart above)
+   NOTE: For X86-64 you do not have to use any postfix, so, for Debian 13 on X86-64, you should simply use `debian-trixie`.
+
+    ``` shell
+    deb [signed-by=/etc/apt/keyrings/syslog-ng-ose.gpg] https://ose-repo.syslog-ng.com/apt/ stable <os>-<codename>[-<architecture>]
+    ```
+
+   on newer OSes (like on Debian 13 - Trixie)
+
+    ``` shell
+    echo "deb [signed-by=/etc/apt/keyrings/syslog-ng-ose.gpg] https://ose-repo.syslog-ng.com/apt/ stable <os>-<codename>[-<architecture>]" | sudo tee /etc/apt/sources.list.d/syslog-ng-ose.list > /dev/null
+    ```
+
+3. Update your repositories with
+
+   ``` shell
+   sudo apt update
+   ```
+
+4. Now install syslog-ng:
+
+   ``` shell
+   sudo apt install syslog-ng
+   ```
 
 #### Nightly builds
 
-Nightly packages are built and released from the git `master` branch everyday.
+Nightly packages are built and released from the git `develop` branch everyday.
 
-Use `nightly` instead of `stable` in step 2 to use the nightly APT repository. E.g.:
+Use `nightly` instead of `stable` in step 2 to use the nightly APT repository. e.g.:
 
 ``` shell
 echo "deb https://ose-repo.syslog-ng.com/apt/ nightly ubuntu-noble" | sudo tee -a /etc/apt/sources.list.d/syslog-ng-ose.list
@@ -206,18 +241,76 @@ echo "deb https://ose-repo.syslog-ng.com/apt/ nightly ubuntu-noble" | sudo tee -
 
 Nightly builds can be used for testing purposes (obtaining new features and bugfixes) at the risk of breakage.
 
+### RHEL
+
+Simply invoke the following command as root:
+
+``` shell
+dnf install syslog-ng
+```
+
+The latest versions of syslog-ng are available for a wide range of RHEL releases from our DNF repository.
+
+The packages and the DNF repository are provided "as is" without warranty of any kind, on a best-effort level.
+
+#### Supported distributions
+
+syslog-ng packages are released for the following distribution versions:
+
+| Distro version | sources.list component name | Arch | stable | nightly |
+|---|---|---|---|---|
+| RHEL 8  | rhel8        | x86-64 | [stable](https://ose-repo.syslog-ng.com/yum/stable/rhel-8/x86_64/)   | [nightly](https://ose-repo.syslog-ng.com/yum/nightly/rhel-8/x86_64/) |
+| RHEL 8  | rhel8-arm64  | arm64  | [stable](https://ose-repo.syslog-ng.com/yum/stable/rhel-8/aarch64/)  | [nightly](https://ose-repo.syslog-ng.com/yum/nightly/rhel-8/aarch64/) |
+| RHEL 9  | rhel9        | x86-64 | [stable](https://ose-repo.syslog-ng.com/yum/stable/rhel-9/x86_64/)   | [nightly](https://ose-repo.syslog-ng.com/yum/nightly/rhel-9/x86_64/) |
+| RHEL 9  | rhel9-arm64  | arm64  | [stable](https://ose-repo.syslog-ng.com/yum/stable/rhel-9/aarch64/)  | [nightly](https://ose-repo.syslog-ng.com/yum/nightly/rhel-9/aarch64/) |
+| RHEL 10 | rhel10       | x86-64 | [stable](https://ose-repo.syslog-ng.com/yum/stable/rhel-10/x86_64/)  | [nightly](https://ose-repo.syslog-ng.com/yum/nightly/rhel-10/x86_64/) |
+| RHEL 10 | rhel10-arm64 | arm64  | [stable](https://ose-repo.syslog-ng.com/yum/stable/rhel-10/aarch64/) | [nightly](https://ose-repo.syslog-ng.com/yum/nightly/rhel-10/aarch64/) |
+
+#### Adding the DNF repository
+
+1. Download and install the repository definition:
+
+    ``` shell
+    sudo curl -o /etc/yum.repos.d/syslog-ng-ose-stable.repo https://ose-repo.syslog-ng.com/yum/syslog-ng-ose-stable.repo
+    ```
+
+2. Refresh repsitory metadata:
+
+    ``` shell
+    sudo dnf makecache
+    ```
+
+3. Now install syslog-ng:
+
+   ```` shell
+   sudo dnf install syslog-ng
+   ````
+
+#### Nightly builds
+
+Nightly packages are built and released from the git `develop` branch everyday.
+
+Use `nightly` instead of `stable` in step 1 to use the nightly DNF repository. E.g.:
+
+``` shell
+sudo curl -o /etc/yum.repos.d/syslog-ng-ose-nightly.repo https://ose-repo.syslog-ng.com/yum/syslog-ng-ose-nightly.repo
+```
+
+Nightly builds can be used for testing purposes (obtaining new features and bugfixes) at the risk of breakage.
+
 ### Arch Linux
 
 ``` shell
-# pacman -S syslog-ng
+pacman -S syslog-ng
 ```
 
 ### Fedora
 
-syslog-ng is available as a Fedora package that you can install using
-dnf:
+syslog-ng is available as a Fedora package that you can install using dnf:
 
-#### dnf install syslog-ng
+``` shell
+dnf install syslog-ng
+```
 
 You can download packages for the latest versions from [here](https://copr.fedoraproject.org/coprs/czanik/).
 
@@ -228,7 +321,7 @@ If you wish to install the latest RPM package that comes from a recent commit in
 ### macOS
 
 ``` shell
-# brew install syslog-ng
+brew install syslog-ng
 ```
 
 ### Others
@@ -240,7 +333,65 @@ official [third party page][3rd-party].
 
 ## Installation from Docker image
 
-Binaries are also available as a Docker image. To find out more, check out the blog post, [Your central log server in Docker](https://syslog-ng.com/blog/central-log-server-docker/).
+Two flavors of the official syslog-ng image are published:
+
+| Image | Base | Init model | Tag |
+|---|---|---|---|
+| [`balabit/syslog-ng`](https://hub.docker.com/r/balabit/syslog-ng)         | Debian (trixie)  | `syslog-ng -F` as PID 1 (entrypoint wrapper) | `latest` / `nightly` |
+| [`balabit/syslog-ng-rpm`](https://hub.docker.com/r/balabit/syslog-ng-rpm) | AlmaLinux 9      | `systemd` as PID 1, syslog-ng as a service   | `latest` / `nightly` |
+
+Both images include every published syslog-ng module subpackage (Java-based modules excluded to keep the image lean).
+
+### Debian-based image (`balabit/syslog-ng`)
+
+```shell
+# Latest official release
+docker pull balabit/syslog-ng:latest
+
+# Latest developer nightly build
+docker pull balabit/syslog-ng:nightly
+
+# Run (syslog-ng is PID 1 — standard docker run is enough)
+docker run -d --name syslog-ng \
+    -p 514:514/udp -p 601:601/tcp -p 6514:6514/tcp \
+    balabit/syslog-ng:latest
+```
+
+### AlmaLinux / systemd-based image (`balabit/syslog-ng-rpm`)
+
+The RPM image runs `systemd` as PID 1 and manages `syslog-ng` as a regular systemd service. systemd-in-container needs a writable cgroup hierarchy and a tmpfs `/run`, so the `docker run` invocation is different from the Debian image:
+
+```shell
+# Latest official release
+docker pull balabit/syslog-ng-rpm:latest
+
+# Latest developer nightly build
+docker pull balabit/syslog-ng-rpm:nightly
+
+# Run (Linux host with cgroup v2)
+docker run -d --name syslog-ng-rpm \
+    --privileged --cgroupns=host \
+    -p 514:514/udp -p 601:601/tcp -p 6514:6514/tcp \
+    balabit/syslog-ng-rpm:latest
+
+# Run (Docker Desktop on macOS / Windows — add explicit tmpfs and cgroup mounts)
+docker run -d --name syslog-ng-rpm \
+    --privileged --cgroupns=host \
+    --tmpfs /run --tmpfs /run/lock \
+    -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
+    -e SYSTEMD_LOG_TARGET=console \
+    -p 514:514/udp -p 601:601/tcp -p 6514:6514/tcp \
+    balabit/syslog-ng-rpm:latest
+
+# Inspect / control syslog-ng inside the container
+docker exec -it syslog-ng-rpm systemctl status syslog-ng
+docker exec -it syslog-ng-rpm syslog-ng-ctl stats
+```
+
+> **Note:** `systemd` logs to the journal, not to container stdout. Use `docker exec <container> journalctl -u syslog-ng` to read syslog-ng's startup logs (or set `-e SYSTEMD_LOG_TARGET=console` to route systemd's own messages to stdout for debugging).
+
+For build instructions and additional run examples, see [docker/README.md](docker/README.md).
+
 
 ## Documentation
 
@@ -250,4 +401,4 @@ The official documentation of the earlier versions (3.X) of syslog-ng Open Sourc
 
 ## Contributing
 
-If you would like to contribute to syslog-ng, to fix a bug or create a new module, the [syslog-ng pages](https://syslog-ng.github.io/dev-guide/README) helps you take the first steps to working with the code base.
+If you would like to contribute to syslog-ng, to fix a bug or create a new module, the [syslog-ng developer pages](https://syslog-ng.github.io/dev-guide/README) helps you take the first steps to working with the code base.

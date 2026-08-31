@@ -322,7 +322,18 @@ Test(logmsg_serialize, existing_and_given_ts_processed)
 #include "messages/syslog-ng-3.30.1-msg.h"
 
 
-ParameterizedTestParameters(logmsg_serialize, test_deserialization_of_legacy_messages)
+Test(logmsg_serialize, test_deserialization_of_pe_message)
+{
+  LogMessage *msg = _deserialize_message_from_string(serialized_pe_msg, sizeof(serialized_pe_msg));
+  _check_deserialized_message_original_fields(msg);
+  log_msg_unref(msg);
+}
+
+/* Keep this as a plain Test + loop (not ParameterizedTest + ParameterizedTestParameters)
+ * the cases are pointer-based iovec entries, and we must avoid pointer payload transport through
+ * Criterion parameterization on macOS.
+ */
+Test(logmsg_serialize, test_deserialization_of_legacy_messages)
 {
   static struct iovec messages[] =
   {
@@ -336,23 +347,12 @@ ParameterizedTestParameters(logmsg_serialize, test_deserialization_of_legacy_mes
     { serialized_message_3_30_1, sizeof(serialized_message_3_30_1) },
   };
 
-  return cr_make_param_array(struct iovec, messages, G_N_ELEMENTS(messages));
-}
-
-
-Test(logmsg_serialize, test_deserialization_of_pe_message)
-{
-  LogMessage *msg = _deserialize_message_from_string(serialized_pe_msg, sizeof(serialized_pe_msg));
-  _check_deserialized_message_original_fields(msg);
-  log_msg_unref(msg);
-}
-
-ParameterizedTest(struct iovec *param, logmsg_serialize, test_deserialization_of_legacy_messages)
-{
-  LogMessage *msg = _deserialize_message_from_string(param->iov_base, param->iov_len);
-  _check_deserialized_message_all_fields(msg);
-
-  log_msg_unref(msg);
+  for (gsize i = 0; i < G_N_ELEMENTS(messages); i++)
+    {
+      LogMessage *msg = _deserialize_message_from_string(messages[i].iov_base, messages[i].iov_len);
+      _check_deserialized_message_all_fields(msg);
+      log_msg_unref(msg);
+    }
 }
 
 Test(logmsg_serialize, serialization_performance)

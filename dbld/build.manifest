@@ -24,23 +24,44 @@
 #   customize a build in cases where an optional feature is not available
 #   there.
 #
+#   NOTE: every platform that has a control file must be enumertated here
+#         as run_build_command_with_build_manifest_parameters in functions.sh
+#         will only use the control file content if the platform can be found here
+#         so, add all platforms here always, even if no special env-list or
+#         commandline-options line is needed
+#
 
-# kafka support needs librdkafka >= 1.0.0, which is only available on ubuntu-bionic
-# on Debian we don't build java and use Python3 _after_ buster
-# libcriterion-dev is available starting with bullseye
-debian-bullseye		python3,nojava,notzdatalegacy
+# on Debian
+#    - we don't build java and use Python3 _after_ buster
+#    - libcriterion-dev
+#        - is available starting with bullseye
+#        - has regression issues in testing, so it is banned from time to time
+#   - bpf is available correctly from bookworm
+debian-bullseye		python3,nojava,nobpf,notzdatalegacy
 debian-bookworm		python3,nojava,notzdatalegacy
-debian-testing		python3,nojava
-debian-sid		python3,nojava
+debian-trixie		python3,nojava,notzdatalegacy
+debian-testing		python3,nojava,nocriterion,notestsonarm
+debian-sid			python3,nojava
 
-# on ubuntu, we start using Python3 at focal onwards.
-# libcriterion-dev is available starting with 21.04
-ubuntu-focal		python3,nocriterion,nomqtt,nogrpc,notzdatalegacy
-ubuntu-jammy		python3,notzdatalegacy
-ubuntu-noble		python3,notzdatalegacy
-ubuntu-lunar		python3
-ubuntu-mantic		python3
+# on ubuntu
+#   - we start using Python3 at focal onwards.
+#   - libcriterion-dev is available starting with 21.04
+#   - bpf is available correctly from plucky?!
+ubuntu-focal		python3,nocriterion,nomqtt,nogrpc,nobpf,notzdatalegacy
+ubuntu-jammy		python3,nobpf,notzdatalegacy
+ubuntu-noble		python3,nobpf,notzdatalegacy
+ubuntu-plucky		python3,notzdatalegacy
+ubuntu-resolute		python3,notzdatalegacy
 
-fedora			python3
-almalinux		python3
-centos			python3
+# fedora-rawhide currently ships a broken protobuf/grpc/protobuf-c set
+# (grpc-plugins still pulls libprotoc.so.30 while protobuf-c-compiler needs
+# libprotoc.so.33; protobuf-compiler also conflicts with protobuf3-compiler).
+# Disable grpc and riemann here to unblock the rawhide image build until the
+# Fedora packaging chain is consistent again.
+fedora-rawhide		python3,nogrpc,noriemann
+fedora				python3
+almalinux			python3
+centos				python3
+rhel				python3
+rocky				python3,sql
+opensuse			python3,sql

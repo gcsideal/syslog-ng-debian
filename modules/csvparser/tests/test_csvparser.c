@@ -54,7 +54,8 @@ typedef struct _csvparser_test_param
   const gchar *expected_values[13];
 } CsvParserTestParam;
 
-ParameterizedTestParameters(parser, test_csv_parser)
+static CsvParserTestParam *
+_get_test_csv_parser_params(gsize *len)
 {
   static CsvParserTestParam parser_params[] =
   {
@@ -766,15 +767,18 @@ ParameterizedTestParameters(parser, test_csv_parser)
     },
   };
 
-  return cr_make_param_array(CsvParserTestParam, parser_params, G_N_ELEMENTS(parser_params));
+  *len = G_N_ELEMENTS(parser_params);
+  return parser_params;
 }
 
-ParameterizedTest(CsvParserTestParam *param, parser, test_csv_parser)
+/* Keep this as a plain Test + loop (not ParameterizedTest + ParameterizedTestParameters)
+ * the cases are pointer-based iovec entries, and we must avoid pointer payload transport through
+ * Criterion parameterization on macOS.
+ */
+Test(parser, test_csv_parser)
 {
-  LogMessage *logmsg;
-  LogParser *p, *pclone;
-  gint i;
-  NVTable *nvtable;
+  gsize n_params;
+  CsvParserTestParam *params = _get_test_csv_parser_params(&n_params);
   const gchar *column_array[] =
   {
     "C1",
@@ -810,87 +814,95 @@ ParameterizedTest(CsvParserTestParam *param, parser, test_csv_parser)
     NULL
   };
 
-  gboolean success;
-
-  logmsg = log_msg_new_empty();
-  log_msg_set_value(logmsg, LM_V_MESSAGE, param->msg, -1);
-
-  p = csv_parser_new(configuration);
-  csv_parser_set_drop_invalid(p, param->drop_invalid);
-  csv_scanner_options_set_flags(csv_parser_get_scanner_options(p), param->flags);
-  csv_scanner_options_set_dialect(csv_parser_get_scanner_options(p), param->dialect);
-  if (param->delimiters)
-    csv_scanner_options_set_delimiters(csv_parser_get_scanner_options(p), param->delimiters);
-  if (param->quotes)
-    csv_scanner_options_set_quote_pairs(csv_parser_get_scanner_options(p), param->quotes);
-  if (param->null_value)
-    csv_scanner_options_set_null_value(csv_parser_get_scanner_options(p), param->null_value);
-
-  csv_scanner_options_set_string_delimiters(csv_parser_get_scanner_options(p),
-                                            string_array_to_list(param->string_delims));
-
-  GList *columns = NULL;
-  for (i = 0; column_array[i] && (param->max_columns < 0 || i < param->max_columns); i++)
-    columns = g_list_append(columns, csv_parser_column_new(column_array[i], LM_VT_STRING));
-  csv_parser_set_columns(p, columns);
-
-  pclone = (LogParser *) log_pipe_clone(&p->super);
-  log_pipe_unref(&p->super);
-
-  cr_assert(log_pipe_init(&pclone->super));
-
-  nvtable = nv_table_ref(logmsg->payload);
-  success = log_parser_process(pclone, &logmsg, NULL, log_msg_get_value(logmsg, LM_V_MESSAGE, NULL), -1);
-  nv_table_unref(nvtable);
-
-  cr_assert_not((success && !param->expected_values[0]), "unexpected match; msg=%s\n", param->msg);
-  cr_assert_not((!success && param->expected_values[0]), "unexpected non-match; msg=%s\n", param->msg);
-
-  log_pipe_unref(&pclone->super);
-
-  i = 0;
-  while (param->expected_values[i] && column_array[i])
+  for (gsize param_index = 0; param_index < n_params; param_index++)
     {
-      const gchar *value;
-      gssize value_len;
+      CsvParserTestParam *param = &params[param_index];
+      LogMessage *logmsg;
+      LogParser *p, *pclone;
+      gint i;
+      NVTable *nvtable;
+      gboolean success;
 
-      value = log_msg_get_value_by_name(logmsg, column_array[i], &value_len);
+      logmsg = log_msg_new_empty();
+      log_msg_set_value(logmsg, LM_V_MESSAGE, param->msg, -1);
 
-      if (param->expected_values[i] && param->expected_values[i][0])
+      p = csv_parser_new(configuration);
+      csv_parser_set_drop_invalid(p, param->drop_invalid);
+      csv_scanner_options_set_flags(csv_parser_get_scanner_options(p), param->flags);
+      csv_scanner_options_set_dialect(csv_parser_get_scanner_options(p), param->dialect);
+      if (param->delimiters)
+        csv_scanner_options_set_delimiters(csv_parser_get_scanner_options(p), param->delimiters);
+      if (param->quotes)
+        csv_scanner_options_set_quote_pairs(csv_parser_get_scanner_options(p), param->quotes);
+      if (param->null_value)
+        csv_scanner_options_set_null_value(csv_parser_get_scanner_options(p), param->null_value);
+
+      csv_scanner_options_set_string_delimiters(csv_parser_get_scanner_options(p),
+                                                string_array_to_list(param->string_delims));
+
+      GList *columns = NULL;
+      for (i = 0; column_array[i] && (param->max_columns < 0 || i < param->max_columns); i++)
+        columns = g_list_append(columns, csv_parser_column_new(column_array[i], LM_VT_STRING));
+      csv_parser_set_columns(p, columns);
+
+      pclone = (LogParser *) log_pipe_clone(&p->super);
+      log_pipe_unref(&p->super);
+
+      cr_assert(log_pipe_init(&pclone->super));
+
+      nvtable = nv_table_ref(logmsg->payload);
+      success = log_parser_process(pclone, &logmsg, NULL, log_msg_get_value(logmsg, LM_V_MESSAGE, NULL), -1);
+      nv_table_unref(nvtable);
+
+      cr_assert_not((success && !param->expected_values[0]), "unexpected match; msg=%s\n", param->msg);
+      cr_assert_not((!success && param->expected_values[0]), "unexpected non-match; msg=%s\n", param->msg);
+
+      log_pipe_unref(&pclone->super);
+
+      i = 0;
+      while (param->expected_values[i] && column_array[i])
         {
-          cr_assert(value
-                    && value[0],
-                    "Testcase failed: expected value set, but no actual value; msg=\n'%s'\n, cond='value && value[0]', value='%s', expected_value='%s'\n",
-                    param->msg,
-                    value,
-                    param->expected_values[i]);
+          const gchar *value;
+          gssize value_len;
 
-          cr_assert(strlen(param->expected_values[i]) == value_len,
-                    "Testcase failed: value length doesn't match actual length; msg=\n'%s'\n, cond='strlen(expected_value) == value_len', value_len='%d', strlen(expected_value)='%d', value=%s, expected_value=%s\n",
-                    param->msg, (int)value_len,
-                    (int)strlen(param->expected_values[i]),
-                    value,
-                    param->expected_values[i]);
+          value = log_msg_get_value_by_name(logmsg, column_array[i], &value_len);
 
-          cr_assert(strncmp(value, param->expected_values[i], value_len) == 0,
-                    "Testcase failed: value does not match expected value; msg=\n'%s'\n, cond='strncmp(value, expected_value, value_len) == 0', value='%s', expected_value='%s' value_len=%d\n",
-                    param->msg,
-                    value,
-                    param->expected_values[i],
-                    (int)value_len);
+          if (param->expected_values[i] && param->expected_values[i][0])
+            {
+              cr_assert(value
+                        && value[0],
+                        "Testcase failed: expected value set, but no actual value; msg=\n'%s'\n, cond='value && value[0]', value='%s', expected_value='%s'\n",
+                        param->msg,
+                        value,
+                        param->expected_values[i]);
+
+              cr_assert(strlen(param->expected_values[i]) == value_len,
+                        "Testcase failed: value length doesn't match actual length; msg=\n'%s'\n, cond='strlen(expected_value) == value_len', value_len='%d', strlen(expected_value)='%d', value=%s, expected_value=%s\n",
+                        param->msg, (int)value_len,
+                        (int)strlen(param->expected_values[i]),
+                        value,
+                        param->expected_values[i]);
+
+              cr_assert(strncmp(value, param->expected_values[i], value_len) == 0,
+                        "Testcase failed: value does not match expected value; msg=\n'%s'\n, cond='strncmp(value, expected_value, value_len) == 0', value='%s', expected_value='%s' value_len=%d\n",
+                        param->msg,
+                        value,
+                        param->expected_values[i],
+                        (int)value_len);
+            }
+          else
+            {
+              cr_assert(!(value
+                          && value[0]),
+                        "Testcase failed: expected unset, but actual value present; msg='%s', cond='!(value && value[0])', value='%s', expected_value='%s'\n",
+                        param->msg, value, param->expected_values[i]);
+            }
+
+          i++;
         }
-      else
-        {
-          cr_assert(!(value
-                      && value[0]),
-                    "Testcase failed: expected unset, but actual value present; msg='%s', cond='!(value && value[0])', value='%s', expected_value='%s'\n",
-                    param->msg, value, param->expected_values[i]);
-        }
 
-      i++;
+      log_msg_unref(logmsg);
     }
-
-  log_msg_unref(logmsg);
 }
 
 void

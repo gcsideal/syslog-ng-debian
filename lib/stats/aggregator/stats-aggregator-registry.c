@@ -92,10 +92,15 @@ _reset_func (gpointer _key, gpointer _value, gpointer _user_data)
   stats_aggregator_reset(aggr);
 }
 
+/* NOTE: callers may hold stats_lock (see _reset_counters in stats-control.c).
+ * Aggregator reset implementations must therefore stay lock-free w.r.t.
+ * stats_lock; taking it here would self-deadlock on the non-recursive mutex.
+ */
 void
 stats_aggregator_registry_reset(void)
 {
   g_assert(stats_aggregator_locked);
+  stats_is_locked(TRUE);
   main_loop_assert_main_thread();
 
   g_hash_table_foreach(stats_container.aggregators, _reset_func, NULL);

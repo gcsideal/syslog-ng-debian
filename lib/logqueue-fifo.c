@@ -196,11 +196,15 @@ log_queue_fifo_drop_messages_from_input_queue(LogQueueFifo *self, InputQueue *in
       iv_list_del(&node->list);
       input_queue->len--;
       log_queue_dropped_messages_inc(&self->super);
-      log_msg_free_queue_node(node);
-
-      LogMessage *msg = node->msg;
 
       input_queue->non_flow_controlled_len--;
+
+      LogMessage *msg = node->msg;
+      /* Free the queue node before dropping the message: log_msg_drop()
+       * can release the last message reference, and queue nodes may be
+       * embedded in LogMessage storage.
+       */
+      log_msg_free_queue_node(node);
       log_msg_drop(msg, &path_options, AT_PROCESSED);
 
       dropped++;
@@ -516,9 +520,13 @@ log_queue_fifo_ack_backlog(LogQueue *s, gint rewind_count)
         self->backlog_queue.non_flow_controlled_len--;
 
       path_options.ack_needed = node->ack_needed;
-      log_msg_ack(msg, &path_options, AT_PROCESSED);
+
+      /* Free the queue node before dropping the message: log_msg_drop()
+       * can release the last message reference, and queue nodes may be
+       * embedded in LogMessage storage.
+       */
       log_msg_free_queue_node(node);
-      log_msg_unref(msg);
+      log_msg_drop(msg, &path_options, AT_PROCESSED);
     }
 }
 
@@ -596,9 +604,12 @@ log_queue_fifo_free_queue(struct iv_list_head *q)
 
       path_options.ack_needed = node->ack_needed;
       msg = node->msg;
+      /* Free the queue node before dropping the message: log_msg_drop()
+       * can release the last message reference, and queue nodes may be
+       * embedded in LogMessage storage.
+       */
       log_msg_free_queue_node(node);
-      log_msg_ack(msg, &path_options, AT_ABORTED);
-      log_msg_unref(msg);
+      log_msg_drop(msg, &path_options, AT_ABORTED);
     }
 }
 

@@ -32,27 +32,32 @@
 #include <string.h>
 #include <math.h>
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct _StringHintPair
 {
-  gchar *string;
+  gchar string[64];
   LogMessageValueType value;
 } StringHintPair;
 
 typedef struct _StringBoolPair
 {
-  gchar *string;
+  gchar string[64];
   gboolean value;
 } StringBoolPair;
 
 typedef struct _StringDoublePair
 {
-  gchar *string;
+  gchar string[64];
   gdouble value;
 } StringDoublePair;
 
 typedef struct _StringUInt64Pair
 {
-  gchar *string;
+  gchar string[64];
   guint64 value;
 } StringUInt64Pair;
 
@@ -283,7 +288,7 @@ cr_assert_gdouble_eq(gdouble a, gdouble b)
       return;
     }
 
-  cr_assert(fabs(a-b) < G_MINDOUBLE);
+  cr_assert(fabs(a - b) < G_MINDOUBLE);
 }
 
 ParameterizedTest(StringDoublePair *string_value_pair, type_hints, test_double_cast)

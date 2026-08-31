@@ -26,6 +26,7 @@
 
 #include "transport/tls-verifier.h"
 #include "transport/tls-session.h"
+#include "file-perms.h"
 #include "messages.h"
 
 typedef enum
@@ -38,24 +39,24 @@ typedef enum
 typedef enum
 {
   TVM_NONE,
-  TVM_TRUSTED=0x0001,
-  TVM_UNTRUSTED=0x0002,
-  TVM_OPTIONAL=0x0010,
-  TVM_REQUIRED=0x0020,
+  TVM_TRUSTED = 0x0001,
+  TVM_UNTRUSTED = 0x0002,
+  TVM_OPTIONAL = 0x0010,
+  TVM_REQUIRED = 0x0020,
 } TLSVerifyMode;
 
 typedef enum
 {
   TSO_NONE,
-  TSO_NOSSLv2=0x0001,
-  TSO_NOSSLv3=0x0002,
-  TSO_NOTLSv1=0x0004,
-  TSO_NOTLSv11=0x0008,
-  TSO_NOTLSv12=0x0010,
-  TSO_NOTLSv13=0x0020,
-  TSO_IGNORE_UNEXPECTED_EOF=0x0040,
-  TSO_IGNORE_HOSTNAME_MISMATCH=0x0080,
-  TSO_IGNORE_VALIDITY_PERIOD=0x0100,
+  TSO_NOSSLv2 = 0x0001,
+  TSO_NOSSLv3 = 0x0002,
+  TSO_NOTLSv1 = 0x0004,
+  TSO_NOTLSv11 = 0x0008,
+  TSO_NOTLSv12 = 0x0010,
+  TSO_NOTLSv13 = 0x0020,
+  TSO_IGNORE_UNEXPECTED_EOF = 0x0040,
+  TSO_IGNORE_HOSTNAME_MISMATCH = 0x0080,
+  TSO_IGNORE_VALIDITY_PERIOD = 0x0100,
 } TLSSslOptions;
 
 typedef enum
@@ -76,6 +77,7 @@ struct _TLSContext
     gchar *keylog_file_path;
     FILE *keylog_file;
     GMutex keylog_file_lock;
+    FilePermOptions keylog_file_perm_options;
   };
   gchar *cert_file;
   gchar *dhparam_file;
@@ -90,6 +92,8 @@ struct _TLSContext
   gchar *ecdh_curve_list;
   gchar *sni;
   gboolean ocsp_stapling_verify;
+  gboolean extended_key_usage_verify;
+  gboolean allow_compress;
 
   SSL_CTX *ssl_ctx;
   GList *conf_cmds_list;
@@ -111,10 +115,6 @@ enum TLSContextError
   TLSCONTEXT_INTERNAL_ERROR,
 };
 
-#define TMI_ALLOW_COMPRESS 0x1
-
-
-
 gboolean tls_context_set_verify_mode_by_name(TLSContext *self, const gchar *mode_str);
 gboolean tls_context_set_ssl_options_by_name(TLSContext *self, GList *options);
 gboolean tls_context_set_ssl_version_by_name(TLSContext *self, const gchar *value);
@@ -130,6 +130,7 @@ void tls_context_set_ca_dir(TLSContext *self, const gchar *ca_dir);
 void tls_context_set_crl_dir(TLSContext *self, const gchar *crl_dir);
 void tls_context_set_ca_file(TLSContext *self, const gchar *ca_file);
 void tls_context_set_cipher_suite(TLSContext *self, const gchar *cipher_suite);
+void tls_context_set_allow_compress(TLSContext *self, gboolean allow);
 gboolean tls_context_set_tls13_cipher_suite(TLSContext *self, const gchar *tls13_cipher_suite, GError **error);
 gboolean tls_context_set_sigalgs(TLSContext *self, const gchar *sigalgs, GError **error);
 gboolean tls_context_set_client_sigalgs(TLSContext *self, const gchar *sigalgs, GError **error);
@@ -138,6 +139,7 @@ void tls_context_set_ecdh_curve_list(TLSContext *self, const gchar *ecdh_curve_l
 void tls_context_set_dhparam_file(TLSContext *self, const gchar *dhparam_file);
 void tls_context_set_sni(TLSContext *self, const gchar *sni);
 void tls_context_set_ocsp_stapling_verify(TLSContext *self, gboolean ocsp_stapling_verify);
+void tls_context_set_extended_key_usage_verify(TLSContext *self, gboolean extended_key_usage_verify);
 const gchar *tls_context_get_key_file(TLSContext *self);
 EVTTAG *tls_context_format_tls_error_tag(TLSContext *self);
 EVTTAG *tls_context_format_location_tag(TLSContext *self);

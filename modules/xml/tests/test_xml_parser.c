@@ -74,9 +74,14 @@ _construct_xml_parser(XMLParserTestOptions options)
 
 TestSuite(xmlparser, .init = setup, .fini = teardown);
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct
 {
-  const gchar *input;
+  gchar input[512];
 } XMLFailTestCase;
 
 ParameterizedTestParameters(xmlparser, invalid_inputs)
@@ -115,11 +120,16 @@ ParameterizedTest(XMLFailTestCase *test_case, xmlparser, invalid_inputs)
   log_msg_unref(msg);
 }
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct
 {
-  const gchar *input;
-  const gchar *key;
-  const gchar *value;
+  gchar input[512];
+  gchar key[128];
+  gchar value[512];
 } ValidXMLTestCase;
 
 ParameterizedTestParameters(xmlparser, valid_inputs)
@@ -159,12 +169,17 @@ ParameterizedTest(ValidXMLTestCase *test_cases, xmlparser, valid_inputs)
   log_msg_unref(msg);
 }
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct
 {
-  const gchar *input;
+  gchar input[512];
   gboolean create_lists;
-  const gchar *key;
-  const gchar *value;
+  gchar key[128];
+  gchar value[512];
 } ListCreateTestCase;
 
 ParameterizedTestParameters(xmlparser, list_quoting_array_elements)
@@ -260,12 +275,17 @@ Test(xmlparser, test_drop_invalid)
   log_msg_unref(msg);
 }
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct
 {
-  const gchar *input;
-  gchar *pattern;
-  const gchar *key;
-  const gchar *value;
+  gchar input[512];
+  gchar pattern[64];
+  gchar key[128];
+  gchar value[512];
 } SingleExcludeTagTestCase;
 
 ParameterizedTestParameters(xmlparser, single_exclude_tags)
@@ -403,34 +423,41 @@ Test(xmlparser, test_strip_whitespaces)
   log_msg_unref(msg);
 }
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ * has_prefix preserves NULL-vs-set prefix semantics.
+ */
 typedef struct
 {
-  const gchar *input;
-  const gchar *prefix;
-  const gchar *key;
-  const gchar *value;
+  gchar input[512];
+  gchar prefix[64];
+  gboolean has_prefix;
+  gchar key[128];
+  gchar value[512];
 } PrefixTestCase;
 
 ParameterizedTestParameters(xmlparser, test_prefix)
 {
   static PrefixTestCase test_cases[] =
   {
-    {"<tag>default_prefix</tag>", NULL, ".xml.tag", "default_prefix"},
-    {"<tag>foo</tag>", "", "tag", "foo"},
-    {"<tag>foobar</tag>", ".xmlparser", ".xmlparser.tag", "foobar"},
-    {"<tag>baz</tag>", ".meta.", ".meta.tag", "baz"},
-    {"<top><t1>asd</t1><t2>jkl</t2></top>", "", "top.t2", "jkl"},
-    {"<top><t1>1</t1><t2><t3>3</t3></t2></top>", "", "top.t2.t3", "3"},
-    {"<top><t1>1</t1><t2><t3>3</t3></t2><misc>value</misc></top>", "", "top.misc", "value"},
+    {"<tag>default_prefix</tag>", "", FALSE, ".xml.tag", "default_prefix"},
+    {"<tag>foo</tag>", "", TRUE, "tag", "foo"},
+    {"<tag>foobar</tag>", ".xmlparser", TRUE, ".xmlparser.tag", "foobar"},
+    {"<tag>baz</tag>", ".meta.", TRUE, ".meta.tag", "baz"},
+    {"<top><t1>asd</t1><t2>jkl</t2></top>", "", TRUE, "top.t2", "jkl"},
+    {"<top><t1>1</t1><t2><t3>3</t3></t2></top>", "", TRUE, "top.t2.t3", "3"},
+    {"<top><t1>1</t1><t2><t3>3</t3></t2><misc>value</misc></top>", "", TRUE, "top.misc", "value"},
   };
-  return cr_make_param_array(PrefixTestCase, test_cases, sizeof(test_cases)/sizeof(test_cases[0]));
+  return cr_make_param_array(PrefixTestCase, test_cases, sizeof(test_cases) / sizeof(test_cases[0]));
 }
 
 ParameterizedTest(PrefixTestCase *test_cases, xmlparser, test_prefix)
 {
   LogParser *xml_parser = _construct_xml_parser((XMLParserTestOptions)
   {
-    .prefix = test_cases->prefix
+    .prefix = test_cases->has_prefix ? test_cases->prefix : NULL
   });
 
   LogMessage *msg = log_msg_new_empty();

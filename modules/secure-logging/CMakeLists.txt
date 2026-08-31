@@ -1,3 +1,9 @@
+module_switch(ENABLE_SLOG "Enable secure logging (slog) module and CLI tools from Airbus" OFF)
+
+if(NOT ENABLE_SLOG)
+  return()
+endif()
+
 set(SECURE_LOGGING_SOURCES
   slog.c
   slog.h

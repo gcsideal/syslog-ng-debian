@@ -1,4 +1,4 @@
-set (AFFILE_SOURCES
+set(AFFILE_SOURCES
   "affile-dest.h"
   "affile-dest-internal-queue-filter.h"
   "affile-parser.h"
@@ -10,6 +10,7 @@ set (AFFILE_SOURCES
   "directory-monitor-poll.h"
   "file-opener.h"
   "file-reader.h"
+  "file-monitor-factory.h"
   "file-specializations.h"
   "logproto-file-reader.h"
   "logproto-file-writer.h"
@@ -22,6 +23,7 @@ set (AFFILE_SOURCES
   "wildcard-source.h"
   "wildcard-file-reader.h"
   "file-list.h"
+  "logrotate.h"
   "affile-dest.c"
   "affile-parser.c"
   "affile-plugin.c"
@@ -31,6 +33,7 @@ set (AFFILE_SOURCES
   "directory-monitor-factory.c"
   "directory-monitor-content-comparator.c"
   "directory-monitor-poll.c"
+  "file-monitor-factory.c"
   "file-opener.c"
   "file-reader.c"
   "linux-kmsg.c"
@@ -46,17 +49,20 @@ set (AFFILE_SOURCES
   "wildcard-source.c"
   "wildcard-file-reader.c"
   "file-list.c"
+  "logrotate.c"
 )
 
-if(SYSLOG_NG_HAVE_INOTIFY)
+# Use only one of them if both are present, such as on FreeBSD, where the inotify wrapper has started to be distributed.
+# Prioritize kqueue, as inotify is just a wrapper around it when both are available.
+if(SYSLOG_NG_HAVE_KQUEUE)
+list(APPEND AFFILE_SOURCES
+  "directory-monitor-kqueue.h"
+  "directory-monitor-kqueue.c"
+)
+elseif(SYSLOG_NG_HAVE_INOTIFY)
   list(APPEND AFFILE_SOURCES
     "directory-monitor-inotify.h"
     "directory-monitor-inotify.c"
-  )
-elseif(SYSLOG_NG_HAVE_KQUEUE)
-  list(APPEND AFFILE_SOURCES
-    "directory-monitor-kqueue.h"
-    "directory-monitor-kqueue.c"
   )
 endif ()
 

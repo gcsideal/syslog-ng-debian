@@ -19,7 +19,6 @@ add_subdirectory(control)
 add_subdirectory(healthcheck)
 add_subdirectory(debugger)
 add_subdirectory(filter)
-add_subdirectory(filterx)
 add_subdirectory(logmsg)
 add_subdirectory(logproto)
 add_subdirectory(multi-line)
@@ -46,7 +45,6 @@ set(LIB_SUBDIR_HEADERS
     ${HEALTHCHECK_HEADERS}
     ${DEBUGGER_HEADERS}
     ${FILTER_HEADERS}
-    ${FILTERX_HEADERS}
     ${LOGMSG_HEADERS}
     ${LOGPROTO_HEADERS}
     ${MULTI_LINE_HEADERS}
@@ -67,7 +65,6 @@ set(LIB_SUBDIR_HEADERS
     ${LOGTHRSOURCE_HEADERS}
     ${SIGNAL_SLOT_CONNECTOR_HEADERS}
     ${CMAKE_CURRENT_BINARY_DIR}/filter/filter-expr-grammar.h
-    ${CMAKE_CURRENT_BINARY_DIR}/filterx/filterx-grammar.h
     ${CMAKE_CURRENT_BINARY_DIR}/rewrite/rewrite-expr-grammar.h
     ${CMAKE_CURRENT_BINARY_DIR}/parser/parser-expr-grammar.h
 )
@@ -80,6 +77,7 @@ set (LIB_HEADERS
     atomic-gssize.h
     block-ref-parser.h
     cache.h
+    console.h
     cfg.h
     cfg-lexer.h
     cfg-lexer-subst.h
@@ -94,14 +92,15 @@ set (LIB_HEADERS
     cfg-tree.h
     cfg-walker.h
     cfg-persist.h
-    cfg-monitor.h
     children.h
     crypto.h
+    crypto-utils.h
     dnscache.h
     driver.h
     dynamic-window-pool.h
     dynamic-window.h
     fdhelpers.h
+    file-monitor.h
     file-perms.h
     find-crlf.h
     generic-number.h
@@ -153,6 +152,7 @@ set (LIB_HEADERS
     serialize.h
     service-management.h
     seqnum.h
+    stackdump.h
     str-format.h
     str-utils.h
     syslog-names.h
@@ -180,6 +180,7 @@ set(LIB_SOURCES
     apphook.c
     block-ref-parser.c
     cache.c
+    console.c
     cfg.c
     cfg-args.c
     cfg-block.c
@@ -194,13 +195,15 @@ set(LIB_SOURCES
     cfg-tree.c
     cfg-walker.c
     cfg-persist.c
-    cfg-monitor.c
     children.c
+    crypto.c
+    crypto-utils.c
     dnscache.c
     driver.c
     dynamic-window.c
     dynamic-window-pool.c
     fdhelpers.c
+    file-monitor.c
     file-perms.c
     find-crlf.c
     globals.c
@@ -249,12 +252,12 @@ set(LIB_SOURCES
     scratch-buffers.c
     serialize.c
     service-management.c
+    stackdump.c
     str-format.c
     str-utils.c
     syslog-names.c
     string-list.c
     ringbuffer.c
-    crypto.c
     uuid.c
     userdb.c
     utf8utils.c
@@ -267,7 +270,6 @@ set(LIB_SOURCES
     ${HEALTHCHECK_SOURCES}
     ${DEBUGGER_SOURCES}
     ${FILTER_SOURCES}
-    ${FILTERX_SOURCES}
     ${LOGMSG_SOURCES}
     ${LOGPROTO_SOURCES}
     ${MULTI_LINE_SOURCES}
@@ -289,7 +291,6 @@ set(LIB_SOURCES
     ${PROJECT_BINARY_DIR}/lib/cfg-lex.c
     ${PROJECT_BINARY_DIR}/lib/pragma-grammar.c
     ${CMAKE_CURRENT_BINARY_DIR}/filter/filter-expr-grammar.c
-    ${CMAKE_CURRENT_BINARY_DIR}/filterx/filterx-grammar.c
     ${CMAKE_CURRENT_BINARY_DIR}/rewrite/rewrite-expr-grammar.c
     ${CMAKE_CURRENT_BINARY_DIR}/parser/parser-expr-grammar.c
     )
@@ -327,17 +328,6 @@ set_source_files_properties(
     PROPERTIES
     COMPILE_FLAGS ${BISON_BUILT_SOURCE_CFLAGS})
 
-generate_y_from_ym (lib/filterx/filterx-grammar)
-bison_target(FilterXGrammar
-    ${CMAKE_CURRENT_BINARY_DIR}/filterx/filterx-grammar.y
-    ${CMAKE_CURRENT_BINARY_DIR}/filterx/filterx-grammar.c
-    COMPILE_FLAGS ${BISON_FLAGS})
-add_flex_bison_dependency(CfgLexer FilterXGrammar)
-set_source_files_properties(
-    ${CMAKE_CURRENT_BINARY_DIR}/filterx/filterx-grammar.c
-    PROPERTIES
-    COMPILE_FLAGS ${BISON_BUILT_SOURCE_CFLAGS})
-
 generate_y_from_ym (lib/rewrite/rewrite-expr-grammar)
 bison_target(RewriteExprGrammar
     ${CMAKE_CURRENT_BINARY_DIR}/rewrite/rewrite-expr-grammar.y
@@ -366,6 +356,7 @@ set(CORE_INCLUDE_DIRS
     ${JSONC_INCLUDE_DIR}
     ${LIBPCRE_INCLUDE_DIRS}
     ${Libsystemd_INCLUDE_DIRS}
+    ${LIBUNWIND_INCLUDE_DIRS}
 )
 
 add_library(syslog-ng SHARED ${LIB_SOURCES})
@@ -381,19 +372,20 @@ target_include_directories(syslog-ng
     ${CORE_INCLUDE_DIRS}
 )
 
-target_link_libraries(
-    syslog-ng
+target_link_libraries(syslog-ng
   PUBLIC
+    ${JEMALLOC_LIBRARIES}
     m
     eventlog
     GLib::GLib
     GLib::GThread
     GLib::GModule
     ${Gettext_LIBRARIES}
-    ${IVYKIS_LIBRARY}
+    ${IVYKIS_LIBRARIES}
     ${JSONC_LIBRARY}
-    ${LIBPCRE_LIBRARIES}
+    PkgConfig::LIBPCRE
     ${Libsystemd_LIBRARIES}
+    ${LIBUNWIND_LIBRARIES}
     resolv
     libcap
     OpenSSL::SSL
@@ -422,7 +414,6 @@ install(FILES ${CONTROL_HEADERS} DESTINATION include/syslog-ng/control)
 install(FILES ${HEALTHCHECK_HEADERS} DESTINATION include/syslog-ng/healthcheck)
 install(FILES ${DEBUGGER_HEADERS} DESTINATION include/syslog-ng/debugger)
 install(FILES ${FILTER_HEADERS} DESTINATION include/syslog-ng/filter)
-install(FILES ${FILTERX_HEADERS} DESTINATION include/syslog-ng/filterx)
 install(FILES ${LOGMSG_HEADERS} DESTINATION include/syslog-ng/logmsg)
 install(FILES ${LOGPROTO_HEADERS} DESTINATION include/syslog-ng/logproto)
 install(FILES ${PARSER_HEADERS} DESTINATION include/syslog-ng/parser)

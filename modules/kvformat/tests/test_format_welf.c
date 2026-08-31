@@ -125,10 +125,15 @@ Test(format_welf, test_space)
   log_msg_unref(msg);
 }
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 struct test_params
 {
-  gchar *template;
-  gchar *expected;
+  gchar template[256];
+  gchar expected[256];
 };
 
 ParameterizedTestParameters(format_welf, key_and_exclude)
@@ -143,7 +148,7 @@ ParameterizedTestParameters(format_welf, key_and_exclude)
     {"$(format-welf --key prefix.* --exclude prefix.exclude* --exclude prefix.key2)", "prefix.key1=value1"},
   };
 
-  return cr_make_param_array(struct test_params, params, sizeof(params)/sizeof(params[0]));
+  return cr_make_param_array(struct test_params, params, sizeof(params) / sizeof(params[0]));
 }
 
 ParameterizedTest(struct test_params *param, format_welf, key_and_exclude)

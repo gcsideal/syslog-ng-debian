@@ -42,9 +42,6 @@
 
 #include "filter/filter-expr-parser.h"
 #include "filter/filter-pipe.h"
-#include "filterx/filterx-parser.h"
-#include "filterx/filterx-expr.h"
-#include "filterx/filterx-pipe.h"
 #include "parser/parser-expr-parser.h"
 #include "rewrite/rewrite-expr-parser.h"
 #include "block-ref-parser.h"
@@ -71,8 +68,8 @@
 
 extern LogSourceOptions *last_source_options;
 extern LogReaderOptions *last_reader_options;
-extern LogProtoServerOptions *last_proto_server_options;
-extern LogProtoClientOptions *last_proto_client_options;
+extern LogProtoServerOptionsStorage *last_proto_server_options;
+extern LogProtoClientOptionsStorage *last_proto_client_options;
 extern LogWriterOptions *last_writer_options;
 extern FilePermOptions *last_file_perm_options;
 extern MsgFormatOptions *last_msg_format_options;

@@ -27,6 +27,8 @@
 
 #include "syslog-ng.h"
 
+#include <stdio.h>
+
 typedef struct _FilePermOptions
 {
   gint file_uid;
@@ -60,5 +62,6 @@ gboolean file_perm_options_apply_symlink(const FilePermOptions *self, const gcha
 gboolean file_perm_options_apply_dir(const FilePermOptions *self, const gchar *name);
 gboolean file_perm_options_apply_fd(const FilePermOptions *self, gint fd);
 gboolean file_perm_options_create_containing_directory(const FilePermOptions *self, const gchar *name);
-
+FILE *file_perm_options_fopen(const FilePermOptions *self, const gchar *path, const gchar *mode_str);
+gint file_perm_options_open(const FilePermOptions *self, const gchar *path, const gchar *mode_str);
 #endif

@@ -3,24 +3,95 @@
 . /dbld/functions.sh
 DBLD_DIR=/dbld
 
-YUM_INSTALL="yum install -y"
 DNF_INSTALL="dnf install -y"
 APT_INSTALL="apt-get install -y --no-install-recommends"
+ZYPPER_INSTALL="zypper -n install"
 
 set -e
 set -x
 
+function normalize_architecture() {
+    local architecture="$1"
+
+    architecture="${architecture,,}"
+
+    case "${architecture}" in
+        x86_64|amd64|x64|x86-64|intel64|em64t)
+            echo "x86_64"
+            ;;
+        aarch64|arm64)
+            echo "arm64"
+            ;;
+        *)
+            echo "${architecture}"
+            ;;
+    esac
+}
+
+function require_platform_architecture() {
+    local required_architecture="${1:-x86_64}"
+    local current_architecture
+    local normalized_required_architecture
+    local normalized_current_architecture
+
+    current_architecture="$(uname -m)"
+    normalized_required_architecture="$(normalize_architecture "${required_architecture}")"
+    normalized_current_architecture="$(normalize_architecture "${current_architecture}")"
+
+    if [ "${normalized_current_architecture}" = "${normalized_required_architecture}" ]; then
+        return 0
+    fi
+
+    echo "Error: unsupported platform architecture '${current_architecture}' (normalized: '${normalized_current_architecture}'). Required: '${required_architecture}' (normalized: '${normalized_required_architecture}')."
+    exit 1
+}
+
+function hashfile() {
+    FILE="$1"
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "${FILE}" | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "${FILE}" | awk '{print $1}'
+    else
+        echo "Do not know how to create a file hash (no sha256sum, shasum found)!"
+        exit 1
+    fi
+}
+
 function update_packages() {
     case "${OS_DISTRIBUTION}" in
-        centos|almalinux)
-            yum update -y
-            ;;
         debian|ubuntu)
+            if [ "$JENKINS_URL" = "https://ci.syslog-ng.com/" ]; then
+                # we are running under the ci.syslog-ng.com thus AWS. Use their
+                # Ubuntu mirror, instead of spamming the real Ubuntu mirrors, as
+                # they are really aggressive, when it comes to banning IPs over
+                # hammering s of 2025.06.02.
+                sed -i -e 's,http://\(archive\|security\).ubuntu.com,http://eu-west-1.ec2.archive.ubuntu.com,' /etc/apt/sources.list
+                if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+                    sed -i -e 's,http://\(archive\|security\).ubuntu.com,http://eu-west-1.ec2.archive.ubuntu.com,' /etc/apt/sources.list.d/ubuntu.sources
+                fi
+            elif [ "$JENKINS_URL" = "github-hosted" ]; then
+                # we are running under GitHub's env, thus we can use Microsoft's
+                # Azure specific Ubuntu mirror. Yes, it's a dirty hack, I know ...
+                sed -i -e 's,http://\(archive\|security\).ubuntu.com,http://azure.archive.ubuntu.com,' /etc/apt/sources.list
+                if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+                    sed -i -e 's,http://\(archive\|security\).ubuntu.com,http://azure.archive.ubuntu.com,' /etc/apt/sources.list.d/ubuntu.sources
+                fi
+            fi
             apt-get update
             apt-get upgrade -y
+
+            apt-get install -y curl
+            curl -s "https://checkip.amazonaws.com"
+            curl -s "http://whatismyip.akamai.com"
+
             ;;
-        fedora)
+        fedora|rhel|rocky|centos|almalinux)
             dnf upgrade -y
+            ;;
+        opensuse)
+            zypper -n dist-upgrade
+            zypper -n update
             ;;
     esac
 }
@@ -42,45 +113,91 @@ function workaround_rpm_repos() {
 # needed by this script _before_ installing packages from packages.manifest.
 #
 # NOTE: If at all possible don't put anything here.
-function install_dbld_dependencies()
-{
+function install_dbld_dependencies() {
     case "${OS_DISTRIBUTION}" in
-        centos|almalinux)
-            $YUM_INSTALL yum-utils
-            ;;
         debian|ubuntu)
-            apt-get update
             $APT_INSTALL curl gnupg2
             ;;
-        fedora)
-            $DNF_INSTALL -y dnf-plugins-core
+        centos|almalinux|fedora|rhel|rocky)
+            $DNF_INSTALL dnf-plugins-core sudo
+            ;;
+        opensuse)
+            $ZYPPER_INSTALL sudo
             ;;
     esac
 }
 
-function install_cmake() {
-    CMAKE_VERSION=3.12.2
-    CMAKE_SHORT_VERSION=$(echo ${CMAKE_VERSION} | cut -d"." -f1-2)
-    download_target "https://cmake.org/files/v${CMAKE_SHORT_VERSION}/cmake-${CMAKE_VERSION}-Linux-x86_64.sh" /tmp/cmake.sh
-    chmod +x /tmp/cmake.sh
-    mkdir -p /opt/cmake
-    /tmp/cmake.sh --skip-license --prefix=/opt/cmake/
-    ln -s /opt/cmake/bin/cmake /usr/bin/cmake
-    rm -rf /tmp/cmake.sh
+function download_target() {
+    TARGET=$1
+    OUTPUT=$2
+    FALLBACK_PATH=$3
+    HASH=$4
+
+    # NOTE: Any new fallback packages must be uploaded to this repo, do not forget to maintain if needed!
+    #       Keep it version organized!
+    OSE_GIT_DOWNLOAD_REPO="https://github.com/syslog-ng/syslog-ng-deps/raw/refs/heads/main"
+
+    if ! curl --location --insecure --fail "$TARGET" --output "$OUTPUT"; then
+        if [ -n "$FALLBACK_PATH" ]; then
+            FALLBACK_URL="${OSE_GIT_DOWNLOAD_REPO}/${FALLBACK_PATH}"
+            echo "Primary download failed, trying fallback: $FALLBACK_URL"
+            curl --location --insecure --fail "$FALLBACK_URL" --output "$OUTPUT"
+        else
+            echo "Download failed and no fallback specified."
+            return 1
+        fi
+    fi
+    CURR_HASH=$(hashfile "${OUTPUT}")
+    if [ "${HASH}" = "${CURR_HASH}" ]; then
+        echo "Downloaded file hash matches"
+    else
+        echo "Downloaded file hash does not match"
+        return 2
+    fi
+}
+
+function install_criterion_from_source() {
+    local tool="${1:-cmake}"
+
+    if [ "$tool" = "cmake" ]; then
+        CRITERION_VERSION=2.3.3
+        HASH="8c85e1fcdb9a39b82bee50394bedfe74a0c839ffff129ddfc6fb73b11adafa29"
+
+        download_target "https://github.com/Snaipe/Criterion/releases/download/v${CRITERION_VERSION}/criterion-v${CRITERION_VERSION}.tar.bz2" /tmp/criterion.tar.bz2 criterion/${CRITERION_VERSION}/criterion.tar.bz2 "${HASH}"
+        cd /tmp/
+        "$(tar_app)" xvf /tmp/criterion.tar.bz2
+        cd /tmp/criterion-v${CRITERION_VERSION}
+        which cmake
+        cmake --version
+        cmake -Wno-dev -DCMAKE_INSTALL_PREFIX=/usr .
+        make -j $(nproc) install
+        ldconfig
+        rm -rf /tmp/criterion.tar.bz2 /tmp/criterion-v${CRITERION_VERSION}
+    else
+        CRITERION_VERSION=2.4.3
+        HASH="6d924ee5eeaaaed7762ab968f560b9ff543fc3473aa949bf53ac56a2a1a9416c"
+
+        download_target "https://github.com/Snaipe/Criterion/archive/refs/tags/v${CRITERION_VERSION}.tar.gz" /tmp/criterion.tar.gz criterion/${CRITERION_VERSION}/criterion.tar.gz "${HASH}"
+        cd /tmp/
+        "$(tar_app)" xvf /tmp/criterion.tar.gz
+        cd /tmp/Criterion-${CRITERION_VERSION}
+        meson setup build --prefix=/usr
+        meson install -C build
+        ldconfig
+        rm -rf /tmp/criterion.tar.gz /tmp/Criterion-${CRITERION_VERSION}
+    fi
 }
 
 function install_criterion() {
-    CRITERION_VERSION=2.3.3
+    require_platform_architecture "x86_64"
 
-    download_target "https://github.com/Snaipe/Criterion/releases/download/v${CRITERION_VERSION}/criterion-v${CRITERION_VERSION}.tar.bz2" /tmp/criterion.tar.bz2
-    cd /tmp/
-    tar xvf /tmp/criterion.tar.bz2
-    cd /tmp/criterion-v${CRITERION_VERSION}
-    cmake -DCMAKE_INSTALL_PREFIX=/usr .
-    make install
+    CRITERION_VERSION=2.4.3
+    HASH="f1b3dd5186783dcdd63433c1facd3b4d6af5244a151057370b53bdda80f16121"
+
+    download_target "https://github.com/Snaipe/Criterion/releases/download/v${CRITERION_VERSION}/criterion-${CRITERION_VERSION}-linux-x86_64.tar.xz" /tmp/criterion.tar.xz criterion/${CRITERION_VERSION}/criterion.tar.xz "${HASH}"
+    "$(tar_app)" -C /usr --strip-components=1 -xvf /tmp/criterion.tar.xz
     ldconfig
-    rm -rf /tmp/criterion.tar.bz2 /tmp/criterion-v${CRITERION_VERSION}
-
+    rm -rf /tmp/criterion.tar.xz
 }
 
 function set_jvm_paths() {
@@ -90,7 +207,9 @@ function set_jvm_paths() {
 
 function install_gradle {
     GRADLE_VERSION=4.10
-    download_target "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" /tmp/gradle.zip
+    HASH="248cfd92104ce12c5431ddb8309cf713fe58de8e330c63176543320022f59f18"
+
+    download_target "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" /tmp/gradle.zip gradle/${GRADLE_VERSION}/gradle.zip "${HASH}"
     mkdir -p /opt/gradle
     unzip -d /opt/gradle /tmp/gradle.zip
     rm -rf /tmp/gradle.zip
@@ -100,57 +219,104 @@ function install_gradle {
 }
 
 function install_pip2 {
-    download_target "https://bootstrap.pypa.io/pip/2.7/get-pip.py" get-pip.py
+    PIP_VERSION=2.7
+    HASH="40ee07eac6674b8d60fce2bbabc148cf0e2f1408c167683f110fd608b8d6f416"
+
+    download_target "https://bootstrap.pypa.io/pip/${PIP_VERSION}/get-pip.py" get-pip.py pip/${PIP_VERSION}/get-pip.py "${HASH}"
     python2 get-pip.py
 }
 
-function download_target() {
-    target=$1
-    output=$2
-    curl --location --insecure "$target" --output "$output"
+function install_bison_from_source {
+    BISON_VERSION=3.7.6
+    HASH="69dc0bb46ea8fc307d4ca1e0b61c8c355eb207d0b0c69f4f8462328e74d7b9ea"
+
+    cd /tmp
+    download_target https://ftp.gnu.org/gnu/bison/bison-${BISON_VERSION}."$(tar_app)".gz /tmp/bison-${BISON_VERSION}.tar.gz bison/${BISON_VERSION}/bison.tar.gz "${HASH}"
+    "$(tar_app)" xvfz /tmp/bison-${BISON_VERSION}.tar.gz
+    cd /tmp/bison-${BISON_VERSION}
+    ./configure --prefix=/usr/local --disable-nls
+    make -j $(nproc) && make -j $(nproc) install
+}
+
+function install_astyle_from_source {
+    ASTYLE_VERSION=3.6.13
+    HASH="83a207e9b4e96fbab1662a786c74434f7fe6881003ee5e5d66fcaf87c96a8672"
+
+    cd /tmp
+    download_target https://gitlab.com/saalen/astyle/-/archive/${ASTYLE_VERSION}/astyle-${ASTYLE_VERSION}.zip?ref_type=tags /tmp/astyle-${ASTYLE_VERSION}.zip astyle/${ASTYLE_VERSION}/astyle.zip "${HASH}"
+    unzip /tmp/astyle-${ASTYLE_VERSION}.zip
+    cd /tmp/astyle-${ASTYLE_VERSION}
+    mkdir build
+    cd build
+    which cmake
+    cmake --version
+    cmake ../
+    make -j $(nproc) && make -j $(nproc) install
 }
 
 function filter_packages_by_platform {
     FILENAME=$1
-    grep -v "#" ${FILENAME} | grep -e "${IMAGE_PLATFORM}" -e "${OS_DISTRIBUTION}[^-]" | cut -d"[" -f1
+    local IMAGE_PLATFORM_BASE=$(image_platform_base)
+    grep -v "#" ${FILENAME} | grep -e "${IMAGE_PLATFORM_BASE}" -e "${OS_DISTRIBUTION}[^-]" | cut -d"[" -f1
 }
 
 function filter_pip_packages_by_platform_and_python_version {
     FILENAME=$1
     PYTHON_VERSION=$2
-    grep -v "#" ${FILENAME} | grep -e "${IMAGE_PLATFORM}" -e "${OS_DISTRIBUTION}[^-]" | grep -e "${PYTHON_VERSION}" | cut -d"[" -f1
+    local IMAGE_PLATFORM_BASE=$(image_platform_base)
+    grep -v "#" ${FILENAME} | grep -e "${IMAGE_PLATFORM_BASE}" -e "${OS_DISTRIBUTION}[^-]" | grep -e "${PYTHON_VERSION}" | cut -d"[" -f1
 }
 
 function add_copr_repo {
 
-    # NOTE: we are removing dnf/yum plugins after enabling copr as they
+    # NOTE: we are removing dnf plugins after enabling copr as they
     # install a couple of Python dependencies which then conflict with our
     # PIP installation later.
     case "${OS_DISTRIBUTION}" in
         centos|almalinux)
-            $YUM_INSTALL yum-plugin-copr
-            yum copr enable -y czanik/syslog-ng-githead
+            dnf copr enable -y czanik/syslog-ng-githead
             case "${OS_DISTRIBUTION_CODE_NAME}" in
                 8)
-                    yum config-manager --set-enabled powertools
+                    dnf config-manager --set-enabled powertools
                     ;;
-                9|stream9)
-                    yum config-manager --set-enabled crb
+                9|stream9|stream10)
+                    dnf config-manager --set-enabled crb
                     ;;
                 esac
             ;;
         fedora)
-            $DNF_INSTALL -y dnf-plugins-core
             if [ "${OS_DISTRIBUTION_CODE_NAME}" = "rawhide" ]; then
                 dnf5 install -y 'dnf5-command(copr)'
             fi
             dnf copr enable -y czanik/syslog-ng-githead
             ;;
+        rocky)
+            dnf config-manager --set-enabled crb
+            ;;
+        # rhel)
+        #     dnf copr enable -y czanik/syslog-ng-githead
+        #     ;;
     esac
+
+    update_packages
 }
 
 function add_epel_repo {
-    $YUM_INSTALL epel-release
+    case "${OS_DISTRIBUTION}" in
+        centos|almalinux-8|almalinux-9|rocky)
+            $DNF_INSTALL epel-release
+            ;;
+        rhel|almalinux)
+            # $DNF_INSTALL epel-release
+            # $DNF_INSTALL epel-next-release
+            curl -LO https://dl.fedoraproject.org/pub/epel/epel-release-latest-${OS_DISTRIBUTION_CODE_NAME}.noarch.rpm
+            rpm -Uvh epel-release-latest-${OS_DISTRIBUTION_CODE_NAME}.noarch.rpm
+            if curl -fL -o epel-next-release-latest-${OS_DISTRIBUTION_CODE_NAME}.noarch.rpm https://dl.fedoraproject.org/pub/epel/epel-next-release-latest-${OS_DISTRIBUTION_CODE_NAME}.noarch.rpm; then
+                rpm -Uvh epel-next-release-latest-${OS_DISTRIBUTION_CODE_NAME}.noarch.rpm
+            fi
+            /usr/bin/crb enable
+            ;;
+    esac
 }
 
 function install_apt_packages {
@@ -175,18 +341,24 @@ function install_rpm_build_deps {
     fi
 
     case "${OS_DISTRIBUTION}" in
-        centos|almalinux)
-            rpm_run_build_command yum-builddep -y ${RPM_SPEC_FILE}
+        fedora|rhel|almalinux|centos|rocky)
+            rpm_run_build_command dnf builddep -y --allowerasing ${RPM_SPEC_FILE}
             ;;
-        fedora)
-            rpm_run_build_command dnf builddep -y ${RPM_SPEC_FILE}
+        opensuse)
+            # FIXME: add support for build-deps in opensuse once it is needed
+            rpm_run_build_command zypper --build-deps-only ${RPM_SPEC_FILE}
             ;;
     esac
 }
 
-function install_yum_packages {
-    $YUM_INSTALL findutils
-    filter_packages_by_platform $DBLD_DIR/packages.manifest | xargs $YUM_INSTALL
+function install_dnf_packages {
+    $DNF_INSTALL findutils
+    filter_packages_by_platform $DBLD_DIR/packages.manifest | xargs $DNF_INSTALL
+}
+
+function install_zypper_packages {
+    $ZYPPER_INSTALL findutils
+    filter_packages_by_platform $DBLD_DIR/packages.manifest | xargs $ZYPPER_INSTALL
 }
 
 function install_pip_packages {
@@ -224,16 +396,6 @@ function install_perf {
             apt-cache search linux-tools | grep 'linux-tools-.*-generic' | cut -d" " -f1 | tail -n1 | cut -d"-" -f1-4 | xargs $APT_INSTALL
             ;;
     esac
-}
-
-function install_bison_from_source {
-    BISON_VERSION=3.7.6
-    cd /tmp
-    download_target https://ftp.gnu.org/gnu/bison/bison-${BISON_VERSION}.tar.gz /tmp/bison-${BISON_VERSION}.tar.gz
-    tar xvfz /tmp/bison-${BISON_VERSION}.tar.gz
-    cd /tmp/bison-${BISON_VERSION}
-    ./configure --prefix=/usr/local --disable-nls
-    make && make install
 }
 
 

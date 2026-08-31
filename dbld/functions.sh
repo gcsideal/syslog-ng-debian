@@ -1,5 +1,31 @@
 set -e
 
+__TAR_APP_PATH=""
+
+# tools (like tar) linked with newer glibc can cause ABI issues in QEMU
+# try to use not effected alternatives
+
+tar_app() {
+    # Return cached value if already resolved
+    if [ -n "$__TAR_APP_PATH" ]; then
+        printf '%s\n' "$__TAR_APP_PATH"
+        return 0
+    fi
+
+    # Prefer bsdtar if available in PATH
+    if command -v bsdtar >/dev/null 2>&1; then
+        __TAR_APP_PATH="$(command -v bsdtar)"
+    elif command -v tar >/dev/null 2>&1; then
+        __TAR_APP_PATH="$(command -v tar)"
+    else
+        echo "Error: neither bsdtar nor tar found in PATH" >&2
+        return 1
+    fi
+
+    printf '%s\n' "$__TAR_APP_PATH"
+    return 0
+}
+
 function get_version() {
 	[ -n "$VERSION" ] && echo $VERSION && return
 	[ -d /source/scripts ] && cd /source && scripts/version.sh || echo "unknown-version"
@@ -15,6 +41,13 @@ function _map_env_null()
 	echo "_=_"
 }
 
+function image_platform_base() {
+    local BASE=${IMAGE_PLATFORM%-amd64}
+    BASE=${BASE%-arm64}
+    BASE=${BASE%-i386}
+    echo ${BASE}
+}
+
 function run_build_command_with_build_manifest_parameters() {
 	map_environment=$1
 	map_cmdline=$2
@@ -24,9 +57,10 @@ function run_build_command_with_build_manifest_parameters() {
 	# first.
 
 	TMPDIR=$(mktemp -d)
+	local IMAGE_PLATFORM_BASE=$(image_platform_base)
 
 	IFS=$'\t'
-	egrep -e "^${OS_DISTRIBUTION}([^-]|$)" -e "^${IMAGE_PLATFORM}" /dbld/build.manifest | sort -r | head -1 | while read os featureflags env cmdline; do
+	egrep -e "^${OS_DISTRIBUTION}([^-]|$)" -e "^${IMAGE_PLATFORM_BASE}" /dbld/build.manifest | sort -r | head -1 | while read os featureflags env cmdline; do
 		unset IFS
 		echo $os $featureflags $env $cmdline
 		declare -a env_values

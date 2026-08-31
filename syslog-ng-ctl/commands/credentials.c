@@ -22,7 +22,6 @@
  */
 
 #include "credentials.h"
-#include "compat/string.h"
 
 #include <termios.h>
 #include <unistd.h>
@@ -83,9 +82,7 @@ read_password_from_stdin(gchar *buffer, gsize *length)
 static gint
 slng_passwd_add(int argc, char *argv[], const gchar *mode, GOptionContext *ctx)
 {
-  gchar *answer;
   gint remaining_unused_index = 0;
-
 
   if (!credentials_key)
     credentials_key = consume_next_from_remaining(credentials_remaining, &remaining_unused_index);
@@ -95,7 +92,8 @@ slng_passwd_add(int argc, char *argv[], const gchar *mode, GOptionContext *ctx)
       gchar *usage = g_option_context_get_help(ctx, TRUE, NULL);
       fprintf(stderr, "Error: missing arguments!\n%s\n", usage);
       g_free(usage);
-      return 1;
+      g_option_context_set_description(ctx, "credentials");
+      return EINVAL;
     }
 
   if (!is_syslog_ng_running())
@@ -121,8 +119,8 @@ slng_passwd_add(int argc, char *argv[], const gchar *mode, GOptionContext *ctx)
       read_password_from_stdin(secret_to_store, &buff_size);
     }
 
-  gint retval = asprintf(&answer, "PWD %s %s %s", "add", credentials_key, secret_to_store);
-  if (retval == -1)
+  gchar *answer = g_strdup_printf("PWD %s %s %s", "add", credentials_key, secret_to_store);
+  if (answer == NULL)
     g_assert_not_reached();
 
   secret_storage_wipe(secret_to_store, strlen(secret_to_store));
@@ -142,13 +140,7 @@ slng_passwd_add(int argc, char *argv[], const gchar *mode, GOptionContext *ctx)
 static gint
 slng_passwd_status(int argc, char *argv[], const gchar *mode, GOptionContext *ctx)
 {
-  gchar *answer;
-
-  gint retval = asprintf(&answer, "PWD %s", "status");
-  if (retval == -1)
-    g_assert_not_reached();
-
-  return dispatch_command(answer);
+  return dispatch_command("PWD status");
 }
 
 static GOptionEntry credentials_options_add[] =

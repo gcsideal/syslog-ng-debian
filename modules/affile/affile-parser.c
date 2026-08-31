@@ -40,6 +40,7 @@ static CfgLexerKeyword affile_keywords[] =
   { "wildcard_file",      KW_WILDCARD_FILE },
   { "base_dir",           KW_BASE_DIR },
   { "filename_pattern",   KW_FILENAME_PATTERN },
+  { "exclude_pattern",    KW_EXCLUDE_PATTERN },
   { "recursive",          KW_RECURSIVE },
   { "max_files",          KW_MAX_FILES },
   { "monitor_method",     KW_MONITOR_METHOD },
@@ -49,10 +50,16 @@ static CfgLexerKeyword affile_keywords[] =
   { "remove_if_older",    KW_OVERWRITE_IF_OLDER, KWS_OBSOLETE, "overwrite_if_older" },
   { "overwrite_if_older", KW_OVERWRITE_IF_OLDER },
   { "symlink_as",         KW_SYMLINK_AS },
+  { "follow_always_reads", KW_FOLLOW_ALWAYS_READS },
   { "follow_freq",        KW_FOLLOW_FREQ },
+  { "follow_method",      KW_FOLLOW_METHOD },
   { "monitor_freq",       KW_MONITOR_FREQ },
   { "multi_line_timeout", KW_MULTI_LINE_TIMEOUT },
   { "time_reap",          KW_TIME_REAP },
+  { "logrotate",          KW_LOGROTATE },
+  { "enable",             KW_LOGROTATE_ENABLE },
+  { "size",               KW_LOGROTATE_SIZE },
+  { "rotations",          KW_LOGROTATE_ROTATIONS},
   { NULL }
 };
 

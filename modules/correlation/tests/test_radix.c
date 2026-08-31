@@ -119,14 +119,14 @@ test_search_matches(RNode *root, const gchar *key, const gchar *search_pattern[]
     {
       cr_assert(ret, "not found while expected: '%s' => none %s\n", key, search_pattern[0]);
 
-      for (int i=0; search_pattern[i]; i+=2)
+      for (int i = 0; search_pattern[i]; i += 2)
         {
-          cr_assert_lt(i/2, matches->len, "not enough matches: %d => expecting %d", i, matches->len);
+          cr_assert_lt(i / 2, matches->len, "not enough matches: %d => expecting %d", i, matches->len);
 
           const gchar *expected_name = search_pattern[i];
-          const gchar *expected_value = search_pattern[i+1];
+          const gchar *expected_value = search_pattern[i + 1];
 
-          match = &g_array_index(matches, RParserMatch, (i/2)+1);
+          match = &g_array_index(matches, RParserMatch, (i / 2) +1);
           match_name = log_msg_get_value_name(match->handle, NULL);
 
           cr_expect_str_eq(match_name, expected_name,
@@ -272,6 +272,7 @@ Test(dbparser, test_parsers, .init = test_setup, .fini = test_teardown)
   insert_node(root, "AAA@SET:set@AAA");
   insert_node(root, "AAA@OPTIONALSET@AAA");
   insert_node(root, "AAA@OPTIONALSET:set@AAA");
+
   insert_node(root, "AAA@MACADDR@AAA");
   insert_node(root, "newline@NUMBER@\n2ndline\n");
   insert_node(root, "AAA@PCRE:set@AAA");
@@ -296,7 +297,8 @@ Test(dbparser, test_parsers, .init = test_setup, .fini = test_teardown)
   r_free_node(root, NULL);
 }
 
-ParameterizedTestParameters(dbparser, test_radix_search_matches)
+static RadixTestParam *
+_get_test_radix_search_matches_params(gsize *len)
 {
   static RadixTestParam parser_params[] =
   {
@@ -338,107 +340,107 @@ ParameterizedTestParameters(dbparser, test_radix_search_matches)
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="ABCD:EF01:2345:6789:ABCD:EF01:2345:6789 huhuhu",
+      .key = "ABCD:EF01:2345:6789:ABCD:EF01:2345:6789 huhuhu",
       .expected_pattern = {"ip", "ABCD:EF01:2345:6789:ABCD:EF01:2345:6789", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="abcd:ef01:2345:6789:abcd:ef01:2345:6789 huhuhu",
+      .key = "abcd:ef01:2345:6789:abcd:ef01:2345:6789 huhuhu",
       .expected_pattern = {"ip", "abcd:ef01:2345:6789:abcd:ef01:2345:6789", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key =":: huhuhu",
+      .key = ":: huhuhu",
       .expected_pattern = {"ip", "::", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="0:0:0:0:0:0:13.1.68.3 huhuhu",
+      .key = "0:0:0:0:0:0:13.1.68.3 huhuhu",
       .expected_pattern = {"ip", "0:0:0:0:0:0:13.1.68.3", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="::202.1.68.3 huhuhu",
+      .key = "::202.1.68.3 huhuhu",
       .expected_pattern = {"ip", "::202.1.68.3", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="2001:0DB8:0:CD30:: huhuhu",
+      .key = "2001:0DB8:0:CD30:: huhuhu",
       .expected_pattern = {"ip", "2001:0DB8:0:CD30::", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="ABCD:EF01:2345:6789:ABCD:EF01:2345:6789.huhuhu",
+      .key = "ABCD:EF01:2345:6789:ABCD:EF01:2345:6789.huhuhu",
       .expected_pattern = {"ip", "ABCD:EF01:2345:6789:ABCD:EF01:2345:6789", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="abcd:ef01:2345:6789:abcd:ef01:2345:6789.huhuhu",
+      .key = "abcd:ef01:2345:6789:abcd:ef01:2345:6789.huhuhu",
       .expected_pattern = {"ip", "abcd:ef01:2345:6789:abcd:ef01:2345:6789", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="::.huhuhu",
+      .key = "::.huhuhu",
       .expected_pattern = {"ip", "::", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="0:0:0:0:0:0:13.1.68.3.huhuhu",
+      .key = "0:0:0:0:0:0:13.1.68.3.huhuhu",
       .expected_pattern = {"ip", "0:0:0:0:0:0:13.1.68.3", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="::202.1.68.3.huhuhu",
+      .key = "::202.1.68.3.huhuhu",
       .expected_pattern = {"ip", "::202.1.68.3", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="2001:0DB8:0:CD30::.huhuhu",
+      .key = "2001:0DB8:0:CD30::.huhuhu",
       .expected_pattern = {"ip", "2001:0DB8:0:CD30::", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="1:2:3:4:5:6:7:8.huhuhu",
+      .key = "1:2:3:4:5:6:7:8.huhuhu",
       .expected_pattern = {"ip", "1:2:3:4:5:6:7:8", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="1:2:3:4:5:6:7:8 huhuhu",
+      .key = "1:2:3:4:5:6:7:8 huhuhu",
       .expected_pattern = {"ip", "1:2:3:4:5:6:7:8", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="1:2:3:4:5:6:7:8:huhuhu",
+      .key = "1:2:3:4:5:6:7:8:huhuhu",
       .expected_pattern = {"ip", "1:2:3:4:5:6:7:8", NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="1:2:3:4:5:6:7 huhu",
+      .key = "1:2:3:4:5:6:7 huhu",
       .expected_pattern = {NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="1:2:3:4:5:6:7.huhu",
+      .key = "1:2:3:4:5:6:7.huhu",
       .expected_pattern = {NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="1:2:3:4:5:6:7:huhu",
+      .key = "1:2:3:4:5:6:7:huhu",
       .expected_pattern = {NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="1:2:3:4:5:6:77777:8 huhu",
+      .key = "1:2:3:4:5:6:77777:8 huhu",
       .expected_pattern = {NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="1:2:3:4:5:6:1.2.333.4 huhu",
+      .key = "1:2:3:4:5:6:1.2.333.4 huhu",
       .expected_pattern = {NULL}
     },
     {
       .node_to_insert = {"@IPvANY:ip@", NULL},
-      .key ="v12345",
+      .key = "v12345",
       .expected_pattern = {NULL}
     },
     /* test_ipv4_matches */
@@ -706,6 +708,16 @@ ParameterizedTestParameters(dbparser, test_radix_search_matches)
     },
     {
       .node_to_insert = {"@NUMBER:number@", NULL},
+      .key = "+0xAF12345 hihihi",
+      .expected_pattern = {"number", "+0xAF12345", NULL}
+    },
+    {
+      .node_to_insert = {"@NUMBER:number@", NULL},
+      .key = "-0xAF12345 hihihi",
+      .expected_pattern = {"number", "-0xAF12345", NULL}
+    },
+    {
+      .node_to_insert = {"@NUMBER:number@", NULL},
       .key = "0x12345 hihihi",
       .expected_pattern = {"number", "0x12345", NULL}
     },
@@ -718,6 +730,11 @@ ParameterizedTestParameters(dbparser, test_radix_search_matches)
       .node_to_insert = {"@NUMBER:number@", NULL},
       .key = "-12345 hihihi",
       .expected_pattern = {"number", "-12345", NULL}
+    },
+    {
+      .node_to_insert = {"@NUMBER:number@", NULL},
+      .key = "+12345 hihihi",
+      .expected_pattern = {"number", "+12345", NULL}
     },
     {
       .node_to_insert = {"@NUMBER:number@", NULL},
@@ -935,6 +952,11 @@ ParameterizedTestParameters(dbparser, test_radix_search_matches)
     },
     {
       .node_to_insert = {"@FLOAT:float@", NULL},
+      .key = "12.345e+12 hihihi",
+      .expected_pattern = {"float", "12.345e+12", NULL},
+    },
+    {
+      .node_to_insert = {"@FLOAT:float@", NULL},
       .key = "-12.345E12 hihihi",
       .expected_pattern = {"float", "-12.345E12", NULL},
     },
@@ -942,6 +964,16 @@ ParameterizedTestParameters(dbparser, test_radix_search_matches)
       .node_to_insert = {"@FLOAT:float@", NULL},
       .key = "-12.345E-12 hihihi",
       .expected_pattern = {"float", "-12.345E-12", NULL},
+    },
+    {
+      .node_to_insert = {"@FLOAT:float@", NULL},
+      .key = "+12.345E12 hihihi",
+      .expected_pattern = {"float", "+12.345E12", NULL},
+    },
+    {
+      .node_to_insert = {"@FLOAT:float@", NULL},
+      .key = "+12.345E+12 hihihi",
+      .expected_pattern = {"float", "+12.345E+12", NULL},
     },
     {
       .node_to_insert = {"@FLOAT:float@", NULL},
@@ -975,6 +1007,12 @@ ParameterizedTestParameters(dbparser, test_radix_search_matches)
       .expected_pattern = {"set", "  ", NULL},
     },
     {
+      .node_to_insert = {"@SET:set:  @", NULL},
+      .key = "  ",
+      .expected_pattern = {"set", "  ", NULL},
+    },
+    /* test_optional_set_matches */
+    {
       .node_to_insert = {"@OPTIONALSET:set:  @", NULL},
       .key = " aaa",
       .expected_pattern = {"set", " ", NULL},
@@ -988,6 +1026,22 @@ ParameterizedTestParameters(dbparser, test_radix_search_matches)
       .node_to_insert = {"@OPTIONALSET:set:  @", NULL},
       .key = "aaa",
       .expected_pattern = {"set", "", NULL},
+    },
+    {
+      .node_to_insert = {"@OPTIONALSET:set:  @", NULL},
+      .key = "  ",
+      .expected_pattern = {"set", "  ", NULL},
+    },
+    /* test_optional_set_matches at the end */
+    {
+      .node_to_insert = {"@QSTRING:q:[]@@OPTIONALSET:s: @", NULL},
+      .key = "[AAA]  ",
+      .expected_pattern = {"q", "AAA", "s", "  ", NULL},
+    },
+    {
+      .node_to_insert = {"@QSTRING:q:[]@@OPTIONALSET:s: @", NULL},
+      .key = "[AAA]",
+      .expected_pattern = {"q", "AAA", "s", "", NULL},
     },
     /* test_mcaddr_matches */
     {
@@ -1015,6 +1069,16 @@ ParameterizedTestParameters(dbparser, test_radix_search_matches)
       .node_to_insert = {"@EMAIL:email:[<]>@", NULL },
       .key = "[blint@balabit.hu]",
       .expected_pattern = {"email", "blint@balabit.hu", NULL},
+    },
+    {
+      .node_to_insert = {"@EMAIL:email:[<]>@", NULL },
+      .key = "a@b.c",
+      .expected_pattern = {"email", "a@b.c", NULL},
+    },
+    {
+      .node_to_insert = {"@EMAIL:email:[<]>@", NULL },
+      .key = "<a@b.c>",
+      .expected_pattern = {"email", "a@b.c", NULL},
     },
     /* test_hostname_matches */
     {
@@ -1096,18 +1160,30 @@ ParameterizedTestParameters(dbparser, test_radix_search_matches)
       .expected_pattern = {"nlstring", "foobar", NULL},
     }
   };
-  return cr_make_param_array(RadixTestParam, parser_params, G_N_ELEMENTS(parser_params));
+  *len = G_N_ELEMENTS(parser_params);
+  return parser_params;
 }
 
-ParameterizedTest(RadixTestParam *param, dbparser, test_radix_search_matches, .init = test_setup, .fini = test_teardown)
+/* Keep this as a plain Test + loop (not ParameterizedTest + ParameterizedTestParameters)
+ * the cases are pointer-based iovec entries, and we must avoid pointer payload transport through
+ * Criterion parameterization on macOS.
+ */
+Test(dbparser, test_radix_search_matches, .init = test_setup, .fini = test_teardown)
 {
-  RNode *root = r_new_node("", NULL);
+  gsize n_params;
+  RadixTestParam *params = _get_test_radix_search_matches_params(&n_params);
 
-  for (int i=0; param->node_to_insert[i]; i++)
-    insert_node(root, param->node_to_insert[i]);
+  for (gsize param_index = 0; param_index < n_params; param_index++)
+    {
+      RadixTestParam *param = &params[param_index];
+      RNode *root = r_new_node("", NULL);
 
-  test_search_matches(root, param->key, param->expected_pattern);
-  r_free_node(root, NULL);
+      for (int i = 0; param->node_to_insert[i]; i++)
+        insert_node(root, param->node_to_insert[i]);
+
+      test_search_matches(root, param->key, param->expected_pattern);
+      r_free_node(root, NULL);
+    }
 }
 
 Test(dbparser, test_radix_prefix, .init = test_setup, .fini = test_teardown)

@@ -39,12 +39,15 @@ _report_generator_args(gpointer key, gpointer value, gpointer user_data)
 {
   GString *result = (GString *) user_data;
   g_string_append_printf(result, "## %s=", (gchar *) key);
-  for (const gchar *c = (const gchar *) value; *c; c++)
+  if (value != NULL)
     {
-      if (*c == '\n' && *(c + 1))
-        g_string_append(result, "\n## ");
-      else
-        g_string_append_c(result, *c);
+      for (const gchar *c = (const gchar *) value; *c; c++)
+        {
+          if (*c == '\n' && *(c + 1))
+            g_string_append(result, "\n## ");
+          else
+            g_string_append_c(result, *c);
+        }
     }
 
   g_string_append_c(result, '\n');
@@ -55,7 +58,7 @@ cfg_block_generator_generate(CfgBlockGenerator *self, GlobalConfig *cfg, gpointe
                              const gchar *reference)
 {
   gchar block_name[1024];
-  cfg_block_generator_format_name(self, block_name, sizeof(block_name)/sizeof(block_name[0]));
+  cfg_block_generator_format_name(self, block_name, sizeof(block_name) / sizeof(block_name[0]));
 
   g_string_append_printf(result, "\n#Start Block %s\n", block_name);
   cfg_args_foreach(args, _report_generator_args, result);

@@ -32,12 +32,24 @@ int afsocket_parse(CfgLexer *lexer, LogDriver **instance, gpointer arg);
 
 static CfgLexerKeyword afsocket_keywords[] =
 {
-  { "unix_dgram", KW_UNIX_DGRAM },
-  { "unix_stream",  KW_UNIX_STREAM },
+  { "unix_dgram",         KW_UNIX_DGRAM },
+  { "unix_stream",        KW_UNIX_STREAM },
   { "udp",                KW_UDP },
   { "tcp",                KW_TCP },
   { "syslog",             KW_SYSLOG },
   { "network",            KW_NETWORK },
+  { "http",               KW_HTTP },
+
+  { "http_scraper",       KW_HTTP_SCRAPER },
+  { "scrape_pattern",     KW_SCRAPE_PATTERN},
+  { "scrape_freq_limit",  KW_SCRAPE_FREQ_LIMIT},
+  { "single_instance",    KW_SINGLE_INSTANCE},
+  { "stat_type",          KW_STAT_TYPE},
+  { "stat_query",         KW_STAT_QUERY},
+  { "stat_format",        KW_STAT_FORMAT},
+  { "stats_without_orphaned", KW_STATS_WITHOUT_ORPHANED },
+  { "stats_with_legacy",  KW_STATS_WITH_LEGACY },
+
 #if SYSLOG_NG_ENABLE_IPV6
   { "udp6",               KW_UDP6 },
   { "tcp6",               KW_TCP6 },
@@ -67,6 +79,7 @@ static CfgLexerKeyword afsocket_keywords[] =
   { "sni",                KW_SNI },
   { "allow_compress",     KW_ALLOW_COMPRESS },
   { "ocsp_stapling_verify", KW_OCSP_STAPLING_VERIFY },
+  { "extended_key_usage_verify", KW_EXTENDED_KEY_USAGE_VERIFY },
   { "openssl_conf_cmds",  KW_CONF_CMDS},
 
   { "localip",            KW_LOCALIP },

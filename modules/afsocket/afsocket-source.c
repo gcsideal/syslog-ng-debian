@@ -37,7 +37,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#ifdef SYSLOG_NG_HAVE_LINUX_SOCK_DIAG_H
+#if SYSLOG_NG_HAVE_LINUX_SOCK_DIAG_H
 #include <linux/sock_diag.h>
 #endif
 
@@ -145,32 +145,25 @@ afsocket_sc_format_name(AFSocketSourceConnection *self)
   return _format_sc_name(self, GSA_FULL);
 }
 
-static LogTransport *
-afsocket_sc_construct_transport(AFSocketSourceConnection *self, gint fd)
-{
-  return transport_mapper_construct_log_transport(self->owner->transport_mapper, fd);
-}
-
 static gboolean
 afsocket_sc_init(LogPipe *s)
 {
   AFSocketSourceConnection *self = (AFSocketSourceConnection *) s;
-  LogTransport *transport;
   LogProtoServer *proto;
 
   gboolean restored_kept_alive_source = !!self->reader;
   if (!restored_kept_alive_source)
     {
-      transport = afsocket_sc_construct_transport(self, self->sock);
-      /* transport_mapper_inet_construct_log_transport() can return NULL on TLS errors */
-      if (!transport)
-        return FALSE;
-
-      proto = log_proto_server_factory_construct(self->owner->proto_factory, transport,
-                                                 &self->owner->reader_options.proto_options.super);
+      proto = log_proto_server_factory_construct(self->owner->proto_factory, NULL,
+                                                 &self->owner->reader_options.proto_options);
       if (!proto)
         {
-          log_transport_free(transport);
+          return FALSE;
+        }
+
+      if (!transport_mapper_setup_stack(self->owner->transport_mapper, &proto->transport_stack, self->sock))
+        {
+          log_proto_server_free(proto);
           return FALSE;
         }
 
@@ -255,7 +248,6 @@ afsocket_sc_set_owner(AFSocketSourceConnection *self, AFSocketSourceDriver *owne
 
   log_pipe_append(&self->super, &owner->super.super.super);
 }
-
 
 /*
   This should be called by log_reader_free -> log_pipe_unref
@@ -534,16 +526,10 @@ afsocket_sd_accept(gpointer s)
         {
           socket_options_setup_peer_socket(self->socket_options, new_fd, peer_addr);
 
-          if (peer_addr->sa.sa_family != AF_UNIX)
-            msg_notice("Syslog connection accepted",
-                       evt_tag_int("fd", new_fd),
-                       evt_tag_str("client", g_sockaddr_format(peer_addr, buf1, sizeof(buf1), GSA_FULL)),
-                       evt_tag_str("local", g_sockaddr_format(self->bind_addr, buf2, sizeof(buf2), GSA_FULL)));
-          else
-            msg_verbose("Syslog connection accepted",
-                        evt_tag_int("fd", new_fd),
-                        evt_tag_str("client", g_sockaddr_format(peer_addr, buf1, sizeof(buf1), GSA_FULL)),
-                        evt_tag_str("local", g_sockaddr_format(self->bind_addr, buf2, sizeof(buf2), GSA_FULL)));
+          msg_verbose("Syslog connection accepted",
+                      evt_tag_int("fd", new_fd),
+                      evt_tag_str("client", g_sockaddr_format(peer_addr, buf1, sizeof(buf1), GSA_FULL)),
+                      evt_tag_str("local", g_sockaddr_format(self->bind_addr, buf2, sizeof(buf2), GSA_FULL)));
         }
       else
         {
@@ -561,16 +547,10 @@ afsocket_sd_close_connection(AFSocketSourceDriver *self, AFSocketSourceConnectio
 {
   gchar buf1[MAX_SOCKADDR_STRING], buf2[MAX_SOCKADDR_STRING];
 
-  if (sc->peer_addr->sa.sa_family != AF_UNIX)
-    msg_notice("Syslog connection closed",
-               evt_tag_int("fd", sc->sock),
-               evt_tag_str("client", g_sockaddr_format(sc->peer_addr, buf1, sizeof(buf1), GSA_FULL)),
-               evt_tag_str("local", g_sockaddr_format(self->bind_addr, buf2, sizeof(buf2), GSA_FULL)));
-  else
-    msg_verbose("Syslog connection closed",
-                evt_tag_int("fd", sc->sock),
-                evt_tag_str("client", g_sockaddr_format(sc->peer_addr, buf1, sizeof(buf1), GSA_FULL)),
-                evt_tag_str("local", g_sockaddr_format(self->bind_addr, buf2, sizeof(buf2), GSA_FULL)));
+  msg_verbose("Syslog connection closed",
+              evt_tag_int("fd", sc->sock),
+              evt_tag_str("client", g_sockaddr_format(sc->peer_addr, buf1, sizeof(buf1), GSA_FULL)),
+              evt_tag_str("local", g_sockaddr_format(self->bind_addr, buf2, sizeof(buf2), GSA_FULL)));
 
   log_reader_close_proto(sc->reader);
   log_pipe_deinit(&sc->super);
@@ -640,7 +620,7 @@ _dynamic_window_realloc(AFSocketSourceDriver *self)
 static void
 _dynamic_window_set_balanced_window(AFSocketSourceDriver *self)
 {
-  gssize number_of_connections= _connections_count_get(self);
+  gssize number_of_connections = _connections_count_get(self);
 
   if (number_of_connections <= 0)
     return;
@@ -728,14 +708,17 @@ afsocket_sd_restore_dynamic_window_pool(AFSocketSourceDriver *self)
 {
   GlobalConfig *cfg = log_pipe_get_config(&self->super.super.super);
 
-  if (!self->connections_kept_alive_across_reloads)
-    return FALSE;
-
   DynamicWindowPool *ctr = cfg_persist_config_fetch(cfg, afsocket_sd_format_dynamic_window_pool_name(self));
   if (ctr == NULL)
     return FALSE;
 
-  self->dynamic_window_pool = ctr;
+  /* See afsocket_sd_restore_kept_alive_connections() for the details why is_reloading_scheduled() is used too */
+  if (self->connections_kept_alive_across_reloads || (FALSE == self->socket_options->so_reuseport
+                                                      && is_reloading_scheduled()))
+    {
+      self->dynamic_window_pool = ctr;
+      return TRUE;
+    }
   return TRUE;
 }
 
@@ -903,7 +886,6 @@ _unregister_packet_stats(AFSocketSourceDriver *self, StatsClusterLabel *labels, 
 
 #endif
 
-
 static gboolean
 afsocket_sd_setup_reader_options(AFSocketSourceDriver *self)
 {
@@ -971,12 +953,9 @@ afsocket_sd_setup_transport(AFSocketSourceDriver *self)
       return FALSE;
     }
 
-  self->transport_mapper->create_multitransport = self->proto_factory->use_multitransport;
-
   afsocket_sd_setup_reader_options(self);
   return TRUE;
 }
-
 
 static void
 afsocket_sd_save_connections(AFSocketSourceDriver *self)
@@ -989,12 +968,9 @@ afsocket_sd_save_connections(AFSocketSourceDriver *self)
     }
   else
     {
-      GList *p;
-
       /* for SOCK_STREAM source drivers this is a list, for
        * SOCK_DGRAM this is a single connection */
-
-      for (p = self->connections; p; p = p->next)
+      for (GList *p = self->connections; p; p = p->next)
         {
           log_pipe_deinit((LogPipe *) p->data);
         }
@@ -1010,24 +986,51 @@ afsocket_sd_restore_kept_alive_connections(AFSocketSourceDriver *self)
   GlobalConfig *cfg = log_pipe_get_config(&self->super.super.super);
 
   /* fetch persistent connections first */
-  if (self->connections_kept_alive_across_reloads)
-    {
-      GList *p = NULL;
-      self->connections = cfg_persist_config_fetch(cfg, afsocket_sd_format_connections_name(self));
+  self->connections = cfg_persist_config_fetch(cfg, afsocket_sd_format_connections_name(self));
+  guint stored_conn_count = self->connections ? g_list_length(self->connections) : 0;
 
+  /* If a config reload is in progress and there are stored connections (but the new config
+   * does not have keep-alive() and so-reuseport() enabled), then in the current
+   * config deinit/init order, no component will close the previous connections before
+   * the new ones are opened.
+   *
+   * Because the new config may attempt to open sockets on the same ports, this will fail
+   * in absence of the proper socket reuse settings.
+   *
+   * Therefore, we have two options:
+   *    - Close the stored connections to avoid socket allocation collisions.
+   *      However, this is more complex, as we would need to properly deinit and free
+   *      the existing connections (unwind the registered cleanup functions), etc.
+   *      The even bigger problem is that this would cause connection loss if the reload
+   *      is failing for any reason (e.g., syntax error in the new config), as the
+   *      existing connections would already be closed it will not be possible to restore them
+   *      during the config revert.
+   *    - Restore the connections if is_reloading_scheduled() is TRUE and there are stored
+   *      connections — essentially treating it as if keep-alive() were enabled.
+   *      This ensures that connections are properly maintained, but it also
+   *      means that the new config’s value for keep-alive() appears
+   *      to be ignored (at least during the first reload; though subsequent reloads will correctly
+   *      respect it).
+   *
+   * We go with the second option for now.
+   */
+  if (self->connections_kept_alive_across_reloads || (FALSE == self->socket_options->so_reuseport
+                                                      && is_reloading_scheduled() && stored_conn_count > 0))
+    {
       _connections_count_set(self, 0);
-      for (p = self->connections; p; p = p->next)
+      for (GList *p = self->connections; p; p = p->next)
         {
-          afsocket_sc_set_owner((AFSocketSourceConnection *) p->data, self);
+          AFSocketSourceConnection *sc = (AFSocketSourceConnection *)p->data;
+
+          afsocket_sc_set_owner(sc, self);
           if (log_pipe_init((LogPipe *) p->data))
             {
               _connections_count_inc(self);
             }
           else
             {
-              AFSocketSourceConnection *sc = (AFSocketSourceConnection *)p->data;
-
-              self->connections = g_list_remove(self->connections, sc);
+              /* FIXME: Unlike the earlier g_list_remove, which caused crashes, this works — but I think it’s still leaking. */
+              self->connections = g_list_remove_link(self->connections, p);
               afsocket_sd_kill_connection((AFSocketSourceConnection *)sc);
             }
         }
@@ -1078,6 +1081,7 @@ _sd_open_stream_finalize(gpointer arg)
   afsocket_sd_start_watches(self);
   char buf[256];
   msg_info("Accepting connections",
+           evt_tag_int("listen_fd",  self->listen_fd.fd),
            evt_tag_str("addr", g_sockaddr_format(self->bind_addr, buf, sizeof(buf), GSA_FULL)));
   return TRUE;
 }
@@ -1092,7 +1096,7 @@ afsocket_sd_open_socket(AFSocketSourceDriver *self, gint *sock)
   AFSocketSetupSocketSignalData signal_data = {0};
 
   signal_data.sock = *sock;
-  EMIT(self->super.super.super.signal_slot_connector, signal_afsocket_setup_socket, &signal_data);
+  EMIT(self->super.super.signal_slot_connector, signal_afsocket_setup_socket, &signal_data);
   return !signal_data.failure;
 }
 
@@ -1101,13 +1105,16 @@ _sd_open_stream(AFSocketSourceDriver *self)
 {
   GlobalConfig *cfg = log_pipe_get_config(&self->super.super.super);
   gint sock = -1;
-  if (self->connections_kept_alive_across_reloads)
+
+  /* See afsocket_sd_restore_kept_alive_connections() for the details why is_reloading_scheduled() is used too */
+  if (self->connections_kept_alive_across_reloads || (FALSE == self->socket_options->so_reuseport
+                                                      && is_reloading_scheduled()))
     {
       /* NOTE: this assumes that fd 0 will never be used for listening fds,
        * main.c opens fd 0 so this assumption can hold */
       gpointer config_result = cfg_persist_config_fetch(cfg, afsocket_sd_format_listener_name(self));
-      sock = GPOINTER_TO_UINT(config_result) - 1;
-
+      if (config_result)
+        sock = GPOINTER_TO_UINT(config_result) - 1;
     }
 
   if (sock == -1)
@@ -1172,9 +1179,9 @@ static void
 afsocket_sd_close_fd(gpointer value)
 {
   gint fd = GPOINTER_TO_UINT(value) - 1;
+  msg_verbose("Closing listener fd", evt_tag_int("fd", fd));
   close(fd);
 }
-
 
 static void
 afsocket_sd_save_listener(AFSocketSourceDriver *self)
@@ -1194,13 +1201,11 @@ afsocket_sd_save_listener(AFSocketSourceDriver *self)
         {
           /* NOTE: the fd is incremented by one when added to persistent config
            * as persist config cannot store NULL */
-
           cfg_persist_config_add(cfg, afsocket_sd_format_listener_name(self),
                                  GUINT_TO_POINTER(self->fd + 1), afsocket_sd_close_fd);
         }
     }
 }
-
 
 gboolean
 afsocket_sd_setup_addresses_method(AFSocketSourceDriver *self)

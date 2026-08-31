@@ -46,11 +46,18 @@ _reset_counter_if_needed(StatsCluster *sc, gint type, StatsCounterItem *counter,
 static void
 _reset_counters(void)
 {
-  stats_lock();
-  stats_foreach_counter(_reset_counter_if_needed, NULL, NULL);
-  stats_unlock();
+  /* Hold both locks for the whole reset so counter writes and aggregator
+   * re-arms appear atomic to readers and to concurrent registrations.
+   * Order matches the rest of the codebase: aggregator outer, stats inner
+   * (see stats-change-per-second.c and stats-aggregator.c register paths).
+   */
   stats_aggregator_lock();
+  stats_lock();
+
+  stats_foreach_counter(_reset_counter_if_needed, NULL, NULL);
   stats_aggregator_registry_reset();
+
+  stats_unlock();
   stats_aggregator_unlock();
 }
 
@@ -78,18 +85,40 @@ static void
 control_connection_send_stats(ControlConnection *cc, GString *command, gpointer user_data, gboolean *cancelled)
 {
   gchar **cmds = g_strsplit(command->str, " ", 3);
-  g_assert(g_str_equal(cmds[0], "STATS"));
+  gsize cmd_ndx = 0;
+  g_assert(g_str_equal(cmds[cmd_ndx], "STATS"));
+  ++cmd_ndx;
+  g_assert(cmds[cmd_ndx] != NULL && "STATS command must have at least one format argument");
 
   GString *response = NULL;
   gpointer args[] = {cc, &response};
 
-  if (g_strcmp0(cmds[1], "PROMETHEUS") == 0)
+  if (strcmp(cmds[cmd_ndx], "PROMETHEUS") == 0)
     {
-      gboolean with_legacy = g_strcmp0(cmds[2], "WITH_LEGACY") == 0;
-      stats_generate_prometheus(_send_batched_response, args, with_legacy, cancelled);
+      gboolean with_legacy = g_strcmp0(cmds[cmd_ndx + 1], "WITH_LEGACY") == 0;
+      if (with_legacy)
+        ++cmd_ndx;
+      gboolean without_orphaned = g_strcmp0(cmds[cmd_ndx + 1], "WITHOUT_ORPHANED") == 0;
+      // NOTE: do not forget to increment cmd_ndx if new commands added later
+      //       now just commented out to avoid compiler warning
+      // if (without_orphaned)
+      //   ++cmd_ndx;
+      stats_generate_prometheus(_send_batched_response, args, with_legacy, without_orphaned, cancelled);
     }
   else
-    stats_generate_csv(_send_batched_response, args, cancelled);
+    {
+      gboolean csv = strcmp(cmds[cmd_ndx], "CSV") == 0;
+      g_assert(csv || strcmp(cmds[cmd_ndx], "KV") == 0);
+      gboolean without_header = g_strcmp0(cmds[cmd_ndx + 1], "WITHOUT_HEADER") == 0;
+      if (without_header)
+        ++cmd_ndx;
+      gboolean without_orphaned = g_strcmp0(cmds[cmd_ndx + 1], "WITHOUT_ORPHANED") == 0;
+      // NOTE: do not forget to increment cmd_ndx if new commands added later
+      //       now just commented out to avoid compiler warning
+      // if (without_orphaned)
+      //   ++cmd_ndx;
+      stats_generate_csv_or_kv(_send_batched_response, args, csv, FALSE == without_header, without_orphaned, cancelled);
+    }
 
   if (response != NULL)
     control_connection_send_batched_reply(cc, response);
@@ -133,5 +162,5 @@ stats_register_control_commands(void)
   control_register_command("STATS", control_connection_send_stats, NULL, TRUE);
   control_register_command("RESET_STATS", control_connection_reset_stats, NULL, FALSE);
   control_register_command("REMOVE_ORPHANED_STATS", control_connection_remove_orphans, NULL, FALSE);
-  control_register_command("QUERY", process_query_command, NULL, TRUE);
+  control_register_command("QUERY", stats_process_query_command, NULL, TRUE);
 }

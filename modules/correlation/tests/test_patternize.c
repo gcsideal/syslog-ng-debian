@@ -77,8 +77,8 @@ _get_logmessages(const gchar *logs)
     {
       logline = g_strdup_printf("Jul 29 06:25:41 vav zorp/inter_http[27940]: %s", input_lines[i]);
       len = strlen(logline);
-      if (logline[len-1] == '\n')
-        logline[len-1] = 0;
+      if (logline[len - 1] == '\n')
+        logline[len - 1] = 0;
 
       msg = msg_format_parse(&parse_options, (const guchar *) logline, len);
       g_ptr_array_add(self->logmessages, msg);
@@ -90,11 +90,16 @@ _get_logmessages(const gchar *logs)
   return self;
 }
 
-typedef struct _patternize_params
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
+typedef struct _PatternizeParams
 {
-  const gchar *logs;
+  gchar logs[256];
   guint support;
-  const gchar *expected;
+  gchar expected[256];
 } PatternizeParams;
 
 ParameterizedTestParameters(dbparser, test_frequent_words)
@@ -319,39 +324,39 @@ ParameterizedTestParameters(dbparser, test_find_clusters_slct)
     },
     {
       .logs = "alma korte\n"
-      "alma korte\n"
-      "alma korte\n"
-      "alma korte\n"
-      "bela korte\n"
-      "bela korte\n"
-      "alma\n",
+              "alma korte\n"
+              "alma korte\n"
+              "alma korte\n"
+              "bela korte\n"
+              "bela korte\n"
+              "alma\n",
       .support = 2,
       .expected = "0,1,2,3:4|4,5:2",
     },
     {
       .logs = "alma korte\n"
-      "alma korte\n"
-      "alma korte\n"
-      "alma korte\n"
-      "bela korte\n"
-      "bela korte\n"
-      "alma\n",
+              "alma korte\n"
+              "alma korte\n"
+              "alma korte\n"
+              "bela korte\n"
+              "bela korte\n"
+              "alma\n",
       .support = 3,
       .expected = "0,1,2,3:4",
     },
     {
       .logs = "alma korte asdf1 labda\n"
-      "alma korte asdf2 labda\n"
-      "alma korte asdf3 labda\n"
-      "sallala\n",
+              "alma korte asdf2 labda\n"
+              "alma korte asdf3 labda\n"
+              "sallala\n",
       .support = 3,
       .expected = "0,1,2:3",
     },
     {
       .logs = "alma korte asdf1 labda qwe1\n"
-      "alma korte asdf2 labda qwe2\n"
-      "alma korte asdf3 labda qwe3\n"
-      "sallala\n",
+              "alma korte asdf2 labda qwe2\n"
+              "alma korte asdf3 labda qwe3\n"
+              "sallala\n",
       .support = 3,
       .expected = "0,1,2:3",
     }
@@ -383,13 +388,15 @@ ParameterizedTest(PatternizeParams *param, dbparser, test_find_clusters_slct, .i
       guint expected_support;
 
       expected_item = g_strsplit(expecteds[i], ":", 0);
-      sscanf(expected_item[1], "%d", &expected_support);
+      cr_assert(sscanf(expected_item[1], "%d", &expected_support) == 1,
+                "Failed to parse expected support value: '%s'", expected_item[1]);
 
       expected_lines_s = g_strsplit(expected_item[0], ",", 0);
 
       for (j = 0; expected_lines_s[j]; ++j)
         {
-          sscanf(expected_lines_s[j], "%d", &expected_lines[j]);
+          cr_assert(sscanf(expected_lines_s[j], "%d", &expected_lines[j]) == 1,
+                    "Failed to parse expected line number: '%s'", expected_lines_s[j]);
           ++num_of_expected_lines;
         }
 

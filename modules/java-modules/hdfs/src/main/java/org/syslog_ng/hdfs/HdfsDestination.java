@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015 Balabit
  * Copyright (c) 2015 Zoltan Pallagi <zoltan.pallagi@balabit.com>
+ * Copyright (c) 2025 One Identity LLC.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published
@@ -239,14 +240,14 @@ public class HdfsDestination extends StructuredLogDestination {
         isOpened = false;
         String resolvedFileName = options.getFileNameTemplate().getResolvedString(logMessage);
         lock.lock();
-        HdfsFile hdfsfile = getHdfsFile(resolvedFileName);
-        if (hdfsfile == null) {
-            // Unable to open file
-            closeAll(true);
-            return ERROR;
-        }
-
         try {
+            HdfsFile hdfsfile = getHdfsFile(resolvedFileName);
+            if (hdfsfile == null) {
+                // Unable to open file
+                closeAll(true);
+                return ERROR;
+            }
+
             String formattedMessage = options.getTemplate().getResolvedString(logMessage);
 
             logger.debug("Outgoing message: " + formattedMessage);
@@ -261,9 +262,8 @@ public class HdfsDestination extends StructuredLogDestination {
             closeAll(false);
             return ERROR;
         } finally {
-          lock.unlock();
+            lock.unlock();
         }
-
 
         isOpened = true;
         return SUCCESS;
@@ -441,7 +441,7 @@ public class HdfsDestination extends StructuredLogDestination {
     }
 
     private void printStackTrace(Throwable e) {
-        String trace = org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e);
+        String trace = org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace(e);
         logger.error(trace);
     }
 

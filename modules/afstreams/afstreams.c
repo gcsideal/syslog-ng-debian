@@ -75,7 +75,7 @@ log_transport_streams_read(LogTransport *self, void *buf, gsize buflen, GSockAdd
   res = getmsg(self->fd, &ctl, &data, &flags);
   if (res == -1)
     return -1;
-  else if ((res & (MORECTL+MOREDATA)) == 0)
+  else if ((res & (MORECTL + MOREDATA)) == 0)
     {
       len = g_snprintf(buf, buflen, "<%d>%.*s", lc.pri, data.len, data.buf);
       return MIN(len, buflen);
@@ -93,10 +93,9 @@ log_transport_streams_new(gint fd)
 {
   LogTransport *self = g_new0(LogTransport, 1);
 
-  log_transport_init_instance(self, fd);
+  log_transport_init_instance(self, "sun-streams", fd);
   self->cond = G_IO_IN;
   self->read = log_transport_streams_read;
-  self->free_fn = log_transport_free_method;
   return self;
 }
 

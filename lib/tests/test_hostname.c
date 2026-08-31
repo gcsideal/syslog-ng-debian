@@ -87,25 +87,33 @@ _invoke_extract_fqdn_from_hostent(gchar *primary_host, gchar **aliases)
   return _extract_fqdn_from_hostent(&hostent);
 }
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS.
+ * has_* members preserve NULL-vs-set semantics for optional string fields.
+ */
 typedef struct _HostNameList
 {
-  gchar *domain_override;
-  gchar *host_name;
-  gchar *expected;
+  gchar domain_override[32];
+  gboolean has_domain_override;
+  gchar host_name[64];
+  gboolean has_host_name;
+  gchar expected[64];
 } HostNameList;
 
 ParameterizedTestParameters(test_hostname, test_hostname_fqdn_conversion)
 {
   static HostNameList host_name_list[] =
   {
-    {NULL, "foo.bar", "foo.bar"},
-    {NULL, "foo", "foo.balabit"},
-    {NULL, "bzorp", "bzorp.balabit"},
-    {NULL, "bzorp.balabit", "bzorp.balabit"},
-    {"bardomain", "bzorp", "bzorp.bardomain"},
-    {"bardomain", "bzorp.balabit", "bzorp.bardomain"},
-    {"bardomain", "foo", "foo.bardomain"},
-    {"bardomain", "foo.bar", "foo.bardomain"}
+    {"", FALSE, "foo.bar", TRUE, "foo.bar"},
+    {"", FALSE, "foo", TRUE, "foo.balabit"},
+    {"", FALSE, "bzorp", TRUE, "bzorp.balabit"},
+    {"", FALSE, "bzorp.balabit", TRUE, "bzorp.balabit"},
+    {"bardomain", TRUE, "bzorp", TRUE, "bzorp.bardomain"},
+    {"bardomain", TRUE, "bzorp.balabit", TRUE, "bzorp.bardomain"},
+    {"bardomain", TRUE, "foo", TRUE, "foo.bardomain"},
+    {"bardomain", TRUE, "foo.bar", TRUE, "foo.bardomain"}
   };
 
   return cr_make_param_array(HostNameList, host_name_list,
@@ -117,9 +125,9 @@ ParameterizedTest(HostNameList *host_name_list, test_hostname, test_hostname_fqd
   gchar buf[256];
 
   wrap_gethostname();
-  hostname_reinit(host_name_list->domain_override);
+  hostname_reinit(host_name_list->has_domain_override ? host_name_list->domain_override : NULL);
 
-  g_strlcpy(buf, host_name_list->host_name, sizeof(buf));
+  g_strlcpy(buf, host_name_list->has_host_name ? host_name_list->host_name : "", sizeof(buf));
   convert_hostname_to_fqdn(buf, sizeof(buf));
   cr_assert_str_eq(buf, host_name_list->expected, "hostname values mismatch");
 }
@@ -128,12 +136,12 @@ ParameterizedTestParameters(test_hostname, test_hostname_short_conversion)
 {
   static HostNameList host_name_list[] =
   {
-    {NULL, "foo", "foo"},
-    {NULL, "foo.bar", "foo"},
-    {NULL, "foo.bardomain", "foo"},
-    {"bardomain", "foo", "foo"},
-    {"bardomain", "foo.bar", "foo"},
-    {"bardomain", "foo.bardomain", "foo"},
+    {"", FALSE, "foo", TRUE, "foo"},
+    {"", FALSE, "foo.bar", TRUE, "foo"},
+    {"", FALSE, "foo.bardomain", TRUE, "foo"},
+    {"bardomain", TRUE, "foo", TRUE, "foo"},
+    {"bardomain", TRUE, "foo.bar", TRUE, "foo"},
+    {"bardomain", TRUE, "foo.bardomain", TRUE, "foo"},
   };
 
   return cr_make_param_array(HostNameList, host_name_list,
@@ -145,9 +153,9 @@ ParameterizedTest(HostNameList *host_name_list, test_hostname, test_hostname_sho
   gchar buf[256];
 
   wrap_gethostname();
-  hostname_reinit(host_name_list->domain_override);
+  hostname_reinit(host_name_list->has_domain_override ? host_name_list->domain_override : NULL);
 
-  g_strlcpy(buf, host_name_list->host_name, sizeof(buf));
+  g_strlcpy(buf, host_name_list->has_host_name ? host_name_list->host_name : "", sizeof(buf));
   convert_hostname_to_short_hostname(buf, sizeof(buf));
   cr_assert_str_eq(buf, host_name_list->expected, "hostname values mismatch");
 }
@@ -156,8 +164,8 @@ ParameterizedTestParameters(test_hostname, test_hostname_fqdn)
 {
   static HostNameList host_name_list[] =
   {
-    {NULL, NULL, "bzorp.balabit"},
-    {"bardomain", NULL, "bzorp.bardomain"},
+    {"", FALSE, "", FALSE, "bzorp.balabit"},
+    {"bardomain", TRUE, "", FALSE, "bzorp.bardomain"},
   };
 
   return cr_make_param_array(HostNameList, host_name_list,
@@ -169,7 +177,7 @@ ParameterizedTest(HostNameList *host_name_list, test_hostname, test_hostname_fqd
   const gchar *host;
 
   wrap_gethostname();
-  hostname_reinit(host_name_list->domain_override);
+  hostname_reinit(host_name_list->has_domain_override ? host_name_list->domain_override : NULL);
 
   host = get_local_hostname_fqdn();
   cr_assert_str_eq(host, host_name_list->expected, "hostname values mismatch");
@@ -179,8 +187,8 @@ ParameterizedTestParameters(test_hostname, test_hostname_short)
 {
   static HostNameList host_name_list[] =
   {
-    {NULL, NULL, "bzorp"},
-    {"bardomain", NULL, "bzorp"},
+    {"", FALSE, "", FALSE, "bzorp"},
+    {"bardomain", TRUE, "", FALSE, "bzorp"},
   };
 
   return cr_make_param_array(HostNameList, host_name_list,
@@ -192,7 +200,7 @@ ParameterizedTest(HostNameList *host_name_list, test_hostname, test_hostname_sho
   const gchar *host;
 
   wrap_gethostname();
-  hostname_reinit(host_name_list->domain_override);
+  hostname_reinit(host_name_list->has_domain_override ? host_name_list->domain_override : NULL);
 
   host = get_local_hostname_short();
   cr_assert_str_eq(host, host_name_list->expected, "hostname values mismatch");

@@ -1,0 +1,416 @@
+/*
+ * Copyright (c) 2025 One Identity
+ * Copyright (c) 2025 Hofi <hofione@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ * As an additional exemption you are allowed to compile & link against the
+ * OpenSSL libraries as published by the OpenSSL project. See the file
+ * COPYING for details.
+ *
+ */
+#include "logproto/logproto-http-scraper-responder-server.h"
+#include "stats/stats-prometheus.h"
+#include "stats/stats-csv.h"
+#include "stats/stats-query-commands.h"
+#include "timeutils/cache.h"
+#include "messages.h"
+
+#include <iv.h>
+#include <glib.h>
+
+static LogProtoHTTPScraperResponder *single_instance;
+static time_t last_scrape_request_time;
+
+// FIXME: cleanup mutex on program exit
+static inline GMutex *
+_mutex(void)
+{
+  static GMutex *mutex = NULL;
+
+  if (g_once_init_enter(&mutex))
+    {
+      GMutex *new_mutex = g_new(GMutex, 1);
+      g_mutex_init(new_mutex);
+      g_once_init_leave(&mutex, new_mutex);
+    }
+  return mutex;
+}
+
+static void
+_generate_batched_response(const gchar *record, gpointer user_data)
+{
+  gpointer *args = (gpointer *) user_data;
+  //LogProtoHTTPScraperResponder *self = (LogProtoHTTPScraperResponder *)args[0];
+  GString **batch = (GString **) args[1];
+
+  g_string_append_printf(*batch, "%s", record);
+}
+
+static gchar *
+_get_stat_format(LogProtoHTTPScraperResponder *self)
+{
+  gchar *stat_format = self->options->stat_format &&
+                       self->options->stat_format[0] ? self->options->stat_format : "prometheus";
+  return stat_format;
+}
+
+static GString *
+_get_response_content_type(LogProtoHTTPServer *s)
+{
+  LogProtoHTTPScraperResponder *self = (LogProtoHTTPScraperResponder *)s;
+
+  gchar *stat_format = _get_stat_format(self);
+  if (strcmp(stat_format, "prometheus") == 0)
+    return g_string_new("text/plain; version=0.0.4");
+  else if (strcmp(stat_format, "csv") == 0)
+    return g_string_new("text/csv");
+  else
+    return g_string_new("text/plain");
+}
+
+#define USE_DEBUG_RESPONSE 0
+
+#if USE_DEBUG_RESPONSE
+static GString *
+_compose_debug_response_body(LogProtoHTTPScraperResponder *self)
+{
+  gchar *stat_format = _get_stat_format(self);
+
+  /* Generate test data > 100 MB to test size limit handling */
+  const gsize target_size = 100 * 1024 * 1024;
+  GString *response = g_string_sized_new(target_size);
+
+  for (gsize i = 0; response->len < target_size; i++)
+    if (strcmp(stat_format, "prometheus") == 0)
+      g_string_append_printf(response,
+                             "test_metric_%lu{label=\"value\",instance=\"test\"} 12345678.90 %lu\n",
+                             (unsigned long) i, (unsigned long) i);
+    else if (strcmp(stat_format, "csv") == 0)
+      g_string_append_printf(response,
+                             "src.pipe;debug.metric_%lu;instance;a;value;%lu\n",
+                             (unsigned long) i, (unsigned long) i);
+    else if (strcmp(stat_format, "kv") == 0)
+      g_string_append_printf(response,
+                             "src.pipe.debug.metric_%lu.instance.a.value=%lu\n",
+                             (unsigned long) i, (unsigned long) i);
+
+  msg_debug("http-server(): Generated test response body",
+            evt_tag_long("size", response->len));
+
+  return response;
+}
+#endif
+
+static GString *
+_compose_response_body(LogProtoHTTPServer *s)
+{
+  LogProtoHTTPScraperResponder *self = (LogProtoHTTPScraperResponder *)s;
+
+#if USE_DEBUG_RESPONSE
+  return _compose_debug_response_body(self);
+#endif
+
+  GString *stats = NULL;
+  gboolean cancelled = FALSE;
+  gchar *stat_format = _get_stat_format(self);
+
+  if (self->options->stat_type == STT_STATS)
+    {
+      stats = g_string_new(NULL);
+      gpointer args[] = {self, &stats};
+      gboolean with_legacy = self->options->stats_with_legacy;
+      gboolean without_orphaned = self->options->stats_without_orphaned;
+
+      msg_trace("Generating stats", evt_tag_str("stat-format", stat_format),
+                evt_tag_int("with-legacy", with_legacy),
+                evt_tag_int("without-orphaned", without_orphaned));
+      if (strcmp(stat_format, "prometheus") == 0)
+        stats_generate_prometheus(_generate_batched_response, args, with_legacy, without_orphaned, &cancelled);
+      else
+        {
+          gboolean csv = (strcmp(stat_format, "csv") == 0);
+          stats_generate_csv_or_kv(_generate_batched_response, args, csv, FALSE, without_orphaned, &cancelled);
+        }
+    }
+  else
+    {
+      char *query_str = self->options->stat_query && self->options->stat_query[0] ? self->options->stat_query : "*";
+      GString *full_query_str = g_string_new(NULL);
+      g_string_append_printf(full_query_str, "QUERY GET %s %s", stat_format, query_str);
+
+      msg_trace("Running stats query", evt_tag_str("stat-format", stat_format),
+                evt_tag_str("stat-query", query_str));
+      stats = stats_execute_query_command(full_query_str->str, self, &cancelled);
+      g_string_free(full_query_str, TRUE);
+    }
+  return stats;
+}
+
+static gint
+_check_request_headers(LogProtoHTTPServer *s, gchar *buffer_start, gsize buffer_bytes)
+{
+  LogProtoHTTPScraperResponder *self = (LogProtoHTTPScraperResponder *)s;
+  gint status = HTTP_STATUS_OK;
+
+  g_mutex_lock(_mutex());
+  iv_validate_now();
+  time_t now = iv_now.tv_sec;
+  time_t ellapsed = now - last_scrape_request_time;
+  if (self->options->scrape_freq_limit && ellapsed < self->options->scrape_freq_limit)
+    status = HTTP_STATUS_TOO_MANY_REQUESTS;
+  last_scrape_request_time = now;
+  g_mutex_unlock(_mutex());
+  if (status != HTTP_STATUS_OK)
+    {
+      msg_trace("Too frequent scraper requests, ignoring for now",
+                evt_tag_long("last-request", ellapsed),
+                evt_tag_int("allowed-freq", self->options->scrape_freq_limit));
+      return status;
+    }
+
+  GPatternSpec *pattern = g_pattern_spec_new(self->options->scraper_request_hdr_pattern);
+  GString *header = g_string_new_len(buffer_start, buffer_bytes);
+  if (FALSE == g_pattern_spec_match_string(pattern, header->str))
+    {
+      msg_trace("Scraper request header did not match", evt_tag_str("header", header->str), evt_tag_str("expected-header",
+                self->options->scraper_request_hdr_pattern));
+      status = HTTP_STATUS_BAD_REQUEST;
+    }
+  g_string_free(header, TRUE);
+  g_pattern_spec_free(pattern);
+
+  return status;
+}
+
+static void
+_log_proto_http_scraper_responder_server_free(LogProtoServer *s)
+{
+  g_mutex_lock(_mutex());
+  LogProtoHTTPScraperResponder *self = (LogProtoHTTPScraperResponder *)s;
+  if (self->options->single_instance)
+    single_instance = NULL;
+  // The base LogProtoHTTPServer has no overridden free_fn, so we call its base LogProtoTextServer free directly
+  log_proto_text_server_free(s);
+  g_mutex_unlock(_mutex());
+}
+
+void
+log_proto_http_scraper_responder_server_init(LogProtoHTTPScraperResponder *self, LogTransport *transport,
+                                             const LogProtoServerOptionsStorage *options_storage)
+{
+  log_proto_http_server_init((LogProtoHTTPServer *)self, transport, options_storage);
+  self->super.request_header_checker = _check_request_headers;
+  self->super.response_body_composer = _compose_response_body;
+  self->super.response_content_type_composer = _get_response_content_type;
+
+  self->super.super.super.super.free_fn = _log_proto_http_scraper_responder_server_free;
+
+  self->options = (const LogProtoHTTPScraperResponderOptions *)options_storage;
+}
+
+LogProtoServer *
+log_proto_http_scraper_responder_server_new(LogTransport *transport,
+                                            const LogProtoServerOptionsStorage *options_storage)
+{
+  g_mutex_lock(_mutex());
+
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+  if (options->single_instance && single_instance)
+    {
+      msg_trace("Only one HTTP scraper responder instance is allowed");
+      GString *response_data = g_string_new(http_too_many_request_msg);
+      g_string_append(response_data, "\n\n");
+      single_instance->super.response_sender(&single_instance->super, response_data->str,
+                                             response_data->len, FALSE);
+      g_string_free(response_data, TRUE);
+      g_mutex_unlock(_mutex());
+      return NULL;
+    }
+
+  LogProtoHTTPScraperResponder *self = g_new0(LogProtoHTTPScraperResponder, 1);
+  if (options->single_instance)
+    single_instance = self;
+  log_proto_http_scraper_responder_server_init(self, transport, options_storage);
+
+  g_mutex_unlock(_mutex());
+  return &self->super.super.super.super;
+}
+
+/*-----------------  Options  -----------------*/
+
+/* NOTE: We do not maintain here the initialized state at all, it is the responsibility of the
+ *       LogProtoServer/LogProtoServerOptions functions
+ */
+void
+log_proto_http_scraper_responder_options_defaults(LogProtoServerOptionsStorage *options_storage)
+{
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+
+  log_proto_http_server_options_defaults(options_storage);
+  log_proto_http_server_options_set_close_after_send(options_storage, TRUE);
+
+  options_storage->super.init = log_proto_http_scraper_responder_options_init;
+  options_storage->super.validate = log_proto_http_scraper_responder_options_validate;
+  options_storage->super.destroy = log_proto_http_scraper_responder_options_destroy;
+
+  options->stat_type = 0;
+  options->scrape_freq_limit = -1;
+  options->single_instance = TRUE;
+}
+
+void
+log_proto_http_scraper_responder_options_init(LogProtoServerOptionsStorage *options_storage,
+                                              GlobalConfig *cfg)
+{
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+
+  log_proto_http_server_options_init(options_storage, cfg);
+  log_proto_http_server_options_set_close_after_send(options_storage, TRUE);
+
+  if (options->stat_type == 0)
+    options->stat_type = STT_STATS;
+  if (options->scrape_freq_limit == -1)
+    options->scrape_freq_limit = 15;
+}
+
+void
+log_proto_http_scraper_responder_options_destroy(LogProtoServerOptionsStorage *options_storage)
+{
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+
+  log_proto_http_server_options_destroy(options_storage);
+  g_free(options->scraper_request_hdr_pattern);
+  options->scraper_request_hdr_pattern = NULL;
+  g_free(options->stat_query);
+  options->stat_query = NULL;
+  g_free(options->stat_format);
+  options->stat_format = NULL;
+}
+
+gboolean
+log_proto_http_scraper_responder_options_validate(LogProtoServerOptionsStorage *options_storage)
+{
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+
+  if (FALSE == log_proto_http_server_options_validate(options_storage))
+    return FALSE;
+
+  if (options->scraper_request_hdr_pattern == NULL || options->scraper_request_hdr_pattern[0] == '\0')
+    {
+      msg_error("stats-exporter() 'scrape-pattern()' is mandatory and cannot be empty");
+      return FALSE;
+    }
+
+  if (options->stat_type != STT_STATS && options->stat_type != STT_QUERY)
+    {
+      msg_error("stats-exporter() stat type must be 'stat' or 'query'");
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
+void
+log_proto_http_scraper_responder_options_set_scrape_pattern(LogProtoServerOptionsStorage *options_storage,
+                                                            const gchar *value)
+{
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+
+  g_free(options->scraper_request_hdr_pattern);
+  options->scraper_request_hdr_pattern = g_strdup(value);
+}
+
+void
+log_proto_http_scraper_responder_options_set_scrape_freq_limit(
+  LogProtoServerOptionsStorage *options_storage,
+  gint value)
+{
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+
+  options->scrape_freq_limit = value;
+}
+
+void
+log_proto_http_scraper_responder_options_set_single_instance(
+  LogProtoServerOptionsStorage *options_storage,
+  gboolean value)
+{
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+
+  options->single_instance = value;
+}
+
+gboolean
+log_proto_http_scraper_responder_options_set_stat_type(LogProtoServerOptionsStorage *options_storage,
+                                                       const gchar *value)
+{
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+
+  if (strcmp(value, "stats") == 0)
+    {
+      options->stat_type = STT_STATS;
+      return TRUE;
+    }
+  else if (strcmp(value, "query") == 0)
+    {
+      options->stat_type = STT_QUERY;
+      return TRUE;
+    }
+  return FALSE;
+}
+
+void
+log_proto_http_scraper_responder_options_set_stat_query(LogProtoServerOptionsStorage *options_storage,
+                                                        const gchar *value)
+{
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+
+  g_free(options->stat_query);
+  options->stat_query = g_strdup(value);
+}
+
+gboolean
+log_proto_http_scraper_responder_options_set_stat_format(LogProtoServerOptionsStorage *options_storage,
+                                                         const gchar *value)
+{
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+
+  if (strcmp(value, "prometheus") == 0 || strcmp(value, "csv") == 0 || strcmp(value, "kv") == 0)
+    {
+      g_free(options->stat_format);
+      options->stat_format = g_strdup(value);
+      return TRUE;
+    }
+  return FALSE;
+}
+
+void
+log_proto_http_scraper_responder_options_set_stats_without_orpaned(LogProtoServerOptionsStorage *options_storage,
+    gboolean value)
+{
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+
+  options->stats_without_orphaned = value;
+}
+
+void
+log_proto_http_scraper_responder_options_set_stats_with_legacy(LogProtoServerOptionsStorage *options_storage,
+    gboolean value)
+{
+  LogProtoHTTPScraperResponderOptions *options = &((LogProtoHTTPScraperResponderOptionsStorage *)options_storage)->super;
+
+  options->stats_with_legacy = value;
+}

@@ -27,9 +27,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 struct findcrlf_params
 {
-  gchar *msg;
+  gchar msg[64];
   gsize msg_len;
   gsize eom_ofs;
 };

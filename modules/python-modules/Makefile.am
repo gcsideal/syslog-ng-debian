@@ -57,9 +57,13 @@ EXTRA_DIST += \
 	modules/python-modules/syslogng/modules/hypr/__init__.py		\
 	modules/python-modules/syslogng/modules/s3/__init__.py		\
 	modules/python-modules/syslogng/modules/s3/compressable_file_buffer.py		\
-	modules/python-modules/syslogng/modules/s3/s3_object.py		\
+	modules/python-modules/syslogng/modules/s3/s3_object_buffer.py		\
+	modules/python-modules/syslogng/modules/s3/s3_session_handler.py		\
 	modules/python-modules/syslogng/modules/s3/s3_destination.py		\
 	modules/python-modules/syslogng/modules/s3/scl/s3.conf		\
+	modules/python-modules/syslogng/modules/webhook/__init__.py \
+	modules/python-modules/syslogng/modules/webhook/scl/webhook.conf \
+	modules/python-modules/syslogng/modules/webhook/source.py \
 	modules/python-modules/setup.py						\
 	modules/python-modules/README.md
 
@@ -69,7 +73,7 @@ python_sysconf_module_DATA = modules/python-modules/README.md
 
 PYMODULES_PATH = modules/python-modules
 PYMODULES_BUILDDIR = $(abs_builddir)/$(PYMODULES_PATH)
-PYMODULES_SRCDIR = $(top_srcdir)/modules/python-modules
+PYMODULES_SRCDIR = $(top_srcdir)/$(PYMODULES_PATH)
 PYMODULES_MANIFEST = $(PYMODULES_BUILDDIR)/install-manifest.txt
 PYMODULES_ROOT_MODULE = syslogng
 

@@ -2,7 +2,9 @@
 #find -name '*.py'|awk '{ print "\ttests/light/functional_tests/"substr($0,3); }'|sort
 EXTRA_DIST += \
 	tests/light/functional_tests/config_change/test_backtick_substitution.py \
+	tests/light/functional_tests/config_change/test_confgen_network_load_balancer.py \
 	tests/light/functional_tests/config_change/test_manipulating_config_between_reload.py \
+	tests/light/functional_tests/config_change/test_python_custom_options.py \
 	tests/light/functional_tests/conftest.py \
 	tests/light/functional_tests/destination_drivers/example_destination/test_example_destination.py \
 	tests/light/functional_tests/destination_drivers/network_destination/test_network_destination_transport.py \
@@ -14,9 +16,11 @@ EXTRA_DIST += \
 	tests/light/functional_tests/destination_drivers/snmp_destination/v2c/test_snmp_destination_v2c_cisco_ios_traps.py \
 	tests/light/functional_tests/destination_drivers/snmp_destination/v2c/test_snmp_destination_v2c_custom_community.py \
 	tests/light/functional_tests/destination_drivers/snmp_destination/v2c/test_snmp_destination_v2c_using_macro_snmp_obj.py \
+	tests/light/functional_tests/destination_drivers/sql_destination/test_sql.py \
 	tests/light/functional_tests/destination_drivers/unix_dgram_destination/test_unix_dgram_destination.py \
 	tests/light/functional_tests/destination_drivers/unix_stream_destination/test_unix_stream_destination.py \
 	tests/light/functional_tests/filters/rate-limit/test_rate_limit_filter_acceptance.py \
+	tests/light/functional_tests/filters/test_facility_and_level_filters.py \
 	tests/light/functional_tests/filters/test_filter_reference.py \
 	tests/light/functional_tests/filters/test_multiple_filters.py \
 	tests/light/functional_tests/logpath/__init__.py \
@@ -31,37 +35,48 @@ EXTRA_DIST += \
 	tests/light/functional_tests/logpath/test_named_logpaths_with_catchall_flag.py \
 	tests/light/functional_tests/logpath/test_named_logpaths_with_fallback_flag.py \
 	tests/light/functional_tests/logpath/test_named_logpaths_with_final_flag.py \
+	tests/light/functional_tests/parsers/app-parser/test_app_parser.py \
 	tests/light/functional_tests/parsers/app-parser/test_topic_syslog.py \
 	tests/light/functional_tests/parsers/app-parser/test_topic_syslog_raw.py \
 	tests/light/functional_tests/parsers/checkpoint/test_checkpoint.py \
 	tests/light/functional_tests/parsers/cisco-parser/test_cisco_parser.py \
 	tests/light/functional_tests/parsers/csv-parser/test_csv_parser.py \
 	tests/light/functional_tests/parsers/db_parser/test_db_parser.py \
+	tests/light/functional_tests/parsers/group-lines-parser/test_group_lines_parser.py \
 	tests/light/functional_tests/parsers/mariadb-parser/test_mariadb_audit_parser.py \
-	tests/light/functional_tests/parsers/postgresql-csvlog-parser/test_postgresql_csvlog_parser.py \
+	tests/light/functional_tests/parsers/map-value-pairs/test_map_value_pairs.py \
+	tests/light/functional_tests/parsers/metrics-probe/test_metrics_probe.py \
 	tests/light/functional_tests/parsers/panos/test_panos_parser.py \
+	tests/light/functional_tests/parsers/postgresql-csvlog-parser/test_postgresql_csvlog_parser.py \
 	tests/light/functional_tests/parsers/regexp-parser/test_regexp_parser.py \
 	tests/light/functional_tests/parsers/sdata-parser/test_sdata_parser.py \
+	tests/light/functional_tests/performance/test_performance.py \
+	tests/light/functional_tests/python/sngtestmod.py \
+	tests/light/functional_tests/python/test_python.py \
 	tests/light/functional_tests/rewrites/cc-mask/test_cc_mask_and_cc_hash.py \
 	tests/light/functional_tests/rewrites/set-pri/test_set_pri.py \
 	tests/light/functional_tests/rewrites/set-tag/test_set_tag.py \
 	tests/light/functional_tests/source_drivers/file_source/test_acceptance.py \
+	tests/light/functional_tests/source_drivers/file_source/test_file_source.py \
+	tests/light/functional_tests/source_drivers/file_source/test_file_source_exclude.py \
+	tests/light/functional_tests/source_drivers/test_input_drivers.py \
 	tests/light/functional_tests/source_drivers/file_source/test_follow_freq_value.py \
 	tests/light/functional_tests/source_drivers/file_source/test_no_header_flag.py \
 	tests/light/functional_tests/source_drivers/generator_source/test_generator_source.py \
 	tests/light/functional_tests/source_drivers/internal_source/test_internal_acceptance.py \
 	tests/light/functional_tests/source_drivers/network_source/proxyprotocol/test_pp_acceptance.py \
 	tests/light/functional_tests/source_drivers/network_source/proxyprotocol/test_pp_reload.py \
-	tests/light/functional_tests/source_drivers/network_source/proxyprotocol/test_pp_tls_passthrough.py \
-	tests/light/functional_tests/source_drivers/network_source/proxyprotocol/test_pp_tls.py \
-	tests/light/functional_tests/source_drivers/network_source/proxyprotocol/test_pp_tls_with_passphrase.py \
 	tests/light/functional_tests/source_drivers/network_source/proxyprotocol/test_pp_with_multiple_clients.py \
 	tests/light/functional_tests/source_drivers/network_source/proxyprotocol/test_pp_with_simple_tcp_connection.py \
 	tests/light/functional_tests/source_drivers/network_source/proxyprotocol/test_pp_with_syslog_proto.py \
+	tests/light/functional_tests/source_drivers/network_source/test_network_transports.py \
 	tests/light/functional_tests/source_drivers/network_source/test_syslog_parser_timestamp_spinning.py \
 	tests/light/functional_tests/source_drivers/network_source/text_with_nuls/test_nul_acceptance.py \
+	tests/light/functional_tests/source_drivers/syslog_source/auto/test_auto_proto.py \
+	tests/light/functional_tests/source_drivers/syslog_source/test_syslog_transports.py \
 	tests/light/functional_tests/source_options/test_use_syslogng_pid.py \
 	tests/light/functional_tests/template_functions/graphite-output/test_graphite_output.py \
 	tests/light/functional_tests/template_functions/slog/test_secure_logging.py \
-	tests/light/functional_tests/value-pairs/test_value_pairs.py \
-	tests/light/functional_tests/tools/loggen/test_loggen_with_reconnect.py
+	tests/light/functional_tests/templates/test_template_stmt.py \
+	tests/light/functional_tests/tools/loggen/test_loggen_with_reconnect.py \
+	tests/light/functional_tests/value-pairs/test_value_pairs.py

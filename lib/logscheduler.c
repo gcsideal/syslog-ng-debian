@@ -121,7 +121,6 @@ _complete(gpointer s, gpointer arg)
     }
   else
     partition->flush_running = FALSE;
-
   g_mutex_unlock(&partition->batches_lock);
 
   if (needs_restart)
@@ -144,10 +143,7 @@ _partition_add_batch(LogSchedulerPartition *partition, LogSchedulerBatch *batch)
   g_mutex_unlock(&partition->batches_lock);
 
   if (trigger_flush)
-    {
-      main_loop_io_worker_job_submit_continuation(&partition->io_job, NULL);
-    }
-
+    main_loop_io_worker_job_submit_continuation(&partition->io_job, NULL);
 }
 
 static void
@@ -174,20 +170,32 @@ _partition_clear(LogSchedulerPartition *partition)
 
 /* LogSchedulerThreadState */
 
+static inline void
+_advance_partition(gint *partition, gint num_partitions)
+{
+  if (++(*partition) >= num_partitions)
+    *partition = 0;
+}
+
 static guint
 _get_partition_index(LogScheduler *self, LogSchedulerThreadState *thread_state, LogMessage *msg)
 {
-  if (!self->options->partition_key)
-    {
-      gint partition_index = thread_state->last_partition;
-      thread_state->last_partition = (thread_state->last_partition + 1) % self->options->num_partitions;
-      return partition_index;
-    }
-  else
+  if (self->options->partition_key)
     {
       LogTemplateEvalOptions options = DEFAULT_TEMPLATE_EVAL_OPTIONS;
       return log_template_hash(self->options->partition_key, msg, &options) % self->options->num_partitions;
     }
+
+  if (self->options->batch_size > 0)
+    {
+      if (--thread_state->batch_countdown > 0)
+        return thread_state->last_partition;
+      thread_state->batch_countdown = self->options->batch_size;
+    }
+
+  gint partition_index = thread_state->last_partition;
+  _advance_partition(&thread_state->last_partition, self->options->num_partitions);
+  return partition_index;
 }
 
 static gpointer
@@ -210,12 +218,8 @@ _flush_batch(gpointer s)
       INIT_IV_LIST_HEAD(&thread_state->batch_by_partition[partition_index]);
 
       /* add the new batch to the target partition */
-
       LogSchedulerPartition *partition = &self->partitions[partition_index];
-
       _partition_add_batch(partition, batch);
-
-
     }
   thread_state->num_messages = 0;
   return NULL;
@@ -237,43 +241,73 @@ _queue_thread(LogScheduler *self, LogSchedulerThreadState *thread_state, LogMess
   log_msg_unref(msg);
 }
 
-
 static void
-_thread_state_init(LogScheduler *self, LogSchedulerThreadState *state)
+_thread_state_init(LogScheduler *self, LogSchedulerThreadState *state, gint thread_index)
 {
   worker_batch_callback_init(&state->batch_callback);
   state->batch_callback.func = _flush_batch;
   state->batch_callback.user_data = self;
 
+  state->batch_by_partition = g_new0(struct iv_list_head, self->options->num_partitions);
   for (gint i = 0; i < self->options->num_partitions; i++)
     INIT_IV_LIST_HEAD(&state->batch_by_partition[i]);
+
+  /* Spread initial partition assignment to avoid thundering herd on partition 0 */
+  if (self->options->num_partitions > 0)
+    state->last_partition = thread_index % self->options->num_partitions;
+  else
+    state->last_partition = 0;
+
+  state->batch_countdown = self->options->batch_size;
+}
+
+static LogSchedulerThreadState *
+_ensure_thread_state(LogScheduler *self, gint thread_index)
+{
+  LogSchedulerThreadState *state = &self->thread_states[thread_index];
+
+  /* Lazy initialization, only allocate batch_by_partition on first use */
+  if (G_UNLIKELY(state->batch_by_partition == NULL))
+    _thread_state_init(self, state, thread_index);
+
+  return state;
 }
 
 static void
-_init_thread_states(LogScheduler *self)
+_thread_state_clear(LogSchedulerThreadState *state)
+{
+  /* Lazy init means some still might be NULL */
+  if (state->batch_by_partition)
+    {
+      g_free(state->batch_by_partition);
+      state->batch_by_partition = NULL;
+    }
+}
+
+static void
+_free_thread_states(LogScheduler *self)
 {
   for (gint i = 0; i < self->num_threads; i++)
-    {
-      _thread_state_init(self, &self->thread_states[i]);
-    }
+    _thread_state_clear(&self->thread_states[i]);
+  g_free(self->thread_states);
+  self->thread_states = NULL;
 }
 
 static void
 _init_partitions(LogScheduler *self)
 {
+  self->partitions = g_new0(LogSchedulerPartition, self->options->num_partitions);
   for (gint i = 0; i < self->options->num_partitions; i++)
-    {
-      _partition_init(&self->partitions[i], self->front_pipe);
-    }
+    _partition_init(&self->partitions[i], self->front_pipe);
 }
 
 static void
 _free_partitions(LogScheduler *self)
 {
   for (gint i = 0; i < self->options->num_partitions; i++)
-    {
-      _partition_clear(&self->partitions[i]);
-    }
+    _partition_clear(&self->partitions[i]);
+  g_free(self->partitions);
+  self->partitions = NULL;
 }
 
 gboolean
@@ -301,7 +335,7 @@ log_scheduler_push(LogScheduler *self, LogMessage *msg, const LogPathOptions *pa
       return;
     }
 
-  LogSchedulerThreadState *thread_state = &self->thread_states[thread_index];
+  LogSchedulerThreadState *thread_state = _ensure_thread_state(self, thread_index);
   _queue_thread(self, thread_state, msg, path_options);
 }
 
@@ -309,12 +343,14 @@ LogScheduler *
 log_scheduler_new(LogSchedulerOptions *options, LogPipe *front_pipe)
 {
   gint max_threads = main_loop_worker_get_max_number_of_threads();
-  LogScheduler *self = g_malloc0(sizeof(LogScheduler) + max_threads * sizeof(LogSchedulerThreadState));
+  LogScheduler *self = g_new0(LogScheduler, 1);
   self->num_threads = max_threads;
   self->options = options;
   self->front_pipe = log_pipe_ref(front_pipe);
 
-  _init_thread_states(self);
+  /* Allocate thread_states array but don't initialize yet (lazy init on first use) */
+  self->thread_states = g_new0(LogSchedulerThreadState, max_threads);
+
   _init_partitions(self);
   return self;
 }
@@ -324,6 +360,7 @@ log_scheduler_free(LogScheduler *self)
 {
   log_pipe_unref(self->front_pipe);
   _free_partitions(self);
+  _free_thread_states(self);
   g_free(self);
 }
 
@@ -356,9 +393,10 @@ log_scheduler_push(LogScheduler *self, LogMessage *msg, const LogPathOptions *pa
 LogScheduler *
 log_scheduler_new(LogSchedulerOptions *options, LogPipe *front_pipe)
 {
-  LogScheduler *self = g_malloc0(sizeof(LogScheduler) + 0 * sizeof(LogSchedulerThreadState));
+  LogScheduler *self = g_new0(LogScheduler, 1);
   self->options = options;
   self->front_pipe = log_pipe_ref(front_pipe);
+  self->thread_states = NULL;  /* Not used without iv_work_pool support */
 
   return self;
 }
@@ -380,9 +418,51 @@ log_scheduler_options_set_partition_key_ref(LogSchedulerOptions *options, LogTem
 }
 
 void
+_log_scheduler_readjust_num_partitions(LogSchedulerOptions *options, gint num_partitions)
+{
+  gint max_threads = main_loop_worker_get_max_number_of_threads();
+  if (num_partitions > max_threads)
+    {
+      msg_warning("The partitions() setting exceeds the maximum number of worker threads, "
+                  "clamping to worker thread count for optimal performance",
+                  evt_tag_int("partitions", num_partitions),
+                  evt_tag_int("max-threads", max_threads),
+                  evt_tag_int("clamped-to", max_threads));
+      num_partitions = max_threads;
+    }
+
+  gint optimal_partitions = max_threads / 2;
+  if (num_partitions > optimal_partitions)
+    {
+      gint memory_per_thread_bytes = num_partitions * sizeof(struct iv_list_head);
+      msg_info("High partitions() setting increases memory usage and lock contention; "
+               "consider using half the worker thread count for optimal balance",
+               evt_tag_int("partitions", num_partitions),
+               evt_tag_int("max-threads", max_threads),
+               evt_tag_int("recommended-optimal", optimal_partitions),
+               evt_tag_int("memory-per-active-thread-bytes", memory_per_thread_bytes));
+    }
+}
+
+void
+log_scheduler_options_set_num_partitions(LogSchedulerOptions *options, gint num_partitions)
+{
+  /* NOTE: we cannot readjust the number of partitions here using _log_scheduler_readjust_num_partitions
+   *       as main_loop_worker_get_max_number_of_threads may not be finalized yet */
+  options->num_partitions = num_partitions;
+}
+
+void
+log_scheduler_options_set_batch_size(LogSchedulerOptions *options, gint batch_size)
+{
+  options->batch_size = batch_size;
+}
+
+void
 log_scheduler_options_defaults(LogSchedulerOptions *options)
 {
   options->num_partitions = -1;
+  options->batch_size = 0;
   options->partition_key = NULL;
 }
 
@@ -391,8 +471,14 @@ log_scheduler_options_init(LogSchedulerOptions *options, GlobalConfig *cfg)
 {
   if (options->num_partitions == -1)
     options->num_partitions = 0;
-  if (options->num_partitions > LOGSCHEDULER_MAX_PARTITIONS)
-    options->num_partitions = LOGSCHEDULER_MAX_PARTITIONS;
+
+  if (options->batch_size > 0 && options->partition_key)
+    {
+      msg_error("parallelize(): batch_size() and worker_partition_key() are mutually exclusive");
+      return FALSE;
+    }
+
+  _log_scheduler_readjust_num_partitions(options, options->num_partitions);
   return TRUE;
 }
 

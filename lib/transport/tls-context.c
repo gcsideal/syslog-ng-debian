@@ -23,8 +23,11 @@
 
 #include "transport/tls-context.h"
 #include "messages.h"
+#include "cfg.h"
+#include "file-perms.h"
 #include "compat/openssl_support.h"
 #include "secret-storage/secret-storage.h"
+#include "string-list.h"
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -95,13 +98,12 @@ _print_and_clear_tls_session_error(TLSContext *self)
 void
 _write_line_to_keylog_file(const char *file_path, const char *line, FILE *keylog_file, GMutex *mutex)
 {
-  if(!keylog_file)
+  if (!keylog_file)
     return;
-
 
   g_mutex_lock(mutex);
   gint ret_val = fprintf(keylog_file, "%s\n", line);
-  if (ret_val != strlen(line)+1)
+  if (ret_val != strlen(line) +1)
     msg_error("Couldn't write to TLS keylogfile", evt_tag_errno("error", ret_val));
 
   fflush(keylog_file);
@@ -111,7 +113,7 @@ _write_line_to_keylog_file(const char *file_path, const char *line, FILE *keylog
 static void
 _dump_tls_keylog(const SSL *ssl, const char *line)
 {
-  if(!ssl)
+  if (!ssl)
     return;
 
   SSL_CTX *ssl_ctx = SSL_get_SSL_CTX(ssl);
@@ -125,8 +127,8 @@ _setup_keylog_file(TLSContext *self)
   if (!self->keylog_file_path)
     return TRUE;
 
-  self->keylog_file = fopen(self->keylog_file_path, "a");
-  if(!self->keylog_file)
+  self->keylog_file = file_perm_options_fopen(&self->keylog_file_perm_options, self->keylog_file_path, "a");
+  if (!self->keylog_file)
     {
       msg_error("Error opening keylog-file",
                 evt_tag_str(EVT_TAG_FILENAME, self->keylog_file_path),
@@ -213,20 +215,20 @@ tls_context_setup_ssl_options(TLSContext *self)
   if (self->ssl_options != TSO_NONE)
     {
       glong ssl_options = 0;
-      if(self->ssl_options & TSO_NOSSLv2)
+      if (self->ssl_options & TSO_NOSSLv2)
         ssl_options |= SSL_OP_NO_SSLv2;
-      if(self->ssl_options & TSO_NOSSLv3)
+      if (self->ssl_options & TSO_NOSSLv3)
         ssl_options |= SSL_OP_NO_SSLv3;
-      if(self->ssl_options & TSO_NOTLSv1)
+      if (self->ssl_options & TSO_NOTLSv1)
         ssl_options |= SSL_OP_NO_TLSv1;
 #ifdef SSL_OP_NO_TLSv1_2
-      if(self->ssl_options & TSO_NOTLSv11)
+      if (self->ssl_options & TSO_NOTLSv11)
         ssl_options |= SSL_OP_NO_TLSv1_1;
-      if(self->ssl_options & TSO_NOTLSv12)
+      if (self->ssl_options & TSO_NOTLSv12)
         ssl_options |= SSL_OP_NO_TLSv1_2;
 #endif
 #ifdef SSL_OP_NO_TLSv1_3
-      if(self->ssl_options & TSO_NOTLSv13)
+      if (self->ssl_options & TSO_NOTLSv13)
         ssl_options |= SSL_OP_NO_TLSv1_3;
 #endif
 
@@ -281,7 +283,7 @@ tls_context_setup_dh(TLSContext *self)
   if (!self->dhparam_file)
     return openssl_ctx_setup_dh(self->ssl_ctx);
 
-  if(!_is_file_accessible(self, self->dhparam_file))
+  if (!_is_file_accessible(self, self->dhparam_file))
     return FALSE;
 
   if (!openssl_ctx_load_dh_from_file(self->ssl_ctx, self->dhparam_file))
@@ -305,6 +307,16 @@ tls_context_setup_cipher_suite(TLSContext *self)
     return FALSE;
 #endif
 
+  return TRUE;
+}
+
+static gboolean
+tls_context_setup_compression(TLSContext *self)
+{
+  if (self->allow_compress)
+    SSL_CTX_clear_options(self->ssl_ctx, SSL_OP_NO_COMPRESSION);
+  else
+    SSL_CTX_set_options(self->ssl_ctx, SSL_OP_NO_COMPRESSION);
   return TRUE;
 }
 
@@ -608,6 +620,9 @@ tls_context_setup_context(TLSContext *self)
   if (!tls_context_setup_cipher_suite(self))
     goto error;
 
+  if (!tls_context_setup_compression(self))
+    goto error;
+
   if (!tls_context_setup_sigalgs(self))
     goto error;
 
@@ -637,6 +652,8 @@ tls_context_setup_session(TLSContext *self)
     return NULL;
 
   SSL *ssl = SSL_new(self->ssl_ctx);
+  if (!ssl)
+    return NULL;
 
   if (self->mode == TM_CLIENT)
     SSL_set_connect_state(ssl);
@@ -707,7 +724,7 @@ tls_context_set_ssl_options_by_name(TLSContext *self, GList *options)
   self->ssl_options = TSO_NONE;
 
   GList *l;
-  for (l=options; l != NULL; l=l->next)
+  for (l = options; l != NULL; l = l->next)
     {
       if (strcasecmp(l->data, "no-sslv2") == 0 || strcasecmp(l->data, "no_sslv2") == 0)
         self->ssl_options |= TSO_NOSSLv2;
@@ -855,6 +872,18 @@ tls_context_set_cipher_suite(TLSContext *self, const gchar *cipher_suite)
   self->cipher_suite = g_strdup(cipher_suite);
 }
 
+void
+tls_context_set_allow_compress(TLSContext *self, gboolean allow_compress)
+{
+  if (allow_compress)
+    {
+      msg_warning("WARNING: you are setting tls(allow-compress(yes)), please note that SSL compression is not considered "
+                  "safe anymore and OpenSSL 3.2 completely disallows it at its default security level. You might be able "
+                  "to re-enable it using @SEC_LEVEL in the cipher list. Without extra steps, OpenSSL ignores this setting");
+    }
+  self->allow_compress = allow_compress;
+}
+
 gboolean
 tls_context_set_tls13_cipher_suite(TLSContext *self, const gchar *tls13_cipher_suite, GError **error)
 {
@@ -901,7 +930,7 @@ gboolean
 tls_context_set_conf_cmds(TLSContext *self, GList *cmds, GError **error)
 {
 #if SYSLOG_NG_HAVE_DECL_SSL_CONF_CTX_NEW
-  g_list_foreach(self->conf_cmds_list, (GFunc) g_free, NULL);
+  string_list_free(self->conf_cmds_list);
   self->conf_cmds_list = cmds;
   return TRUE;
 #else
@@ -938,6 +967,12 @@ tls_context_set_ocsp_stapling_verify(TLSContext *self, gboolean ocsp_stapling_ve
   self->ocsp_stapling_verify = ocsp_stapling_verify;
 }
 
+void
+tls_context_set_extended_key_usage_verify(TLSContext *self, gboolean extended_key_usage_verify)
+{
+  self->extended_key_usage_verify = extended_key_usage_verify;
+}
+
 /* NOTE: location is a string description where this tls context was defined, e.g. the location in the config */
 TLSContext *
 tls_context_new(TLSMode mode, const gchar *location)
@@ -949,6 +984,14 @@ tls_context_new(TLSMode mode, const gchar *location)
   self->verify_mode = TVM_REQUIRED | TVM_TRUSTED;
   self->ssl_options = TSO_NOSSLv2;
   self->location = g_strdup(location ? : "n/a");
+
+  /* Snapshot perm()/owner()/group() defaults now: tls_context_new() runs
+   * during parsing while `configuration' is valid; the keylog file is
+   * opened later when it is no longer (see lib/mainloop.c). */
+  if (configuration)
+    self->keylog_file_perm_options = configuration->file_perm_options;
+  else /* Only unit tests instantiate a TLSContext without a live `configuration'. */
+    file_perm_options_global_defaults(&self->keylog_file_perm_options);
 
   if (self->mode == TM_CLIENT)
     self->ssl_ctx = SSL_CTX_new(SSLv23_client_method());
@@ -967,9 +1010,9 @@ _tls_context_free(TLSContext *self)
 {
   g_free(self->location);
   SSL_CTX_free(self->ssl_ctx);
-  g_list_foreach(self->conf_cmds_list, (GFunc) g_free, NULL);
-  g_list_foreach(self->trusted_fingerprint_list, (GFunc) g_free, NULL);
-  g_list_foreach(self->trusted_dn_list, (GFunc) g_free, NULL);
+  string_list_free(self->conf_cmds_list);
+  string_list_free(self->trusted_fingerprint_list);
+  string_list_free(self->trusted_dn_list);
   g_free(self->key_file);
   g_free(self->pkcs12_file);
   g_free(self->cert_file);
@@ -985,7 +1028,7 @@ _tls_context_free(TLSContext *self)
   g_free(self->sni);
   g_free(self->keylog_file_path);
 
-  if(self->keylog_file)
+  if (self->keylog_file)
     fclose(self->keylog_file);
 
   g_free(self);

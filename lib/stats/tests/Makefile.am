@@ -20,7 +20,8 @@ lib_stats_tests_TESTS		+= \
 	lib/stats/tests/test_external_ctr_reg \
 	lib/stats/tests/test_alias_ctr_reg \
 	lib/stats/tests/test_stats_prometheus \
-	lib/stats/tests/test_stats_cluster_key_builder
+	lib/stats/tests/test_stats_cluster_key_builder \
+	lib/stats/tests/test_stats_aggregator_lifecycle
 
 lib_stats_tests_test_stats_query_CFLAGS	= $(TEST_CFLAGS)
 lib_stats_tests_test_stats_query_LDADD	= \
@@ -44,4 +45,8 @@ lib_stats_tests_test_stats_prometheus_LDADD = \
 
 lib_stats_tests_test_stats_cluster_key_builder_CFLAGS = $(TEST_CFLAGS)
 lib_stats_tests_test_stats_cluster_key_builder_LDADD = \
+	$(TEST_LDADD) $(stats_test_extra_modules)
+
+lib_stats_tests_test_stats_aggregator_lifecycle_CFLAGS = $(TEST_CFLAGS)
+lib_stats_tests_test_stats_aggregator_lifecycle_LDADD = \
 	$(TEST_LDADD) $(stats_test_extra_modules)

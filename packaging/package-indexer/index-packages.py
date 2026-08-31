@@ -22,13 +22,18 @@
 #############################################################################
 
 import logging
+import os.path
+from time import sleep
 from argparse import ArgumentParser
 from pathlib import Path
 from sys import stdin
 from typing import List
 
-from indexer import Indexer, NightlyDebIndexer, StableDebIndexer
+from indexer import Indexer, NightlyDebIndexer, StableDebIndexer, NightlyRPMIndexer, StableRPMIndexer
 from config import Config
+
+logger = logging.getLogger("index-packages")
+logger.setLevel(logging.INFO)
 
 
 def add_required_arguments(parser: ArgumentParser) -> None:
@@ -117,13 +122,14 @@ def load_config(args: dict) -> Config:
 
 def construct_indexers(cfg: Config, args: dict) -> List[Indexer]:
     suite = args["suite"]
+    cdn = cfg.create_cdn(suite)
 
     incoming_remote_storage_synchronizer = cfg.create_incoming_remote_storage_synchronizer(suite)
     indexed_remote_storage_synchronizer = cfg.create_indexed_remote_storage_synchronizer(suite)
-    cdn = cfg.create_cdn(suite)
 
     gpg_key_path = Path(cfg.get_gpg_key_path())
     gpg_key_passphrase = stdin.read() if args["gpg_key_passphrase_from_stdin"] else None
+    gpg_key_name = cfg.get_gpg_key_name()
 
     indexers: List[Indexer] = []
 
@@ -132,10 +138,19 @@ def construct_indexers(cfg: Config, args: dict) -> List[Indexer]:
             NightlyDebIndexer(
                 incoming_remote_storage_synchronizer=incoming_remote_storage_synchronizer,
                 indexed_remote_storage_synchronizer=indexed_remote_storage_synchronizer,
-                cdn=cdn,
                 run_id=args["run_id"],
                 gpg_key_path=gpg_key_path,
                 gpg_key_passphrase=gpg_key_passphrase,
+            )
+        )
+        indexers.append(
+            NightlyRPMIndexer(
+                incoming_remote_storage_synchronizer=incoming_remote_storage_synchronizer,
+                indexed_remote_storage_synchronizer=indexed_remote_storage_synchronizer,
+                run_id=args["run_id"],
+                gpg_key_path=gpg_key_path,
+                gpg_key_passphrase=gpg_key_passphrase,
+                gpg_key_name=gpg_key_name,
             )
         )
     elif suite == "stable":
@@ -143,10 +158,19 @@ def construct_indexers(cfg: Config, args: dict) -> List[Indexer]:
             StableDebIndexer(
                 incoming_remote_storage_synchronizer=incoming_remote_storage_synchronizer,
                 indexed_remote_storage_synchronizer=indexed_remote_storage_synchronizer,
-                cdn=cdn,
                 run_id=args["run_id"],
                 gpg_key_path=gpg_key_path,
                 gpg_key_passphrase=gpg_key_passphrase,
+            )
+        )
+        indexers.append(
+            StableRPMIndexer(
+                incoming_remote_storage_synchronizer=incoming_remote_storage_synchronizer,
+                indexed_remote_storage_synchronizer=indexed_remote_storage_synchronizer,
+                run_id=args["run_id"],
+                gpg_key_path=gpg_key_path,
+                gpg_key_passphrase=gpg_key_passphrase,
+                gpg_key_name=gpg_key_name,
             )
         )
     else:
@@ -160,14 +184,15 @@ def main() -> None:
     init_logging(args)
 
     cfg = load_config(args)
+    suite = args["suite"]
+    cdn = cfg.create_cdn(suite)
 
-    indexers = construct_indexers(cfg, args)
-    if args["flush_cache_only"]:
-        for indexer in indexers:
-            indexer.flush_cdn_cache()
-    else:
+    if not args["flush_cache_only"]:
+        indexers = construct_indexers(cfg, args)
         for indexer in indexers:
             indexer.index()
+
+    cdn.refresh_cache(Path("*"))
 
 
 if __name__ == "__main__":

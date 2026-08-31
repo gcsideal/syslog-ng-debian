@@ -129,6 +129,24 @@ stats_aggregator_stop(StatsAggregator *self)
     stats_aggregator_unregister(self);
 }
 
+void
+stats_aggregator_reset(StatsAggregator *self)
+{
+  main_loop_assert_main_thread();
+
+  if (self && self->reset)
+    self->reset(self);
+
+  /* NOTE: This will align all the timers to the next period boundary that leads to
+   *    - a consistent update time for all the aggregators
+   *    - a consistent time period for the calculation of the aggregated value
+   * The latter is important because the users and our tests expect the aggregated value to be
+   * calculated for the same time period, and expect similar values for the same time period.
+   */
+  _stop_timer(self);
+  _restart_timer(self);
+}
+
 static gboolean
 _is_orphaned(StatsAggregator *self)
 {
@@ -176,8 +194,16 @@ stats_aggregator_init_instance(StatsAggregator *self, StatsClusterKey *sc_key, g
 void
 stats_aggregator_free(StatsAggregator *self)
 {
+  g_assert(self);
+
+  /* Cancel any armed update_timer before freeing: its cookie points to
+   * self, so a dispatch after free would deref freed memory.
+   * stats_aggregator_unregister() is idempotent and safe to call
+   * regardless of prior register/unregister state. */
+  stats_aggregator_unregister(self);
+
   stats_cluster_key_cloned_free(&self->key);
-  if (self && self->free_fn)
+  if (self->free_fn)
     self->free_fn(self);
   g_free(self);
 }
