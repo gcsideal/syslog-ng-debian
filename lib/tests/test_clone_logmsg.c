@@ -82,18 +82,30 @@ teardown(void)
 
 TestSuite(clone_logmsg, .init = setup, .fini = teardown);
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS.
+ * The wrapper struct is required because Criterion parameter arrays are
+ * struct-based, and we need a by-value message buffer in each test case.
+ */
+typedef struct _CloneLogMessageParam
+{
+  gchar msg[2048];
+} CloneLogMessageParam;
+
 ParameterizedTestParameters(clone_logmsg, test_cloning_with_log_message)
 {
-  const gchar *messages[] =
+  static CloneLogMessageParam messages[] =
   {
-    "<7>1 2006-10-29T01:59:59.156+01:00 mymachine.example.com evntslog - ID47 [exampleSDID@0 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"][examplePriority@0 class=\"high\"] BOMAn application event log entry...",
-    "<132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [exampleSDID@0 iut=\"3\"] [eventSource=\"Application\" eventID=\"1011\"][examplePriority@0 class=\"high\"] BOMAn application event log entry...",
+    {"<7>1 2006-10-29T01:59:59.156+01:00 mymachine.example.com evntslog - ID47 [exampleSDID@0 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"][examplePriority@0 class=\"high\"] BOMAn application event log entry..."},
+    {"<132>1 2006-10-29T01:59:59.156+01:00 mymachine evntslog - - [exampleSDID@0 iut=\"3\"] [eventSource=\"Application\" eventID=\"1011\"][examplePriority@0 class=\"high\"] BOMAn application event log entry..."},
   };
 
-  return cr_make_param_array(const gchar *, messages, sizeof(messages) / sizeof(const gchar *));
+  return cr_make_param_array(CloneLogMessageParam, messages, G_N_ELEMENTS(messages));
 }
 
-ParameterizedTest(const gchar *msg, clone_logmsg, test_cloning_with_log_message)
+ParameterizedTest(CloneLogMessageParam *param, clone_logmsg, test_cloning_with_log_message)
 {
   LogMessage *original_log_message, *log_message, *cloned_log_message;
   regex_t bad_hostname;
@@ -103,10 +115,11 @@ ParameterizedTest(const gchar *msg, clone_logmsg, test_cloning_with_log_message)
   parse_options.flags = LP_SYSLOG_PROTOCOL;
   parse_options.bad_hostname = &bad_hostname;
 
-  original_log_message = msg_format_parse(&parse_options, (const guchar *) msg, strlen(msg));
+  original_log_message = msg_format_parse(&parse_options, (const guchar *) param->msg, strlen(param->msg));
   log_msg_set_saddr(original_log_message, addr);
-  log_message = msg_format_parse(&parse_options, (const guchar *) msg, strlen(msg));
+  log_message = msg_format_parse(&parse_options, (const guchar *) param->msg, strlen(param->msg));
   log_msg_set_saddr(log_message, addr);
+  log_message->timestamps[LM_TS_STAMP] = original_log_message->timestamps[LM_TS_STAMP];
 
   log_msg_set_tag_by_name(log_message, "newtag");
   path_options.ack_needed = FALSE;

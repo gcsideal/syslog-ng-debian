@@ -23,28 +23,30 @@
 #ifndef BIGQUERY_WORKER_HPP
 #define BIGQUERY_WORKER_HPP
 
-#include "bigquery-worker.h"
 #include "bigquery-dest.hpp"
+#include "grpc-dest-worker.hpp"
 
 #include "compat/cpp-start.h"
 #include "messages.h"
 #include "compat/cpp-end.h"
 
 #include <grpcpp/create_channel.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/message.h>
 
 #include <string>
 #include <memory>
 #include <cstddef>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch-default"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #include "google/cloud/bigquery/storage/v1/storage.grpc.pb.h"
+#pragma GCC diagnostic pop
 
 namespace syslogng {
 namespace grpc {
 namespace bigquery {
 
-class DestinationWorker final
+class DestinationWorker final : public syslogng::grpc::DestWorker
 {
 private:
   struct Slice
@@ -54,31 +56,23 @@ private:
   };
 
 public:
-  DestinationWorker(BigQueryDestWorker *s);
+  DestinationWorker(GrpcDestWorker *s);
   ~DestinationWorker();
 
-  bool init();
-  void deinit();
-  bool connect();
-  void disconnect();
-  LogThreadedResult insert(LogMessage *msg);
-  LogThreadedResult flush(LogThreadedFlushMode mode);
+  bool connect() override;
+  void disconnect() override;
+  LogThreadedResult insert(LogMessage *msg) override;
+  LogThreadedResult flush(LogThreadedFlushMode mode) override;
 
 private:
-  void prepare_context(::grpc::ClientContext &ctx);
   std::shared_ptr<::grpc::Channel> create_channel();
   void construct_write_stream();
   void prepare_batch();
   bool should_initiate_flush();
-  bool insert_field(const google::protobuf::Reflection *reflection, const Field &field,
-                    LogMessage *msg, google::protobuf::Message *message);
   LogThreadedResult handle_row_errors(const google::cloud::bigquery::storage::v1::AppendRowsResponse &response);
-  Slice format_template(LogTemplate *tmpl, LogMessage *msg, GString *value, LogMessageValueType *type);
   DestinationDriver *get_owner();
 
 private:
-  BigQueryDestWorker *super;
-
   std::string table;
   bool connected;
 

@@ -1,5 +1,4 @@
 #!/bin/sh
-#!/bin/bash
 
 ### syslog-ng-debun: syslog debug bundle generator
 ### Written/Copyright: Gyorgy Pasztor <pasztor@linux.gyakg.u-szeged.hu>, (c) 2014-2016.
@@ -12,9 +11,9 @@ LANG=en_US
 LC_ALL=C
 export LANG LC_ALL
 
-version="0.3.20.20220117"
+version="0.3.22.20260428"
 
-### Check for "local" variable support
+### Check for `local` variable support, as not all POSIX shells provide it. If unsupported, try to fall back to Bash when available; otherwise, exit with an error.
 if type local | grep builtin >/dev/null; then
 	:
 elif type bash >/dev/null; then
@@ -51,6 +50,7 @@ netstatpunt () { netstat -punt ; }
 netstatpn () { netstat -pn ; }
 netstatsu="netstat -su"
 binprefix=/opt/syslog-ng
+user_binprefix=
 absscldirs="/usr/share/syslog-ng/include/scl"
 relscldirs="share/include/scl share/syslog-ng/include/scl"
 workdir=/tmp
@@ -58,6 +58,7 @@ lsof="lsof -p"
 no_lsof_fallback() { echo "No lsof in path."; }
 pscmd="ps auxwwwwwf"
 pseao="ps -eao"
+pspoo() { ps -p "${1}" -o pid= -o ppid= ; }
 cpiopdL="cpio -pdL"
 findL () { find -L "$@" ; }
 dfk="df -k"
@@ -112,7 +113,7 @@ Usage: syslog-ng-debun [OPTIONS]
 General Options:
   -r		Run actual information gathering
   -h		Show this help page
-  -R [dir]	Syslog-ng-PE's alternate install dir, instead of /opt/syslog-ng
+  -R [dir]	Syslog-ng's alternate install dir, instead of /opt/syslog-ng
   -W [dir]	Work dir, where debug bundle will be placed
   -l		"light" collect: Don't get data, which may disturb your sense about
 		privacy, like process tree, fstab, etc. If you use with -d, then it
@@ -188,7 +189,7 @@ while getopts "rhlKdD:pP:T:w:i:W:R:t:s" opt ; do
 			debug_mode=1
 			;;
 		R)
-			binprefix="$OPTARG"
+			user_binprefix="$OPTARG"
 			;;
 		t)
 			timeout="$OPTARG"
@@ -223,17 +224,66 @@ fi
 [ -n "$timeout" ] && [ -z "$debug_mode" ] && debun_usage 2 "Timeout without debug mode or packet capture"
 [ -n "$privacy_mode" ] && [ "x$debug_params" = "x$default_debug_params" ] && debug_params="$default_ldebug_params"
 
-syslogbin=${binprefix}/sbin/syslog-ng
-syslogngctlbin=${binprefix}/sbin/syslog-ng-ctl
-syslogngquerybin=${binprefix}/sbin/syslog-ng-query
-vardir=${binprefix}/var
-piddir=${vardir}/run
-confdir=${binprefix}/etc
-if [ -x "${binprefix}/libexec/syslog-ng" ]; then
-	syslogrealbin=${binprefix}/libexec/syslog-ng
-else
-	syslogrealbin=${binprefix}/sbin/syslog-ng
-fi
+run_with_timeout () {
+	# Cross-platform timeout function
+	# run_with_timeout [-t timeout_sec] command
+	local timeout_sec=180
+	local kill_mode='TERM'
+
+	case "$1" in
+		'-t')
+			case "$2" in
+				''|*[!0-9]*)
+					echo "Error: run_with_timeout: -t requires an integer argument" >&4
+					return 1 ;;
+				*)	timeout_sec="$2" ;;
+			esac
+			shift ; shift ;;
+	esac
+	if [ -z "$1" ] ; then
+		echo "Error: run_with_timeout: No command passed" >&4
+		return 1
+	fi
+
+	"$@" &
+	local cmd_pid=$!
+	local cmd_fingerprint="$(pspoo "${cmd_pid}" 2>/dev/null)"
+	local timed_out_file="${tmpdir:-/tmp}/syslog-ng-debun_run-timeout.${cmd_pid}.flag"
+
+	(
+		local i=0
+		while [ "${i}" -lt "${timeout_sec}" ] ; do
+			sleep 1
+			i=$((i + 1))
+		done
+		printf '%s\n' "${kill_mode}" > "${timed_out_file}" 2>/dev/null
+		if [ "${cmd_fingerprint:-unset}" = "$(pspoo "${cmd_pid}" 2>/dev/null)" ]; then
+			kill -s "${kill_mode}" "${cmd_pid}" >/dev/null 2>&1
+			sleep 2
+			if [ "${cmd_fingerprint:-unset}" = "$(pspoo "${cmd_pid}" 2>/dev/null)" ]; then
+				kill_mode='KILL'
+				printf '%s\n' "${kill_mode}" > "${timed_out_file}" 2>/dev/null
+				kill -s "${kill_mode}" "${cmd_pid}" >/dev/null 2>&1
+			fi
+		fi
+	) &
+	local watchdog_pid=$!
+	local watchdog_fingerprint="$(pspoo "${watchdog_pid}" 2>/dev/null)"
+
+	wait "${cmd_pid}" >/dev/null 2>&1
+	local ret=$?
+	if [ "${watchdog_fingerprint:-unset}" = "$(pspoo "${watchdog_pid}" 2>/dev/null)" ]; then
+		kill -s "${kill_mode}" "${watchdog_pid}" >/dev/null 2>&1
+	fi
+	wait "${watchdog_pid}" >/dev/null 2>&1
+	if [ -f "${timed_out_file}" ]; then
+		kill_mode=$(cat "${timed_out_file}" 2>/dev/null)
+		rm -f "${timed_out_file}" >/dev/null 2>&1
+		printf 'Warning: Command timeout reached: %ss (%s): %s\n' "${timeout_sec}" "${kill_mode:-unknown}" "${*}" >&4
+		ret=124
+	fi
+	return $ret
+}
 
 debun_init () {
 	#Create temp dir, to place files into
@@ -247,7 +297,7 @@ debun_init () {
 	# Start redirections
 
 	#exec 3>&1 >${tmpdir}/syslog-ng.debun.txt 2>${tmpdir}/syslog-ng.debun.txt
-	exec 3>&1 >${tmpdir}/syslog-ng.debun.txt 2>&1
+	exec 3>&1 >${tmpdir}/syslog-ng.debun.txt 4>&1 2>&1
 	echo "Syslog-NG DEBUg buNdle generator"
 	sync
 	while [ ! -f ${tmpdir}/syslog-ng.debun.txt ] ; do sleep 1 ; done
@@ -299,11 +349,13 @@ debun_do_tarball () {
 	${selftar} | ${gzipcmd} >${tmpdir}.tgz
 	cd ..
 	rm -r "${tmpdir}"
-	printf "Terminating live message watcher: "
+	printf "Terminating live message watcher... "
 	sync
-	kill ${tailpid}
+	kill ${tailpid} 2>/dev/null
+	wait ${tailpid} 2>/dev/null
 	sync
 	sleep 1
+	printf "done."
 }
 
 debun_generate_hashes () {
@@ -321,12 +373,12 @@ debun_final() {
 		acquire_syslog_stats
 	fi
 
-	printf "\nGenerating hashes..."
+	printf "Generating hashes..."
 	debun_generate_hashes
 	printf " done.\nDebug Bundle generation: Done.\n"
 	exec >&3 2>&1
 	debun_do_tarball
-	printf "\n\nYour debug bundle will be stored at %s.tgz\n" "$tmpdir"
+	printf "\n\nYour debug bundle has been stored at %s.tgz\n" "$tmpdir"
 }
 
 add_extra () {
@@ -393,7 +445,7 @@ acquire_system_info () {
 	printf "System's full uname: "
 	uname -a | tee "${tmpdir}/sys.uname"
 	free >${tmpdir}/sys.free
-	vmstat >${tmpdir}/sys.vmstat
+	$vmstat >${tmpdir}/sys.vmstat
 	topcmd "${tmpdir}/sys.top"
 	if is_available ${opensslcmd}; then
 		${opensslcmd} version >${tmpdir}/sys.openssl.version
@@ -656,9 +708,11 @@ remove_passwords_from_file () {
 	# The goal is matching substrings that look like this, to replace the password string, and preserve original formatting:
 	# password ( 'password-string' ) -->  password ( '___PASSWORD_REMOVED___' )
 	###
-	${sed_equivalent_cmd} "s|password([ \t\r\n\v\f]*)\(([ \t\r\n\v\f]*)([\"']?)[^)\"']+\3([ \t\r\n\v\f]*)\)|password\1(\2\3___PASSWORD_REMOVED___\3\4)|g" <"${1}" | \
-		${sed_equivalent_cmd} "s|token([ \t\r\n\v\f]*)\(([ \t\r\n\v\f]*)([\"']?)[^)\"']+\3([ \t\r\n\v\f]*)\)|token\1(\2\3___AUTH_TOKEN_REMOVED___\3\4)|g" | \
-		${sed_equivalent_cmd} "s|Authorization: [^\"']+|Authorization: ___AUTH_TOKEN_REMOVED___|g" >"${1}.bak"
+	${sed_equivalent_cmd}   "s|password([ \t\r\n\v\f]*)\\(([ \t\r\n\v\f]*)([\"']?)([^)\"']+)\\3([ \t\r\n\v\f]*)\\)|password\\1(\\2\\3___PASSWORD_REMOVED___\\3\\5)|g" < "${1}" | \
+		${sed_equivalent_cmd} "s|password([ \t\r\n\v\f]*)=([ \t\r\n\v\f]*)([\"']?)([^\"'; \t\r\n\v\f]+)\\3|password\\1=\\2\\3___PASSWORD_REMOVED___\\3|g" | \
+		${sed_equivalent_cmd} "s|token([ \t\r\n\v\f]*)\\(([ \t\r\n\v\f]*)([\"']?)([^)\"']+)\\3([ \t\r\n\v\f]*)\\)|token\\1(\\2\\3___AUTH_TOKEN_REMOVED___\\3\\5)|g" | \
+		${sed_equivalent_cmd} "s|token([ \t\r\n\v\f]*)=([ \t\r\n\v\f]*)([\"']?)([^\"'; \t\r\n\v\f]+)\\3|token\\1=\\2\\3___AUTH_TOKEN_REMOVED___\\3|g" | \
+		${sed_equivalent_cmd} "s|Authorization: [^\"']+|Authorization: ___AUTH_TOKEN_REMOVED___|g" > "${1}.bak"
 
 	[ -s "${1}.bak" ] && mv "${1}.bak" "${1}"
 }
@@ -685,7 +739,7 @@ acquire_syslog_config () {
 	else
 		cp ${tmpdir}/syslog.etc.files ${tmpdir}/syslog.etc.files.saved
 	fi
-	$cpiopdL ${tmpdir}/config < ${tmpdir}/syslog.etc.files.saved
+	$cpiopdL ${tmpdir}/config < ${tmpdir}/syslog.etc.files.saved 2>/dev/null
 
 	findL ${tmpdir}/config -name "*.conf*" | \
 		while read FILE; do \
@@ -749,16 +803,16 @@ acquire_syslog_stats () {
 	#handy-dandy delay magic, triggered when we'd step on our own foot
 	[ -f ${tmpdir}/syslog.stats.${tsdata} ] && sleep 5 && tsdata=$( timestamp )
 
-	${syslogngctlbin} stats > ${tmpdir}/syslog.stats.${tsdata} 2>&1
+	run_with_timeout ${syslogngctlbin} stats > ${tmpdir}/syslog.stats.${tsdata} 2>&1
 	echo ${syslogngctlbin} stats
 	tsdata=$( timestamp )
-	${syslogngctlbin} query get "*" > ${tmpdir}/syslog.query.all.${tsdata} 2>/dev/null
+	run_with_timeout ${syslogngctlbin} query get "*" > ${tmpdir}/syslog.query.all.${tsdata} 2>/dev/null
 	echo ${syslogngctlbin} query get "*"
 	if [ -x ${syslogngquerybin} ]; then
 		#if we reach this brach, then syslog.query.all - as generated above - will not contain any meaningful data
 		rm ${tmpdir}/syslog.query.all.${tsdata}
 		tsdata=$( timestamp )
-		${syslogngquerybin} sum "*" > ${tmpdir}/syslog.query.all.${tsdata} 2>/dev/null
+		run_with_timeout ${syslogngquerybin} sum "*" > ${tmpdir}/syslog.query.all.${tsdata} 2>/dev/null
 		echo ${syslogngquerybin} sum "*"
 	fi
 }
@@ -775,11 +829,11 @@ acquire_syslog_info () {
 		acquire_syslog_stats
 	fi
 
-	if ${syslogngctlbin} show-license-info > ${tmpdir}/syslog.license-usage 2>&1; then
-		${syslogngctlbin} show-license-info --json > ${tmpdir}/syslog.license-usage.json 2>/dev/null
+	if run_with_timeout ${syslogngctlbin} show-license-info > ${tmpdir}/syslog.license-usage 2>&1; then
+		run_with_timeout ${syslogngctlbin} show-license-info --json > ${tmpdir}/syslog.license-usage.json 2>/dev/null
 	fi
 	echo ${syslogngctlbin} show-license-info
-	${syslogngctlbin} credentials status > ${tmpdir}/syslog.credentials.status 2>&1
+	run_with_timeout ${syslogngctlbin} credentials status > ${tmpdir}/syslog.credentials.status 2>&1
 	echo ${syslogngctlbin} credentials status
 
 	for i in ${sngallpids} ; do
@@ -798,6 +852,11 @@ acquire_syslog_info () {
 }
 
 acquire_syslog_var () {
+	if [ ! -d "${vardir}" ]; then
+		printf "WARNING: vardir '%s' does not exist, skipping var collection.\n" "${vardir}"
+		return
+	fi
+
 	ls -laR "${vardir}" >${tmpdir}/syslog.lslR.var 2>&1
 
 	$duks "${vardir}/" >${tmpdir}/syslog.duks.var
@@ -926,24 +985,119 @@ acquire_syslog_nprv () {
 }
 
 acquire_running_syslog_config() {
-	if ${syslogngctlbin} config >/dev/null 2>&1; then
-		${syslogngctlbin} config -p > "${tmpdir}/syslog-ng.ctl.running.conf" 2>&1
+	if run_with_timeout ${syslogngctlbin} config >/dev/null 2>&1; then
+		run_with_timeout ${syslogngctlbin} config -p > "${tmpdir}/syslog-ng.ctl.running.conf" 2>&1
 		[ -z "$saveprivatekeys" ] && remove_passwords_from_file "${tmpdir}/syslog-ng.ctl.running.conf"
 	fi
 }
 
+# Set all syslog-ng binary path variables from a given install prefix.
+fhs_set_binary_paths_from_prefix () {
+	local prefix="${1}"
+
+	binprefix="${prefix}"
+
+	syslogbin="${prefix}/sbin/syslog-ng"
+	syslogngctlbin="${prefix}/sbin/syslog-ng-ctl"
+	syslogngquerybin="${prefix}/sbin/syslog-ng-query"
+
+	if [ -x "${prefix}/libexec/syslog-ng" ]; then
+		syslogrealbin="${prefix}/libexec/syslog-ng"
+	else
+		syslogrealbin="${syslogbin}"
+	fi
+}
+
+# Set all syslog-ng path variables from a given install prefix.
+# Callers may override individual variables afterwards for non-standard layouts.
+fhs_set_paths_from_prefix () {
+	local prefix="${1}"
+
+	binprefix="${prefix}"
+
+	fhs_set_binary_paths_from_prefix "${prefix}"
+
+	confdir="${prefix}/etc"
+
+	vardir="${prefix}/var"
+	piddir="${vardir}/run"
+}
+
+# Only called when -R was explicitly passed on the command line.
+fhs_apply_binprefix_override () {
+	# At this point binprefix holds the auto-detected value from fhs_set_*;
+	# override it with the user-supplied -R argument.
+	printf "NOTE: overriding auto-detected install path '%s' with -R parameter: %s\n" "$binprefix" "$user_binprefix"
+
+	# NOTE: Currently we assume here that all the locations set in fhs_set_paths_from_prefix are under the same prefix,
+	#       so not only the binary paths, but also the config/var/pid dirs will be overridden.
+	fhs_set_paths_from_prefix "${user_binprefix}"
+}
+
 fhs_set_linux () {
+	fhs_set_paths_from_prefix /usr
+
 	confdir=/etc/syslog-ng
 	vardir=/var/lib/syslog-ng
 	piddir=/var/lib/syslog-ng
-	syslogbin=/usr/sbin/syslog-ng
-	syslogngctlbin=/usr/sbin/syslog-ng-ctl
-	syslogngquerybin=/usr/sbin/syslog-ng-query
-	syslogrealbin=/usr/sbin/syslog-ng
 }
 
 fhs_set_unix () {
 	:
+}
+
+fhs_set_freebsd () {
+	# FreeBSD: syslog-ng installed via ports to /usr/local/
+	fhs_set_paths_from_prefix /usr/local
+
+	# FreeBSD ports keep runtime data outside the prefix
+	vardir=/var/db
+	piddir=/var/run
+}
+
+fhs_set_macos () {
+	# Ask Homebrew where syslog-ng is installed.
+	# `brew --prefix syslog-ng` works on both Apple Silicon (/opt/homebrew)
+	# and Intel (/usr/local) without any hardcoded path iteration.
+	local prefix
+	if is_available brew; then
+		local brew_prefix brew_base
+		brew_prefix=$( brew --prefix syslog-ng 2>/dev/null )
+		# brew --prefix returns the expected path even for uninstalled formulae;
+		# only accept it when the binary actually exists there.
+		# Homebrew installs to bin/, not sbin/.
+		if [ -x "${brew_prefix}/bin/syslog-ng" ] || [ -x "${brew_prefix}/sbin/syslog-ng" ]; then
+			prefix="${brew_prefix}"
+			# Homebrew's shared var lives at the base prefix, not inside the formula keg.
+			brew_base=$( brew --prefix 2>/dev/null )
+		fi
+	fi
+
+	# Fallback: MacPorts always installs under /opt/local.
+	# There is no per-port prefix command, so check the known binary location.
+	if [ -z "${prefix}" ] && is_available port; then
+		local mp_prefix=/opt/local
+		for mp_bin in bin sbin; do
+			if [ -x "${mp_prefix}/${mp_bin}/syslog-ng" ]; then
+				prefix="${mp_prefix}"
+				break
+			fi
+		done
+	fi
+
+	# If neither package manager has syslog-ng, keep the default binprefix.
+	[ -z "${prefix}" ] && return
+
+	fhs_set_paths_from_prefix "${prefix}"
+
+	# Homebrew's shared var is at $(brew --prefix)/var, not inside the formula keg.
+	# MacPorts uses a unified prefix so ${prefix}/var is correct there.
+	if [ -n "${brew_base}" ]; then
+		vardir="${brew_base}/var/syslog-ng"
+	else
+		vardir="${prefix}/var/syslog-ng"
+	fi
+	piddir="${prefix}/var/run"
 }
 
 rpm_verify () {
@@ -1098,6 +1252,51 @@ debun_freebsd() {
 	add_extra debun_extra_freebsd
 }
 
+debun_extra_macos () {
+	printf "\nmacOS specific checks\n"
+
+	# Kernel extensions (replaces lsmod) - no PII
+	if is_available kextstat; then
+		kextstat > "${tmpdir}/sys.kextstat" 2>/dev/null
+	fi
+
+	# Homebrew syslog-ng package info - only syslog-related package names
+	if is_available brew; then
+		brew list --versions 2>/dev/null | grep -i syslog > "${tmpdir}/brew.packages" || true
+		brew info syslog-ng > "${tmpdir}/brew.info.syslog-ng" 2>/dev/null || true
+	fi
+
+	# MacPorts syslog-ng package info - only syslog-related package names
+	if is_available port; then
+		port installed 2>/dev/null | grep -i syslog > "${tmpdir}/macports.packages" || true
+		port info syslog-ng > "${tmpdir}/macports.info.syslog-ng" 2>/dev/null || true
+	fi
+
+	#the items below this point may expose hardware identifiers (serial, UUID),
+	#host/user names, or arbitrary user/app data from the unified system log;
+	#skip them in privacy mode (mirrors debun_extra_genlinux behaviour)
+	[ -n "$privacy_mode" ] && return
+
+	# Hardware / software info (replaces dmidecode + lspci) - serial, UUID, PCI fingerprint, hostname, username
+	if is_available system_profiler; then
+		system_profiler SPHardwareDataType > "${tmpdir}/sys.macos.hardware" 2>/dev/null
+		system_profiler SPPCIDataType      > "${tmpdir}/sys.macos.pci"      2>/dev/null
+		system_profiler SPSoftwareDataType > "${tmpdir}/sys.macos.software" 2>/dev/null
+	fi
+
+	# CPU / hardware info (replaces /proc/cpuinfo) - may include hw.uuid / hw.serial
+	sysctl -a 2>/dev/null | grep -E '^(hw\.|machdep\.cpu\.)' > "${tmpdir}/sys.cpuinfo"
+
+	# Recent unified system log (supplements dmesg) - may contain unrelated user/app activity
+	if is_available log; then
+		log show --last 2h --style syslog > "${tmpdir}/sys.macos.unifiedlog" 2>/dev/null || true
+	fi
+}
+
+debun_macos () {
+	add_extra debun_extra_macos
+}
+
 debun_extra_hpux () {
 	sysdef >${tmpdir}/sys.sysdef
 	swlist >${tmpdir}/sys.swlist
@@ -1128,9 +1327,14 @@ debun_aix () {
 
 	echo "Check package files integrity"
 	rpm_verify syslog-ng-premium-edition syslog-ng-premium-edition-client syslog-ng-premium-edition-compact || \
-		echo "No syslog-ng RPM packages have been found!"
+	echo "No syslog-ng RPM packages have been found!"
 	echo "list syslog-related packages"
 	rpm -qa |grep syslog > ${tmpdir}/rpm.packages
+}
+
+detect_env_macos () {
+	# Capture macOS version information
+	sw_vers > "${tmpdir}/sys.macos.sw_vers" 2>/dev/null || true
 }
 
 detect_env_linux () {
@@ -1157,27 +1361,43 @@ detect_env_linux () {
 }
 
 detect_env () {
-	###
-	### Detecting syslog-ng ver: ose or pe
-	###
+	local syslogfhs
 
 	echo "Start environment detection"
-	if [ -x /opt/syslog-ng/bin/loggen ] ; then
-		syslogfhs=unix
-		echo "Unix-like FHS detected"
-	elif [ -d /etc/syslog-ng/ ]; then
-		syslogfhs=linux
-		echo "Linux-type FHS detected"
-	else
-		syslogfhs=unknown
-		confdir=/nonexistent
-		echo "No syslog-ng detected"
-	fi
 
 	os=$( uname -s )
-	if [ "$os" = "Linux" ]; then
-		detect_env_linux
-	fi
+	case "$os" in
+		Darwin)
+			detect_env_macos
+			syslogfhs=macos
+			;;
+		FreeBSD)
+			syslogfhs=freebsd
+			;;
+		Linux|SunOS|HP-UX|AIX)
+			[ "$os" = "Linux" ] && detect_env_linux
+
+			if [ -x /opt/syslog-ng/bin/loggen ] ; then
+				syslogfhs=unix
+				echo "Unix-like FHS detected"
+			elif [ -d /etc/syslog-ng/ ]; then
+				syslogfhs=linux
+				echo "Linux-type FHS detected"
+			else
+				syslogfhs=unknown
+				confdir=/nonexistent
+				echo "No syslog-ng detected"
+			fi
+			;;
+		*)
+			printf "Unknown OS: %s\n" "$os"
+			;;
+	esac
+
+	[ "$syslogfhs" = "linux" ] && fhs_set_linux
+	[ "$syslogfhs" = "unix" ] && fhs_set_unix
+	[ "$syslogfhs" = "freebsd" ] && fhs_set_freebsd
+	[ "$syslogfhs" = "macos" ] && fhs_set_macos
 }
 
 setup_env_debian () {
@@ -1429,6 +1649,8 @@ setup_env_freebsd () {
 	service_stop="${initfile} stop"
 	service_start="${initfile} start"
 	service_status="${initfile} status"
+	# BSD cpio (libarchive) does not support -L in pass-through mode
+	cpiopdL="cpio -pd"
 
 	unset -f free
 	unset -f netstatnlp
@@ -1450,6 +1672,152 @@ setup_env_freebsd () {
 	distpkgstatus () { : ; }
 	os_hash_helper () {
 		find . '!' \( -name debun.manifest -o -name syslog-ng.debun.txt \) -type f -exec md5 '{}' \; | ${sed_equivalent_cmd} 's:^MD5 (\(.*\)) = \([a-z0-9]\{32\}\)$:\2  \1:'
+	}
+}
+
+setup_env_macos () {
+	# Overrides for tools that differ on macOS (Darwin)
+
+	# BSD cpio (libarchive) does not support -L in pass-through mode
+	cpiopdL="cpio -pd"
+
+	# Network: macOS has no 'ip' command; use ifconfig / netstat
+	ipconfig="ifconfig -a"
+	netstatsu="netstat -s"
+
+	# ps: macOS ps has no -f (forest/tree) flag; -A replaces -e for all processes
+	pscmd="ps auxwww"
+	pseao="ps -Ao"
+
+	# ldd does not exist on macOS; otool -L lists dynamic libraries
+	# format_ldd_output parses paths from both ldd and otool -L output correctly
+	lddcmd="otool -L"
+
+	# vmstat on macOS is vm_stat (completely different command)
+	vmstat="vm_stat"
+
+	unset -f netstatnlp netstatlunp netstatpunt netstatpn routeconfig
+	unset -f free topcmd mypidof getsyslogpids myplimit
+	unset -f distpkgoffile distpkgstatus os_hash_helper
+
+	# netstat on macOS does not support -p for process names; use lsof if needed
+	netstatnlp  () { lsof -nP -iTCP -sTCP:LISTEN; }
+	netstatlunp () { lsof -nP -iUDP; }
+	netstatpunt () { netstat -anv; }
+	netstatpn   () { lsof -nP -i; }
+	routeconfig () { netstat -nr; }
+
+	# 'free' does not exist on macOS; vm_stat + sysctl give the same info
+	free () {
+		vm_stat
+		echo "---"
+		sysctl -n hw.memsize 2>/dev/null | awk '{printf "Total RAM: %d MB\n", $1/1024/1024}'
+	}
+
+	# top: use -l (logging / non-interactive) instead of Linux's -b
+	topcmd () { top -l 1 -s 0 > "${1}" 2>/dev/null; }
+
+	# 'pidof' does not exist on macOS; pgrep -x matches exact process name
+	mypidof     () { pgrep -x "$1" 2>/dev/null; }
+	getsyslogpids () { mypidof syslog-ng; }
+
+	# plimit is Solaris/Linux; no real per PID limits on macOS
+	myplimit () {
+		echo "Process info for PID $1:"
+		ps -o pid,ppid,user,%cpu,%mem,vsz,rss,command -p "$1"
+
+		echo
+		echo "Open file descriptor count:"
+		lsof -p "$1" 2>/dev/null | wc -l
+
+		echo
+		echo "Current shell limits (not PID-specific):"
+		ulimit -a 2>/dev/null
+
+		echo
+		echo "System-wide launchd limits:"
+		launchctl limit 2>/dev/null
+	}
+
+	# No system package manager maps individual library files on macOS
+	distpkgoffile () { echo "Package file lookup not supported on macOS (file: $1)"; }
+	distpkgstatus () { : ; }
+
+	# md5sum does not exist on macOS; md5 uses a different output format:
+	#   MD5 (filename) = <hash>  -->  <hash>  filename
+	os_hash_helper () {
+		find . -type f ! \( -name debun.manifest -o -name syslog-ng.debun.txt \) -exec md5 {} \; \
+			| sed -E 's:^MD5 \((.*)\) = ([a-f0-9]{32})$:\2  \1:'
+	}
+
+	# strace does not exist on macOS; dtruss is the closest but requires SIP disabled
+	if is_available dtruss; then
+		trace="dtruss -f"
+	else
+		trace="echo 'Syscall tracing unavailable: install dtruss or disable SIP first:'"
+	fi
+
+	# dmesg on macOS gives limited kernel ring buffer; the unified log is more useful
+	if is_available log; then
+		dmesg="log show --last 2h --style syslog"
+	fi
+
+	# Service management via launchd (replaces systemd / SysV init)
+	local sng_plist="/Library/LaunchDaemons/com.syslog-ng.syslog-ng.plist"
+	local sng_label="com.syslog-ng.syslog-ng"
+
+	initfile="${sng_plist}"
+
+	if [ -f "${sng_plist}" ]; then
+		# Prefer modern launchctl API when available
+		if launchctl help 2>/dev/null | grep -q bootstrap; then
+			service_stop="launchctl bootout system ${sng_plist}"
+			service_start="launchctl bootstrap system ${sng_plist}"
+		else
+			service_stop="launchctl unload ${sng_plist}"
+			service_start="launchctl load ${sng_plist}"
+		fi
+
+		# Modern status query
+		if launchctl help 2>/dev/null | grep -q "print"; then
+			service_status="launchctl print system/${sng_label}"
+		else
+			service_status="launchctl list ${sng_label}"
+		fi
+
+	else
+		unset service_stop service_start service_status
+	fi
+
+	# Override startup detection entirely: macOS uses launchd, not systemd/SMF/init
+	unset -f acquire_syslog_startup_method
+	acquire_syslog_startup_method () {
+		printf "Detecting init system: macOS launchd\n"
+
+		local plist="/Library/LaunchDaemons/com.syslog-ng.syslog-ng.plist"
+
+		if [ -f "${plist}" ]; then
+			cp "${plist}" "${tmpdir}/sys.startup.launchd.syslog-ng.plist"
+
+			if [ -n "${service_status}" ]; then
+				eval "${service_status}" \
+					> "${tmpdir}/sys.startup.launchctl-status" 2>&1 || true
+			fi
+
+		else
+			printf "No launchd plist found for syslog-ng\n" \
+				> "${tmpdir}/sys.startup.launchd.syslog-ng.plist"
+		fi
+
+		# Also collect any Balabit / Axoflow branded plists
+		for plist_file in \
+			/Library/LaunchDaemons/com.balabit.syslog-ng*.plist \
+			/Library/LaunchDaemons/com.axoflow.syslog-ng*.plist
+		do
+			[ -f "${plist_file}" ] && \
+				cp "${plist_file}" \
+				   "${tmpdir}/sys.startup.launchd.${plist_file##*/}"
+		done
 	}
 }
 
@@ -1659,11 +2027,38 @@ setup_env() {
 		setup_env_hpux
 	elif [ "$os" = "AIX" ]; then
 		setup_env_aix
+	elif [ "$os" = "Darwin" ]; then
+		setup_env_macos
 	else
 		printf "Unkonwn or (yet) unhandled system\n"
 	fi
 
 	setup_env_generic_post
+}
+
+dump_env () {
+	printf "\nWorking environment is:\n"
+	env | sort > ${tmpdir}/debun.env
+
+	cat >> ${tmpdir}/debun.env <<-VARS
+
+		--- syslog-ng-debun script variables ---
+		os=${os}
+		workdir=${workdir}
+		dist=${dist}
+		binprefix=${binprefix}
+		user_binprefix=${user_binprefix}
+		syslogbin=${syslogbin}
+		syslogngctlbin=${syslogngctlbin}
+		syslogngquerybin=${syslogngquerybin}
+		syslogrealbin=${syslogrealbin}
+		absscldirs=${absscldirs}
+		confdir=${confdir}
+		piddir=${piddir}
+		vardir=${vardir}
+	VARS
+
+	cat ${tmpdir}/debun.env
 }
 
 debun_run () {
@@ -1677,6 +2072,8 @@ debun_run () {
 		debun_hpux
 	elif [ "$os" = "AIX" ]; then
 		debun_aix
+	elif [ "$os" = "Darwin" ]; then
+		debun_macos
 	fi
 }
 
@@ -1760,24 +2157,33 @@ run_debug () {
 	else
 		read line
 	fi
-	}
+}
 
 ###
 ### Main program tasks
 ###
 
+fhs_set_paths_from_prefix "${binprefix}"
+
 debun_init
 detect_env
+# Re-apply the user-supplied -R value on top of whatever fhs_set_* has set in detect_env
+[ -n "$user_binprefix" ] && fhs_apply_binprefix_override
 setup_env
+[ -n "${DUMP_ENV}" ] && dump_env
+
 debun_run
-[ "$syslogfhs" = "linux" ] && fhs_set_linux
-[ "$syslogfhs" = "unix" ] && fhs_set_unix
+
 run_specific_extras
+
 acquire_general_info
+
 if [ -n "$privacy_mode" ]; then
 	acquire_syslog_nprv
 else
 	acquire_syslog_all
 fi
+
 [ -n "$debug_mode" ] && run_debug
+
 debun_final

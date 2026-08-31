@@ -92,7 +92,8 @@ struct TestFileList
   const CollectionComparatorEntry expected_new_files[5];
 };
 
-ParameterizedTestParameters(collection_comparator, test_collection_changes)
+static const struct TestFileList *
+_get_test_collection_changes_params(gsize *len)
 {
   static const struct TestFileList params[] =
   {
@@ -140,56 +141,67 @@ ParameterizedTestParameters(collection_comparator, test_collection_changes)
     }
   };
 
-  size_t nb_params = sizeof(params) / sizeof(const struct TestFileList);
-  return cr_make_param_array(const struct TestFileList, params, nb_params);
+  *len = sizeof(params) / sizeof(const struct TestFileList);
+  return params;
 }
 
-ParameterizedTest(const struct TestFileList *tup, collection_comparator, test_collection_changes)
+/* Keep this as a plain Test + loop (not ParameterizedTest + ParameterizedTestParameters)
+ * the cases are pointer-based iovec entries, and we must avoid pointer payload transport through
+ * Criterion parameterization on macOS.
+ */
+Test(collection_comparator, test_collection_changes)
 {
-  TestData *data = test_data_new();
-  CollectionComparator *comporator = collection_comparator_new();
-  collection_comporator_set_callbacks(comporator,
-                                      _handle_new,
-                                      _handle_delete,
-                                      data);
-  gint ndx = tup->ndx;
-  const CollectionComparatorEntry *curr_entry = NULL;
-  gint i;
+  gsize n_params;
+  const struct TestFileList *params = _get_test_collection_changes_params(&n_params);
 
-  cr_log_info("=== %d. %s", ndx, tup->name);
-
-  for (i = 0; curr_entry = &tup->initial_files[i], curr_entry->value != NULL; i++)
-    collection_comparator_add_initial_value(comporator, tup->initial_files[i].key, tup->initial_files[i].value);
-
-  collection_comparator_start(comporator);
-  for (i = 0; curr_entry = &tup->result_files[i], curr_entry->value != NULL; i++)
-    collection_comparator_add_value(comporator, curr_entry->key, curr_entry->value);
-  collection_comparator_stop(comporator);
-
-  cr_assert(ndx == 0 || ndx == 4 ?
-            g_hash_table_size(data->deleted_entries) == 0 :
-            g_hash_table_size(data->deleted_entries) > 0);
-  for (i = 0; curr_entry = &tup->expected_deleted_files[i], curr_entry->value != NULL; i++)
+  for (gsize param_index = 0; param_index < n_params; param_index++)
     {
-      CollectionComparatorEntry *found = g_hash_table_lookup(data->deleted_entries, curr_entry);
-      cr_assert(found);
-      cr_assert_str_eq(found->value, curr_entry->value);
-      cr_assert_eq(memcmp(found->key, curr_entry->key, 2 * sizeof(gint64)), 0);
-    }
-  cr_assert_eq(g_hash_table_size(data->deleted_entries), i);
+      const struct TestFileList *tup = &params[param_index];
+      TestData *data = test_data_new();
+      CollectionComparator *comporator = collection_comparator_new();
+      collection_comporator_set_callbacks(comporator,
+                                          _handle_new,
+                                          _handle_delete,
+                                          data);
+      gint ndx = tup->ndx;
+      const CollectionComparatorEntry *curr_entry = NULL;
+      gint i;
 
-  cr_assert(ndx != 4 && ndx != 5 ?
-            g_hash_table_size(data->new_entries) == 0 :
-            g_hash_table_size(data->new_entries) > 0);
-  for (i = 0; curr_entry = &tup->expected_new_files[i], curr_entry->value != NULL; i++)
-    {
-      CollectionComparatorEntry *found = g_hash_table_lookup(data->new_entries, curr_entry);
-      cr_assert(found);
-      cr_assert_str_eq(found->value, curr_entry->value);
-      cr_assert_eq(memcmp(found->key, curr_entry->key, 2 * sizeof(gint64)), 0);
-    }
-  cr_assert_eq(g_hash_table_size(data->new_entries), i);
+      cr_log_info("=== %d. %s", ndx, tup->name);
 
-  collection_comparator_free(comporator);
-  test_data_free(data);
+      for (i = 0; curr_entry = &tup->initial_files[i], curr_entry->value != NULL; i++)
+        collection_comparator_add_initial_value(comporator, tup->initial_files[i].key, tup->initial_files[i].value);
+
+      collection_comparator_start(comporator);
+      for (i = 0; curr_entry = &tup->result_files[i], curr_entry->value != NULL; i++)
+        collection_comparator_add_value(comporator, curr_entry->key, curr_entry->value);
+      collection_comparator_stop(comporator);
+
+      cr_assert(ndx == 0 || ndx == 4 ?
+                g_hash_table_size(data->deleted_entries) == 0 :
+                g_hash_table_size(data->deleted_entries) > 0);
+      for (i = 0; curr_entry = &tup->expected_deleted_files[i], curr_entry->value != NULL; i++)
+        {
+          CollectionComparatorEntry *found = g_hash_table_lookup(data->deleted_entries, curr_entry);
+          cr_assert(found);
+          cr_assert_str_eq(found->value, curr_entry->value);
+          cr_assert_eq(memcmp(found->key, curr_entry->key, 2 * sizeof(gint64)), 0);
+        }
+      cr_assert_eq(g_hash_table_size(data->deleted_entries), i);
+
+      cr_assert(ndx != 4 && ndx != 5 ?
+                g_hash_table_size(data->new_entries) == 0 :
+                g_hash_table_size(data->new_entries) > 0);
+      for (i = 0; curr_entry = &tup->expected_new_files[i], curr_entry->value != NULL; i++)
+        {
+          CollectionComparatorEntry *found = g_hash_table_lookup(data->new_entries, curr_entry);
+          cr_assert(found);
+          cr_assert_str_eq(found->value, curr_entry->value);
+          cr_assert_eq(memcmp(found->key, curr_entry->key, 2 * sizeof(gint64)), 0);
+        }
+      cr_assert_eq(g_hash_table_size(data->new_entries), i);
+
+      collection_comparator_free(comporator);
+      test_data_free(data);
+    }
 }

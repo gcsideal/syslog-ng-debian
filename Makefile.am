@@ -33,7 +33,7 @@ endif
 
 ACLOCAL_AMFLAGS		= -I m4 --install
 
-EXTRA_DIST		= $(filter-out ${NODIST_BUILT_SOURCES},${BUILT_SOURCES}) VERSION.txt NEWS.md autogen.sh \
+EXTRA_DIST		= $(filter-out ${BUILT_SOURCES_NODIST},${BUILT_SOURCES}) VERSION.txt NEWS.md autogen.sh \
 			  dist.conf dist.conf.in syslog-ng.pc.in \
 			  syslog-ng-config.h.in	\
 			  CONTRIBUTING.md	\
@@ -78,9 +78,9 @@ AM_CXXFLAGS += \
 
 if ENABLE_EXTRA_WARNINGS
 AM_CFLAGS += \
-	-Wimplicit-function-declaration \
 	$(CFLAGS_W_NO_INITIALIZER_OVERRIDES) \
 	$(CFLAGS_W_OLD_STYLE_DECLARATION) \
+	-Wimplicit-function-declaration \
 	-Wnested-externs \
 	-Wstrict-prototypes \
 	-Wswitch-default \
@@ -118,6 +118,11 @@ AM_CXXFLAGS += \
 	-Wignored-qualifiers \
 	-Wfloat-conversion \
 	-Wunused-but-set-parameter
+endif
+
+if ENABLE_WERROR
+AM_CFLAGS += -Werror
+AM_CXXFLAGS += -Werror
 endif
 
 if ENABLE_DEBUG
@@ -180,7 +185,7 @@ pkginclude_HEADERS	= syslog-ng-config.h
 module_LTLIBRARIES	=
 loggenplugin_LTLIBRARIES	=
 BUILT_SOURCES		=
-NODIST_BUILT_SOURCES		=
+BUILT_SOURCES_NODIST	=
 CLEANFILES 		= $(BUILT_SOURCES)
 check_PROGRAMS		=
 check_SCRIPTS		=
@@ -233,7 +238,7 @@ help:
 	@echo "One can also build individual modules (and their dependencies),"
 	@echo "using any of the following shortcuts:"
 	@echo
-	@echo "" ${SYSLOG_NG_MODULES} | sed -e 's#\(.\{,72\}\) #\1\n #g'
+	@echo "" ${SYSLOG_NG_MODULES} | sed -e 's#\(.\{0,72\}\) #\1\n #g'
 
 .PHONY: help populate-makefiles
 
@@ -270,8 +275,8 @@ TEST_EXTENSIONS = .sh
 VALGRIND_SUPPRESSIONS_FILES = $(top_srcdir)/tests/valgrind/unit-test-leak.supp
 EXTRA_DIST += syslog-ng.supp	\
 	.github/ISSUE_TEMPLATE/10-bug-report.md	\
-	.github/ISSUE_TEMPLATE/20-documentation-issue.md	\
-	.github/ISSUE_TEMPLATE/30-feature-request.md	\
+	.github/ISSUE_TEMPLATE/20-feature-request.md	\
+	.github/ISSUE_TEMPLATE/config.yml	\
 	GPL.txt	\
 	LGPL.txt	\
 	CMakeLists.txt

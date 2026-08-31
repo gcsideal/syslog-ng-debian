@@ -89,7 +89,8 @@ typedef struct _PyTfTestParams
   LogMessageValueType expected_type;
 } PyTfTestParams;
 
-ParameterizedTestParameters(python_tf, test_python_tf)
+static PyTfTestParams *
+_get_test_python_tf_params(gsize *len)
 {
   static PyTfTestParams test_data_list[] =
   {
@@ -154,32 +155,43 @@ ParameterizedTestParameters(python_tf, test_python_tf)
     },
   };
 
-  return cr_make_param_array(PyTfTestParams, test_data_list, G_N_ELEMENTS(test_data_list));
+  *len = G_N_ELEMENTS(test_data_list);
+  return test_data_list;
 }
 
-ParameterizedTest(PyTfTestParams *params, python_tf, test_python_tf)
+/* Keep this as a plain Test + loop (not ParameterizedTest + ParameterizedTestParameters)
+ * the cases are pointer-based iovec entries, and we must avoid pointer payload transport through
+ * Criterion parameterization on macOS.
+ */
+Test(python_tf, test_python_tf)
 {
   const gchar *python_tf_implementation = "def test_python_tf(msg):\n"
                                           "    return msg.get('test_key', default='def')\n";
   const gchar *template = "$(python test_python_tf)";
+  gsize n_params;
+  PyTfTestParams *params = _get_test_python_tf_params(&n_params);
 
-  LogMessage *msg = log_msg_new_empty();
-  log_msg_set_value_by_name_with_type(msg, "test_key", params->value, params->value_length, params->type);
+  for (gsize i = 0; i < n_params; i++)
+    {
+      PyTfTestParams *param = &params[i];
+      LogMessage *msg = log_msg_new_empty();
+      log_msg_set_value_by_name_with_type(msg, "test_key", param->value, param->value_length, param->type);
 
-  PyGILState_STATE gstate;
-  gstate = PyGILState_Ensure();
-  {
-    cr_assert(PyRun_String(python_tf_implementation, Py_file_input, _python_main_dict, _python_main_dict));
+      PyGILState_STATE gstate;
+      gstate = PyGILState_Ensure();
+      {
+        cr_assert(PyRun_String(python_tf_implementation, Py_file_input, _python_main_dict, _python_main_dict));
 
-    const gchar *expected_value = params->v3_x_expected_value ? params->v3_x_expected_value : params->value;
-    cfg_set_version_without_validation(configuration, VERSION_VALUE_3_38);
-    assert_template_format_value_and_type_msg(template, expected_value, LM_VT_STRING, msg);
+        const gchar *expected_value = param->v3_x_expected_value ? param->v3_x_expected_value : param->value;
+        cfg_set_version_without_validation(configuration, VERSION_VALUE_3_38);
+        assert_template_format_value_and_type_msg(template, expected_value, LM_VT_STRING, msg);
 
-    expected_value = params->v4_x_expected_value ? params->v4_x_expected_value : params->value;
-    cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
-    assert_template_format_value_and_type_msg(template, expected_value, params->expected_type, msg);
-  }
-  PyGILState_Release(gstate);
+        expected_value = param->v4_x_expected_value ? param->v4_x_expected_value : param->value;
+        cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
+        assert_template_format_value_and_type_msg(template, expected_value, param->expected_type, msg);
+      }
+      PyGILState_Release(gstate);
 
-  log_msg_unref(msg);
+      log_msg_unref(msg);
+    }
 }

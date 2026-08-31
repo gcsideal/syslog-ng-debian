@@ -34,46 +34,57 @@ typedef struct
   gssize value;
 } atomic_gssize;
 
+/*
+ * All atomic operations below use __atomic_* compiler builtins directly.
+ *
+ * The GLib g_atomic_pointer_* macros expect gpointer * storage, but our
+ * value is gssize.  Using those macros causes type-mismatch errors across
+ * different GLib/compiler combinations (strict-aliasing, -Wincompatible-
+ * pointer-types, -Wint-conversion).  The __atomic_* builtins are available
+ * on GCC 4.7+ and Clang 3.1+ and accept any scalar type, so they are the
+ * portable, type-safe alternative.
+ */
+
 static inline gssize
 atomic_gssize_add(atomic_gssize *a, gssize add)
 {
-  return g_atomic_pointer_add(&a->value, add);
+  return (gssize) __atomic_fetch_add(&a->value, add, __ATOMIC_SEQ_CST);
 }
 
 static inline gssize
 atomic_gssize_sub(atomic_gssize *a, gssize sub)
 {
-  return g_atomic_pointer_add(&a->value, -1 * sub);
+  return (gssize) __atomic_fetch_sub(&a->value, sub, __ATOMIC_SEQ_CST);
 }
 
 static inline gssize
 atomic_gssize_inc(atomic_gssize *a)
 {
-  return g_atomic_pointer_add(&a->value, 1);
+  return (gssize) __atomic_fetch_add(&a->value, 1, __ATOMIC_SEQ_CST);
 }
 
 static inline gssize
 atomic_gssize_dec(atomic_gssize *a)
 {
-  return g_atomic_pointer_add(&a->value, -1);
+  return (gssize) __atomic_fetch_sub(&a->value, 1, __ATOMIC_SEQ_CST);
 }
 
 static inline gssize
 atomic_gssize_get(atomic_gssize *a)
 {
-  return (gssize)g_atomic_pointer_get(&a->value);
+  return (gssize) __atomic_load_n(&a->value, __ATOMIC_SEQ_CST);
 }
 
 static inline void
 atomic_gssize_set(atomic_gssize *a, gssize value)
 {
-  g_atomic_pointer_set(&a->value, value);
+  __atomic_store_n(&a->value, value, __ATOMIC_SEQ_CST);
 }
 
 static inline gsize
 atomic_gssize_get_unsigned(atomic_gssize *a)
 {
-  return (gsize)g_atomic_pointer_get(&a->value);
+  return (gsize) __atomic_load_n(&a->value, __ATOMIC_SEQ_CST);
 }
 
 static inline gssize
@@ -85,7 +96,7 @@ atomic_gssize_racy_get(atomic_gssize *a)
 static inline gsize
 atomic_gssize_racy_get_unsigned(atomic_gssize *a)
 {
-  return (gsize)a->value;
+  return (gsize) a->value;
 }
 
 static inline void
@@ -97,25 +108,26 @@ atomic_gssize_racy_set(atomic_gssize *a, gssize value)
 static inline gsize
 atomic_gssize_or(atomic_gssize *a, gsize value)
 {
-  return g_atomic_pointer_or(&a->value, value);
+  return (gsize) __atomic_fetch_or(&a->value, value, __ATOMIC_SEQ_CST);
 }
 
 static inline gsize
 atomic_gssize_xor(atomic_gssize *a, gsize value)
 {
-  return g_atomic_pointer_xor(&a->value, value);
+  return (gsize) __atomic_fetch_xor(&a->value, value, __ATOMIC_SEQ_CST);
 }
 
 static inline gsize
 atomic_gssize_and(atomic_gssize *a, gsize value)
 {
-  return g_atomic_pointer_and(&a->value, value);
+  return (gsize) __atomic_fetch_and(&a->value, value, __ATOMIC_SEQ_CST);
 }
 
 static inline gboolean
 atomic_gssize_compare_and_exchange(atomic_gssize *a, gssize oldval, gssize newval)
 {
-  return g_atomic_pointer_compare_and_exchange(&a->value, oldval, newval);
+  return !!__atomic_compare_exchange_n(&a->value, &oldval, newval, FALSE,
+                                       __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 }
 
 static inline gssize
@@ -123,9 +135,7 @@ atomic_gssize_set_and_get(atomic_gssize *a, gssize value)
 {
   gssize oldval = atomic_gssize_get(a);
 
-  while (!atomic_gssize_compare_and_exchange(a,
-                                             oldval,
-                                             value))
+  while (!atomic_gssize_compare_and_exchange(a, oldval, value))
     {
       oldval = atomic_gssize_get(a);
     }

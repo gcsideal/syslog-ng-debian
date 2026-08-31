@@ -123,7 +123,8 @@ typedef struct _PyLogMessageSetValueTestParams
   LogMessageValueType expected_log_msg_type;
 } PyLogMessageSetValueTestParams;
 
-ParameterizedTestParameters(python_log_message, test_python_logmessage_set_value)
+static PyLogMessageSetValueTestParams *
+_get_test_python_logmessage_set_value_params(gsize *len)
 {
   static PyLogMessageSetValueTestParams test_data_list[] =
   {
@@ -177,44 +178,53 @@ ParameterizedTestParameters(python_log_message, test_python_logmessage_set_value
     },
   };
 
-  return cr_make_param_array(PyLogMessageSetValueTestParams, test_data_list, G_N_ELEMENTS(test_data_list));
+  *len = G_N_ELEMENTS(test_data_list);
+  return test_data_list;
 }
 
-ParameterizedTest(PyLogMessageSetValueTestParams *params, python_log_message, test_python_logmessage_set_value)
+Test(python_log_message, test_python_logmessage_set_value)
 {
-  LogMessage *msg = log_msg_new_empty();
+  gsize n_params;
+  PyLogMessageSetValueTestParams *params = _get_test_python_logmessage_set_value_params(&n_params);
 
-  PyGILState_STATE gstate;
-  gstate = PyGILState_Ensure();
-  {
-    cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
-    PyObject *msg_object = py_log_message_new(msg, configuration);
+  for (gsize i = 0; i < n_params; i++)
+    {
+      PyLogMessageSetValueTestParams *param = &params[i];
+      LogMessage *msg = log_msg_new_empty();
 
-    PyDict_SetItemString(_python_main_dict, "test_msg", msg_object);
-
-    gchar *script = g_strdup_printf(
-                      "test_msg['test_field'] = %s\n"
-                      "result = test_msg.get('test_field')\n",
-                      params->py_value_to_set
-                    );
-    if (!PyRun_String(script, Py_file_input, _python_main_dict, _python_main_dict))
+      PyGILState_STATE gstate;
+      gstate = PyGILState_Ensure();
       {
-        PyErr_Print();
-        cr_assert(FALSE, "Error running Python script >>>%s<<<", script);
+        cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
+        PyObject *msg_object = py_log_message_new(msg, configuration);
+
+        PyDict_SetItemString(_python_main_dict, "test_msg", msg_object);
+
+        gchar *script = g_strdup_printf(
+                          "test_msg['test_field'] = %s\n"
+                          "result = test_msg.get('test_field')\n",
+                          param->py_value_to_set
+                        );
+        if (!PyRun_String(script, Py_file_input, _python_main_dict, _python_main_dict))
+          {
+            PyErr_Print();
+            cr_assert(FALSE, "Error running Python script >>>%s<<<", script);
+          }
+
+        g_free(script);
+
+        _assert_python_variable_value("result", param->py_value_to_check);
+
+        LogMessageValueType type;
+        const gchar *value = log_msg_get_value_by_name_with_type(msg, "test_field", NULL, &type);
+        cr_assert_str_eq(value, param->expected_log_msg_value);
+        cr_assert(type == param->expected_log_msg_type);
+
+        Py_XDECREF(msg_object);
       }
-
-    g_free(script);
-
-    _assert_python_variable_value("result", params->py_value_to_check);
-
-    LogMessageValueType type;
-    const gchar *value = log_msg_get_value_by_name_with_type(msg, "test_field", NULL, &type);
-    cr_assert_str_eq(value, params->expected_log_msg_value);
-    cr_assert(type == params->expected_log_msg_type);
-
-    Py_XDECREF(msg_object);
-  }
-  PyGILState_Release(gstate);
+      PyGILState_Release(gstate);
+      log_msg_unref(msg);
+    }
 }
 
 static void
@@ -285,7 +295,8 @@ typedef struct
   const gchar *expected_value;
 } PyLogMessageGetTestParams;
 
-ParameterizedTestParameters(python_log_message, test_python_logmessage_get)
+static PyLogMessageGetTestParams *
+_get_test_python_logmessage_get_params(gsize *len)
 {
   static PyLogMessageGetTestParams test_data_list[] =
   {
@@ -345,42 +356,51 @@ ParameterizedTestParameters(python_log_message, test_python_logmessage_get)
     },
   };
 
-  return cr_make_param_array(PyLogMessageGetTestParams, test_data_list, G_N_ELEMENTS(test_data_list));
+  *len = G_N_ELEMENTS(test_data_list);
+  return test_data_list;
 }
 
-ParameterizedTest(PyLogMessageGetTestParams *params, python_log_message, test_python_logmessage_get)
+Test(python_log_message, test_python_logmessage_get)
 {
-  LogMessage *msg = log_msg_new_empty();
+  gsize n_params;
+  PyLogMessageGetTestParams *params = _get_test_python_logmessage_get_params(&n_params);
 
-  PyGILState_STATE gstate;
-  gstate = PyGILState_Ensure();
-  {
-    cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
-    PyObject *msg_object = py_log_message_new(msg, configuration);
-    PyDict_SetItemString(_python_main_dict, "test_msg", msg_object);
+  for (gsize i = 0; i < n_params; i++)
+    {
+      PyLogMessageGetTestParams *param = &params[i];
+      LogMessage *msg = log_msg_new_empty();
 
-    log_msg_set_value_by_name_with_type(msg, "field", params->value, params->value_length, params->type);
-
-    if (params->expected_value)
+      PyGILState_STATE gstate;
+      gstate = PyGILState_Ensure();
       {
-        _run_scripts("result = test_msg.get('field')");
-        _assert_python_variable_value("result", params->expected_value);
+        cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
+        PyObject *msg_object = py_log_message_new(msg, configuration);
+        PyDict_SetItemString(_python_main_dict, "test_msg", msg_object);
 
-        _run_scripts("result = test_msg.get('field', default='def')");
-        _assert_python_variable_value("result", params->expected_value);
+        log_msg_set_value_by_name_with_type(msg, "field", param->value, param->value_length, param->type);
+
+        if (param->expected_value)
+          {
+            _run_scripts("result = test_msg.get('field')");
+            _assert_python_variable_value("result", param->expected_value);
+
+            _run_scripts("result = test_msg.get('field', default='def')");
+            _assert_python_variable_value("result", param->expected_value);
+          }
+        else
+          {
+            _run_scripts("result = test_msg.get('field')");
+            _assert_python_variable_value("result", "None");
+
+            _run_scripts("result = test_msg.get('field', default='def')");
+            _assert_python_variable_value("result", "'def'");
+          }
+
+        Py_XDECREF(msg_object);
       }
-    else
-      {
-        _run_scripts("result = test_msg.get('field')");
-        _assert_python_variable_value("result", "None");
-
-        _run_scripts("result = test_msg.get('field', default='def')");
-        _assert_python_variable_value("result", "'def'");
-      }
-
-    Py_XDECREF(msg_object);
-  }
-  PyGILState_Release(gstate);
+      PyGILState_Release(gstate);
+      log_msg_unref(msg);
+    }
 }
 
 Test(python_log_message, test_python_logmessage_get_with_default_value)
@@ -405,7 +425,8 @@ Test(python_log_message, test_python_logmessage_get_with_default_value)
   PyGILState_Release(gstate);
 }
 
-ParameterizedTestParameters(python_log_message, test_python_logmessage_get_as_str)
+static PyLogMessageGetTestParams *
+_get_test_python_logmessage_get_as_str_params(gsize *len)
 {
   static PyLogMessageGetTestParams test_data_list[] =
   {
@@ -465,42 +486,55 @@ ParameterizedTestParameters(python_log_message, test_python_logmessage_get_as_st
     },
   };
 
-  return cr_make_param_array(PyLogMessageGetTestParams, test_data_list, G_N_ELEMENTS(test_data_list));
+  *len = G_N_ELEMENTS(test_data_list);
+  return test_data_list;
 }
 
-ParameterizedTest(PyLogMessageGetTestParams *params, python_log_message, test_python_logmessage_get_as_str)
+/* Keep this as a plain Test + loop (not ParameterizedTest + ParameterizedTestParameters)
+ * the cases are pointer-based iovec entries, and we must avoid pointer payload transport through
+ * Criterion parameterization on macOS.
+ */
+Test(python_log_message, test_python_logmessage_get_as_str)
 {
-  LogMessage *msg = log_msg_new_empty();
+  gsize n_params;
+  PyLogMessageGetTestParams *params = _get_test_python_logmessage_get_as_str_params(&n_params);
 
-  PyGILState_STATE gstate;
-  gstate = PyGILState_Ensure();
-  {
-    cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
-    PyObject *msg_object = py_log_message_new(msg, configuration);
-    PyDict_SetItemString(_python_main_dict, "test_msg", msg_object);
+  for (gsize i = 0; i < n_params; i++)
+    {
+      PyLogMessageGetTestParams *param = &params[i];
+      LogMessage *msg = log_msg_new_empty();
 
-    log_msg_set_value_by_name_with_type(msg, "field", params->value, params->value_length, params->type);
-
-    if (params->expected_value)
+      PyGILState_STATE gstate;
+      gstate = PyGILState_Ensure();
       {
-        _run_scripts("result = test_msg.get_as_str('field')");
-        _assert_python_variable_value("result", params->expected_value);
+        cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
+        PyObject *msg_object = py_log_message_new(msg, configuration);
+        PyDict_SetItemString(_python_main_dict, "test_msg", msg_object);
 
-        _run_scripts("result = test_msg.get_as_str('field', default='def')");
-        _assert_python_variable_value("result", params->expected_value);
+        log_msg_set_value_by_name_with_type(msg, "field", param->value, param->value_length, param->type);
+
+        if (param->expected_value)
+          {
+            _run_scripts("result = test_msg.get_as_str('field')");
+            _assert_python_variable_value("result", param->expected_value);
+
+            _run_scripts("result = test_msg.get_as_str('field', default='def')");
+            _assert_python_variable_value("result", param->expected_value);
+          }
+        else
+          {
+            _run_scripts("result = test_msg.get_as_str('field', )");
+            _assert_python_variable_value("result", "None");
+
+            _run_scripts("result = test_msg.get_as_str('field', default='def')");
+            _assert_python_variable_value("result", "'def'");
+          }
+
+        Py_XDECREF(msg_object);
       }
-    else
-      {
-        _run_scripts("result = test_msg.get_as_str('field', )");
-        _assert_python_variable_value("result", "None");
-
-        _run_scripts("result = test_msg.get_as_str('field', default='def')");
-        _assert_python_variable_value("result", "'def'");
-      }
-
-    Py_XDECREF(msg_object);
-  }
-  PyGILState_Release(gstate);
+      PyGILState_Release(gstate);
+      log_msg_unref(msg);
+    }
 }
 
 Test(python_log_message, test_python_logmessage_get_as_str_with_default_value)

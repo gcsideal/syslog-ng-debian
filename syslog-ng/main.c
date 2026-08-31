@@ -37,6 +37,7 @@
 #include "mainloop.h"
 #include "plugin.h"
 #include "reloc.h"
+#include "console.h"
 #include "resolved-configurable-paths.h"
 
 #include <sys/types.h>
@@ -89,6 +90,19 @@ static GOptionEntry syslogng_options[] =
   { NULL },
 };
 
+#if SYSLOG_NG_ENABLE_JEMALLOC
+/*
+ * Default jemalloc configuration embedded in the binary.
+ * Can be overridden at runtime via MALLOC_CONF env var.
+ * See: https://jemalloc.net/jemalloc.3.html#tuning
+ */
+const char *je_malloc_conf =
+  "background_thread:true"   /* Enable async memory decay thread for daemon processes */
+  ",dirty_decay_ms:5000"     /* Return dirty pages to OS after 5 seconds - better for bursty traffic */
+  ",muzzy_decay_ms:10000"    /* Return muzzy pages to OS after 10 seconds */
+  ",narenas:8"               /* Limit arenas to reduce fragmentation while allowing some parallelism */
+  ",tcache_max:4096";        /* Thread cache size limit - log messages are typically small */
+#endif
 
 static void
 resolve_paths_in_help_texts(void)
@@ -137,7 +151,7 @@ get_installer_version(gchar **inst_version)
           gchar *pos = strchr(line, '=');
           if (pos)
             {
-              *inst_version = g_strdup(pos+1);
+              *inst_version = g_strdup(pos + 1);
               result = TRUE;
               break;
             }
@@ -160,9 +174,9 @@ version(void)
       installer_version = g_strdup(SYSLOG_NG_VERSION);
     }
   printf(SYSLOG_NG_PACKAGE_NAME " " SYSLOG_NG_COMBINED_VERSION "\n"
-         "Config version: " VERSION_STR_LAST_SEMANTIC_CHANGE "\n"
-         "Installer-Version: %s\n"
-         "Revision: " SYSLOG_NG_SOURCE_REVISION "\n",
+                                "Config version: " VERSION_STR_LAST_SEMANTIC_CHANGE "\n"
+                                "Installer-Version: %s\n"
+                                "Revision: " SYSLOG_NG_SOURCE_REVISION "\n",
          installer_version);
 
 #if SYSLOG_NG_WITH_COMPILE_DATE
@@ -178,6 +192,7 @@ version(void)
   printf("Enable-Debug: %s\n"
          "Enable-GProf: %s\n"
          "Enable-Memtrace: %s\n"
+         "Enable-Stackdump: %s\n"
          "Enable-IPv6: %s\n"
          "Enable-Spoof-Source: %s\n"
          "Enable-TCP-Wrapper: %s\n"
@@ -186,6 +201,7 @@ version(void)
          ON_OFF_STR(SYSLOG_NG_ENABLE_DEBUG),
          ON_OFF_STR(SYSLOG_NG_ENABLE_GPROF),
          ON_OFF_STR(SYSLOG_NG_ENABLE_MEMTRACE),
+         ON_OFF_STR(SYSLOG_NG_ENABLE_STACKDUMP),
          ON_OFF_STR(SYSLOG_NG_ENABLE_IPV6),
          ON_OFF_STR(SYSLOG_NG_ENABLE_SPOOF_SOURCE),
          ON_OFF_STR(SYSLOG_NG_ENABLE_TCP_WRAPPER),
@@ -235,6 +251,9 @@ main(int argc, char *argv[])
   GOptionContext *ctx;
   GError *error = NULL;
 
+  set_thread_name("syslog-ng-main");
+
+  console_global_init("syslog-ng");
   MainLoop *main_loop = main_loop_get_instance();
 
   z_mem_trace_init("syslog-ng.trace");
@@ -293,7 +312,8 @@ main(int argc, char *argv[])
 
   if (debug_flag && !log_stderr)
     {
-      g_process_message("The -d/--debug option no longer implies -e/--stderr, if you want to redirect internal() source to stderr please also include -e/--stderr option");
+      fprintf(stderr,
+              "The -d/--debug option no longer implies -e/--stderr, if you want to redirect internal() source to stderr please also include -e/--stderr option\n");
     }
 
   gboolean exit_before_main_loop_run = main_loop_options.syntax_only
@@ -335,7 +355,7 @@ main(int argc, char *argv[])
   app_post_daemonized();
   app_config_changed();
 
-  if(startup_debug_flag)
+  if (startup_debug_flag)
     {
       debug_flag = FALSE;
       log_stderr = FALSE;
@@ -349,6 +369,7 @@ main(int argc, char *argv[])
   app_shutdown();
   z_mem_trace_dump();
   g_process_finish();
+  console_global_deinit();
   reloc_deinit();
   return rc;
 }

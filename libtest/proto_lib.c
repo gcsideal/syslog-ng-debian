@@ -25,16 +25,42 @@
 #include <criterion/criterion.h>
 #include "proto_lib.h"
 #include "grab-logging.h"
+#include "logproto/logproto-http-scraper-responder-server.h"
 
 #include "cfg.h"
 #include <string.h>
 
-LogProtoServerOptions proto_server_options;
+LogProtoServerOptionsStorage proto_server_options;
 
 void
 assert_proto_server_status(LogProtoServer *proto, LogProtoStatus status, LogProtoStatus expected_status)
 {
   cr_assert_eq(status, expected_status, "LogProtoServer expected status mismatch");
+}
+
+LogProtoStatus
+proto_server_handshake(LogProtoServer **proto)
+{
+  gboolean handshake_finished = FALSE;
+  LogProtoStatus status;
+
+  start_grabbing_messages();
+  do
+    {
+      LogProtoServer *proto_replacement = NULL;
+      status = log_proto_server_handshake(*proto, &handshake_finished, &proto_replacement);
+      if (status == LPS_AGAIN)
+        status = LPS_SUCCESS;
+      if (proto_replacement)
+        {
+          log_transport_stack_move(&proto_replacement->transport_stack, &(*proto)->transport_stack);
+          log_proto_server_free(*proto);
+          *proto = proto_replacement;
+        }
+    }
+  while (status == LPS_SUCCESS && handshake_finished == FALSE);
+  stop_grabbing_messages();
+  return status;
 }
 
 LogProtoStatus
@@ -81,6 +107,16 @@ construct_server_proto_plugin(const gchar *name, LogTransport *transport)
 }
 
 void
+assert_proto_server_handshake(LogProtoServer **proto)
+{
+  LogProtoStatus status;
+
+  status = proto_server_handshake(proto);
+
+  assert_proto_server_status(*proto, status, LPS_SUCCESS);
+}
+
+void
 assert_proto_server_fetch(LogProtoServer *proto, const gchar *expected_msg, gssize expected_msg_len)
 {
   const guchar *msg = NULL;
@@ -95,7 +131,7 @@ assert_proto_server_fetch(LogProtoServer *proto, const gchar *expected_msg, gssi
     expected_msg_len = strlen(expected_msg);
 
   cr_assert_eq(msg_len, expected_msg_len, "LogProtoServer expected message mismatch (length) "
-               "actual: %" G_GSIZE_FORMAT " expected: %" G_GSIZE_FORMAT, msg_len, expected_msg_len);
+                                          "actual: %" G_GSIZE_FORMAT " expected: %" G_GSIZE_FORMAT, msg_len, expected_msg_len);
   cr_assert_arr_eq((const gchar *) msg, expected_msg, expected_msg_len,
                    "LogProtoServer expected message mismatch");
 }
@@ -144,6 +180,16 @@ assert_proto_server_fetch_failure(LogProtoServer *proto, LogProtoStatus expected
   assert_proto_server_status(proto, status, expected_status);
   if (error_message)
     assert_grabbed_log_contains(error_message);
+}
+
+void
+assert_proto_server_handshake_failure(LogProtoServer **proto, LogProtoStatus expected_status)
+{
+  LogProtoStatus status;
+
+  status = proto_server_handshake(proto);
+
+  assert_proto_server_status(*proto, status, expected_status);
 }
 
 void

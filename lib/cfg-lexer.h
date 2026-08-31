@@ -181,15 +181,13 @@ struct _CfgLexer
   GString *token_pretext;
   GString *token_text;
   GlobalConfig *cfg;
-  guint first_non_pragma_seen:1, ignore_pragma:1;
+  guint first_non_pragma_seen: 1, ignore_pragma: 1;
 };
 
 /* pattern buffer */
 void cfg_lexer_unput_token(CfgLexer *self, CFG_STYPE *yylval);
 
 void cfg_lexer_start_block_state(CfgLexer *self, const gchar block_boundary[2]);
-void cfg_lexer_push_filterx_state(CfgLexer *self);
-void cfg_lexer_pop_filterx_state(CfgLexer *self);
 void cfg_lexer_start_block_arg_state(CfgLexer *self);
 
 void cfg_lexer_append_string(CfgLexer *self, int length, char *str);

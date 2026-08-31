@@ -24,6 +24,7 @@
 #include "http.h"
 #include "http-worker.h"
 #include "compression.h"
+#include "string-list.h"
 
 /* HTTPDestinationDriver */
 void
@@ -104,8 +105,8 @@ http_dd_set_headers(LogDriver *d, GList *headers)
 {
   HTTPDestinationDriver *self = (HTTPDestinationDriver *) d;
 
-  g_list_free_full(self->headers, g_free);
-  self->headers = g_list_copy_deep(headers, ((GCopyFunc)g_strdup), NULL);
+  string_list_free(self->headers);
+  self->headers = string_list_clone(headers);
 }
 
 void
@@ -288,9 +289,9 @@ http_dd_set_accept_encoding(LogDriver *d, const gchar *encoding)
 {
   HTTPDestinationDriver *self = (HTTPDestinationDriver *) d;
 
-  if (self->accept_encoding != NULL)
-    g_string_free(self->accept_encoding, TRUE);
 #if SYSLOG_NG_HTTP_COMPRESSION_ENABLED
+  if (self->accept_encoding)
+    g_string_free(self->accept_encoding, TRUE);
   if (strcmp(encoding, CURL_COMPRESSION_LITERAL_ALL) == 0)
     self->accept_encoding = g_string_new("");
   else
@@ -311,13 +312,20 @@ http_dd_set_content_compression(LogDriver *d, const gchar *encoding)
   return self->content_compression != CURL_COMPRESSION_UNKNOWN;
 }
 
-
 void
 http_dd_set_peer_verify(LogDriver *d, gboolean verify)
 {
   HTTPDestinationDriver *self = (HTTPDestinationDriver *) d;
 
   self->peer_verify = verify;
+}
+
+void
+http_dd_set_send_message_data_in_header(LogDriver *d, gboolean value)
+{
+  HTTPDestinationDriver *self = (HTTPDestinationDriver *) d;
+
+  self->send_message_data_in_header = value;
 }
 
 gboolean
@@ -442,20 +450,26 @@ http_dd_init(LogPipe *s)
   if (!log_threaded_dest_driver_init_method(s))
     return FALSE;
 
-  if ((self->super.batch_lines || self->batch_bytes) && http_load_balancer_is_url_templated(self->load_balancer) &&
-      self->super.num_workers > 1 && !self->super.worker_partition_key)
+  if ((self->super.batch_lines || self->batch_bytes) && http_load_balancer_is_url_templated(self->load_balancer))
     {
-      msg_error("http: worker-partition-key() must be set if using templates in the url() option "
-                "while batching is enabled and multiple workers are configured. "
-                "Make sure to set worker-partition-key() with a template that contains all the templates "
-                "used in the url() option",
-                log_pipe_location_tag(&self->super.super.super.super));
-      return FALSE;
+      log_threaded_dest_driver_set_flush_on_worker_key_change(&self->super.super.super, TRUE);
+
+      if (!self->super.worker_partition_key)
+        {
+          msg_error("http: worker-partition-key() must be set if using templates in the url() option "
+                    "while batching is enabled. "
+                    "Make sure to set worker-partition-key() with a template that contains all the templates "
+                    "used in the url() option",
+                    log_pipe_location_tag(&self->super.super.super.super));
+          return FALSE;
+        }
     }
+  if (self->batch_bytes > 0 && self->super.batch_lines == 0)
+    self->super.batch_lines = G_MAXINT;
 
   log_template_options_init(&self->template_options, cfg);
 
-  http_load_balancer_set_recovery_timeout(self->load_balancer, self->super.time_reopen);
+  http_load_balancer_set_recovery_timeout(self->load_balancer, (gint) self->super.time_reopen);
 
   log_threaded_dest_driver_register_aggregated_stats(&self->super);
   return TRUE;
@@ -471,7 +485,8 @@ http_dd_free(LogPipe *s)
   g_string_free(self->delimiter, TRUE);
   g_string_free(self->body_prefix, TRUE);
   g_string_free(self->body_suffix, TRUE);
-  g_string_free(self->accept_encoding, TRUE);
+  if (self->accept_encoding)
+    g_string_free(self->accept_encoding, TRUE);
   log_template_unref(self->body_template);
 
   curl_global_cleanup();
@@ -506,23 +521,21 @@ http_dd_new(GlobalConfig *cfg)
   self->super.super.super.super.free_fn = http_dd_free;
   self->super.super.super.super.generate_persist_name = _format_persist_name;
   self->super.format_stats_key = _format_stats_key;
-  self->super.metrics.raw_bytes_enabled = TRUE;
   self->super.stats_source = stats_register_type("http");
   self->super.worker.construct = http_dw_new;
-
-  log_threaded_dest_driver_set_flush_on_worker_key_change(&self->super.super.super, TRUE);
 
   curl_global_init(CURL_GLOBAL_ALL);
 
   self->ssl_version = CURL_SSLVERSION_DEFAULT;
   self->peer_verify = TRUE;
+  self->send_message_data_in_header = TRUE;
   /* disable batching even if the global batch_lines is specified */
   self->super.batch_lines = 0;
   self->batch_bytes = 0;
   self->body_prefix = g_string_new("");
   self->body_suffix = g_string_new("");
   self->delimiter = g_string_new("\n");
-  self->accept_encoding = g_string_new("");
+  self->accept_encoding = (SYSLOG_NG_HTTP_COMPRESSION_ENABLED ? g_string_new("") : NULL);
   self->load_balancer = http_load_balancer_new();
   curl_version_info_data *curl_info = curl_version_info(CURLVERSION_NOW);
   if (!self->user_agent)

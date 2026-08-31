@@ -33,18 +33,19 @@
 # define MSEC_PER_SEC 1000L
 #endif
 
-#define MSEC_TO_NSEC(msec)   ((msec) * NSEC_PER_SEC / MSEC_PER_SEC)
-#define MSEC_TO_USEC(msec)   ((msec) * USEC_PER_SEC / MSEC_PER_SEC)
+/* Cast to gint64 to avoid integer overflow on 32-bit platforms where long is 32-bit */
+#define MSEC_TO_NSEC(msec)   ((gint64)(msec) * NSEC_PER_SEC / MSEC_PER_SEC)
+#define MSEC_TO_USEC(msec)   ((gint64)(msec) * USEC_PER_SEC / MSEC_PER_SEC)
 
-#define USEC_TO_NSEC(usec)   ((usec) * NSEC_PER_SEC / USEC_PER_SEC)
-#define USEC_TO_USEC(usec)   ((usec) * USEC_PER_SEC / USEC_PER_SEC)
+#define USEC_TO_NSEC(usec)   ((gint64)(usec) * NSEC_PER_SEC / USEC_PER_SEC)
+#define USEC_TO_USEC(usec)   ((gint64)(usec) * USEC_PER_SEC / USEC_PER_SEC)
 
 gboolean check_nanosleep(void);
 
 void timespec_add_msec(struct timespec *ts, glong msec);
-void timespec_add_usec(struct timespec *ts, glong usec);
+void timespec_add_usec(struct timespec *ts, gint64 usec);
 glong timespec_diff_msec(const struct timespec *t1, const struct timespec *t2);
-glong timespec_diff_usec(const struct timespec *t1, const struct timespec *t2);
-glong timespec_diff_nsec(struct timespec *t1, struct timespec *t2);
+gint64 timespec_diff_usec(const struct timespec *t1, const struct timespec *t2);
+gint64 timespec_diff_nsec(struct timespec *t1, struct timespec *t2);
 
 #endif

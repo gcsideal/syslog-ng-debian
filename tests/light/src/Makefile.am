@@ -39,6 +39,11 @@ EXTRA_DIST += \
 	tests/light/src/message_builder/__init__.py \
 	tests/light/src/message_builder/log_message.py \
 	tests/light/src/message_builder/tests/__init__.py \
+	tests/light/src/message_senders/file_sender.py \
+	tests/light/src/message_senders/__init__.py \
+	tests/light/src/message_senders/message_sender.py \
+	tests/light/src/message_senders/README.md \
+	tests/light/src/message_senders/socket_sender.py \
 	tests/light/src/syslog_ng_config/__init__.py \
 	tests/light/src/syslog_ng_config/renderer.py \
 	tests/light/src/syslog_ng_config/statement_group.py \
@@ -69,15 +74,17 @@ EXTRA_DIST += \
 	tests/light/src/syslog_ng_config/statements/sources/source_driver.py \
 	tests/light/src/syslog_ng_config/syslog_ng_config.py \
 	tests/light/src/syslog_ng/console_log_reader.py \
-	tests/light/src/syslog_ng_ctl/driver_stats_handler.py \
+	tests/light/src/syslog_ng_ctl/legacy_stats_handler.py \
 	tests/light/src/syslog_ng_ctl/__init__.py \
 	tests/light/src/syslog_ng_ctl/prometheus_stats_handler.py \
-	tests/light/src/syslog_ng_ctl/syslog_ng_ctl_cli.py \
 	tests/light/src/syslog_ng_ctl/syslog_ng_ctl_executor.py \
+	tests/light/src/syslog_ng_ctl/syslog_ng_ctl_local_executor.py \
+	tests/light/src/syslog_ng_ctl/syslog_ng_ctl_docker_executor.py \
 	tests/light/src/syslog_ng_ctl/syslog_ng_ctl.py \
 	tests/light/src/syslog_ng/__init__.py \
-	tests/light/src/syslog_ng/syslog_ng_cli.py \
 	tests/light/src/syslog_ng/syslog_ng_executor.py \
+	tests/light/src/syslog_ng/syslog_ng_local_executor.py \
+	tests/light/src/syslog_ng/syslog_ng_docker_executor.py \
 	tests/light/src/syslog_ng/syslog_ng_paths.py \
 	tests/light/src/syslog_ng/syslog_ng.py \
 	tests/light/src/syslog_ng/tests/__init__.py \

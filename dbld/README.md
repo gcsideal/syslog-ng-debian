@@ -42,7 +42,7 @@ $ make
 You can also build a DEB using:
 
 ```bash
-$ dbld/rules deb-ubuntu-focal
+$ dbld/rules deb-ubuntu-jammy
 ```
 
 You can find the resulting debs in `$HOME/syslog-ng/dbld/build`.
@@ -58,6 +58,8 @@ Steps for the manual build after entering into the containers shell:
 
 ```bash
 $ ./dbld/rules shell-devshell
+# or, for ARM-64 builds
+#$ ./dbld/rules shell-devshell-arm64
 
 # inside the container
 $ cd /source/

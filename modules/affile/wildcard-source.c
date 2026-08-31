@@ -55,7 +55,7 @@ _check_required_options(WildcardSourceDriver *self)
 }
 
 static void
-_remove_file_reader(FileReader *reader, gpointer user_data)
+_remove_and_readd_file_reader(FileReader *reader, gpointer user_data)
 {
   WildcardSourceDriver *self = (WildcardSourceDriver *) user_data;
 
@@ -99,9 +99,6 @@ _remove_file_reader(FileReader *reader, gpointer user_data)
 void
 _create_file_reader(WildcardSourceDriver *self, const gchar *full_path)
 {
-  WildcardFileReader *reader = NULL;
-  GlobalConfig *cfg = log_pipe_get_config(&self->super.super.super);
-
   if (g_hash_table_size(self->file_readers) >= self->max_files)
     {
       msg_warning("wildcard-file(): number of monitored files reached the configured maximum, rejecting to tail file, increase max-files() along with scaling log-iw-size()",
@@ -112,15 +109,19 @@ _create_file_reader(WildcardSourceDriver *self, const gchar *full_path)
       return;
     }
 
-  reader = wildcard_file_reader_new(full_path,
-                                    &self->file_reader_options,
-                                    self->file_opener,
-                                    &self->super,
-                                    cfg);
+  GlobalConfig *cfg = log_pipe_get_config(&self->super.super.super);
+  gchar *base_dir = g_path_get_dirname(full_path);
+  DirectoryMonitor *monitor = g_hash_table_lookup(self->directory_monitors, base_dir);
+  g_free(base_dir);
+  WildcardFileReader *reader = wildcard_file_reader_new(full_path,
+                                                        &self->file_reader_options,
+                                                        self->file_opener,
+                                                        &self->super,
+                                                        cfg,
+                                                        monitor->can_notify_file_changes);
+  wildcard_file_reader_on_deleted_file_eof(reader, _remove_and_readd_file_reader, self);
+
   log_pipe_set_options(&reader->super.super, &self->super.super.super.options);
-
-  wildcard_file_reader_on_deleted_file_eof(reader, _remove_file_reader, self);
-
   log_pipe_append(&reader->super.super, &self->super.super.super);
   if (!log_pipe_init(&reader->super.super))
     {
@@ -132,21 +133,23 @@ _create_file_reader(WildcardSourceDriver *self, const gchar *full_path)
   else
     {
       g_hash_table_insert(self->file_readers, g_strdup(full_path), reader);
+      msg_debug("wildcard-file(): file created, start tailing",
+                evt_tag_str("filename", full_path));
     }
 }
 
 static void
 _handle_file_created(WildcardSourceDriver *self, const DirectoryMonitorEvent *event)
 {
-  if (g_pattern_spec_match_string(self->compiled_pattern, event->name))
+  if (g_pattern_spec_match_string(self->compiled_pattern, event->name)
+      && !(self->compiled_exclude && g_pattern_spec_match_string(self->compiled_exclude, event->name))
+     )
     {
       WildcardFileReader *reader = g_hash_table_lookup(self->file_readers, event->full_path);
 
       if (!reader)
         {
           _create_file_reader(self, event->full_path);
-          msg_debug("wildcard-file(): file created, start tailing",
-                    evt_tag_str("filename", event->full_path));
         }
       else
         {
@@ -189,13 +192,13 @@ _handle_directory_created(WildcardSourceDriver *self, const DirectoryMonitorEven
 void
 _handle_file_deleted(WildcardSourceDriver *self, const DirectoryMonitorEvent *event)
 {
-  FileReader *reader = g_hash_table_lookup(self->file_readers, event->full_path);
+  WildcardFileReader *reader = g_hash_table_lookup(self->file_readers, event->full_path);
 
   if (reader)
     {
       msg_debug("wildcard-file(): Monitored file was deleted, reading it to the end",
                 evt_tag_str("filename", event->full_path));
-      log_pipe_notify(&reader->super, NC_FILE_DELETED, NULL);
+      log_pipe_notify(&reader->super.super, NC_FILE_DELETED, NULL);
     }
 
   if (pending_file_list_remove(self->waiting_list, event->full_path))
@@ -222,6 +225,17 @@ _handler_directory_deleted(WildcardSourceDriver *self, const DirectoryMonitorEve
     }
 }
 
+#if SYSLOG_NG_HAVE_INOTIFY
+static void
+_handler_file_modified(WildcardSourceDriver *self, const DirectoryMonitorEvent *event)
+{
+  WildcardFileReader *reader = g_hash_table_lookup(self->file_readers, event->full_path);
+
+  if (reader)
+    log_pipe_notify(&reader->super.super, NC_FILE_MODIFIED, NULL);
+}
+#endif
+
 static void
 _on_directory_monitor_changed(const DirectoryMonitorEvent *event, gpointer user_data)
 {
@@ -245,6 +259,12 @@ _on_directory_monitor_changed(const DirectoryMonitorEvent *event, gpointer user_
     {
       _handler_directory_deleted(self, event);
     }
+#if SYSLOG_NG_HAVE_INOTIFY
+  else if (event->event_type == FILE_MODIFIED)
+    {
+      _handler_file_modified(self, event);
+    }
+#endif
 }
 
 
@@ -296,6 +316,22 @@ _init_filename_pattern(WildcardSourceDriver *self)
   return TRUE;
 }
 
+static gboolean
+_init_exclude_pattern(WildcardSourceDriver *self)
+{
+  if (self->exclude_pattern)
+    {
+      self->compiled_exclude = g_pattern_spec_new(self->exclude_pattern);
+      if (!self->compiled_exclude)
+        {
+          msg_error("wildcard-file(): Invalid value for exclude-pattern()",
+                    evt_tag_str("exclude-pattern", self->exclude_pattern));
+          return FALSE;
+        }
+    }
+  return TRUE;
+}
+
 static DirectoryMonitor *
 _add_directory_monitor(WildcardSourceDriver *self, const gchar *directory)
 {
@@ -313,10 +349,9 @@ _add_directory_monitor(WildcardSourceDriver *self, const gchar *directory)
                 log_pipe_location_tag(&self->super.super.super));
       return NULL;
     }
-
   directory_monitor_set_callback(monitor, _on_directory_monitor_changed, self);
+  g_hash_table_insert(self->directory_monitors, g_strdup(monitor->full_path), monitor);
   directory_monitor_start(monitor);
-  g_hash_table_insert(self->directory_monitors, g_strdup(directory), monitor);
   return monitor;
 }
 
@@ -336,6 +371,11 @@ _init(LogPipe *s)
     }
 
   if (!_init_filename_pattern(self))
+    {
+      return FALSE;
+    }
+
+  if (!_init_exclude_pattern(self))
     {
       return FALSE;
     }
@@ -365,6 +405,8 @@ _deinit(LogPipe *s)
   WildcardSourceDriver *self = (WildcardSourceDriver *)s;
 
   g_pattern_spec_free(self->compiled_pattern);
+  if (self->compiled_exclude)
+    g_pattern_spec_free(self->compiled_exclude);
   g_hash_table_foreach(self->file_readers, _deinit_reader, NULL);
   g_hash_table_remove_all(self->directory_monitors);
   return TRUE;
@@ -386,6 +428,15 @@ wildcard_sd_set_filename_pattern(LogDriver *s, const gchar *filename_pattern)
 
   g_free(self->filename_pattern);
   self->filename_pattern = g_strdup(filename_pattern);
+}
+
+void
+wildcard_sd_set_exclude_pattern(LogDriver *s, const gchar *exclude_pattern)
+{
+  WildcardSourceDriver *self = (WildcardSourceDriver *)s;
+
+  g_free(self->exclude_pattern);
+  self->exclude_pattern = g_strdup(exclude_pattern);
 }
 
 void
@@ -436,6 +487,7 @@ _free(LogPipe *s)
   file_opener_free(self->file_opener);
   g_free(self->base_dir);
   g_free(self->filename_pattern);
+  g_free(self->exclude_pattern);
   g_hash_table_unref(self->file_readers);
   g_hash_table_unref(self->directory_monitors);
   file_reader_options_deinit(&self->file_reader_options);

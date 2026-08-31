@@ -39,7 +39,7 @@ cached_get_system_tznames(void)
   if (tz_mock_empty_dst_tzname)
     tznames[1] = "";
 
-  return (const gchar *const *) &tznames;
+  return (const gchar * const *) &tznames;
 }
 
 glong
@@ -75,6 +75,44 @@ Test(wallclocktime, test_strptime_parses_broken_down_time)
   cr_expect(wct.wct_gmtoff == -1);
 }
 
+Test(wallclocktime, test_strptime_percentf_skips_optional_dot)
+{
+  WallClockTime wct = WALL_CLOCK_TIME_INIT;
+  gchar *end;
+
+  end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S%f", "Jan 16 2019 18:23:12.012345");
+  cr_assert(*end == 0);
+  cr_expect(wct.wct_year == 119);
+  cr_expect(wct.wct_mon == 0);
+  cr_expect(wct.wct_mday == 16);
+
+  cr_expect(wct.wct_hour == 18);
+  cr_expect(wct.wct_min == 23);
+  cr_expect(wct.wct_sec == 12);
+  cr_expect(wct.wct_usec == 12345);
+
+  cr_expect(wct.wct_gmtoff == -1);
+}
+
+Test(wallclocktime, test_strptime_percentf_fractions_are_optional)
+{
+  WallClockTime wct = WALL_CLOCK_TIME_INIT;
+  gchar *end;
+
+  /* end of the string */
+  wct.wct_usec = 999999;
+  end = wall_clock_time_strptime(&wct, "%S%f", "12");
+  cr_assert(*end == 0);
+  cr_expect(wct.wct_usec == 0);
+
+  /* something else follows */
+  wct.wct_usec = 999999;
+  end = wall_clock_time_strptime(&wct, "%S%f %z", "12 +02:00");
+  cr_assert(*end == 0, "%s", end);
+  cr_expect(wct.wct_usec == 0);
+  cr_expect(wct.wct_gmtoff == 7200);
+}
+
 Test(wallclocktime, test_strptime_parses_truncated_usec)
 {
   WallClockTime wct = WALL_CLOCK_TIME_INIT;
@@ -100,9 +138,11 @@ Test(wallclocktime, test_strptime_usec_parse_finds_character)
   WallClockTime wct = WALL_CLOCK_TIME_INIT;
   gchar *end;
 
-  end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S.%f", "Jan 16 2019 18:23:12.boom");
-  cr_assert(end == NULL);
-  cr_expect(wct.wct_usec == 0);
+  /* invalid value */
+  wct.wct_usec = 1000000;
+  end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S.%f boom", "Jan 16 2019 18:23:12.boom");
+  cr_assert(*end == 0);
+  cr_expect(wct.wct_usec == 0, "%d", wct.wct_usec);
 }
 
 Test(wallclocktime, test_strptime_percent_z_parses_rfc822_timezone)
@@ -135,18 +175,18 @@ Test(wallclocktime, test_strptime_percent_z_parses_rfc822_timezone)
   cr_expect(wct.wct_sec == 12);
   cr_expect(wct.wct_usec == 0);
 
-  cr_expect(wct.wct_gmtoff == -8*3600, "Unexpected timezone offset: %ld, expected -8*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == -8 * 3600, "Unexpected timezone offset: %ld, expected -8*3600", wct.wct_gmtoff);
 
   /* white space in front of the timezone is skipped with %z */
   wct.wct_gmtoff = -1;
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S%z", "Jan 16 2019 18:23:12 PST");
-  cr_expect(wct.wct_gmtoff == -8*3600, "Unexpected timezone offset: %ld, expected -8*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == -8 * 3600, "Unexpected timezone offset: %ld, expected -8*3600", wct.wct_gmtoff);
   wct.wct_gmtoff = -1;
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S%z", "Jan 16 2019 18:23:12PST");
-  cr_expect(wct.wct_gmtoff == -8*3600, "Unexpected timezone offset: %ld, expected -8*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == -8 * 3600, "Unexpected timezone offset: %ld, expected -8*3600", wct.wct_gmtoff);
 
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %z", "Jan 16 2019 18:23:12 EDT");
-  cr_expect(wct.wct_gmtoff == -4*3600, "Unexpected timezone offset: %ld, expected -4*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == -4 * 3600, "Unexpected timezone offset: %ld, expected -4*3600", wct.wct_gmtoff);
 
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %z", "Jan 16 2019 18:23:12 GMT");
   cr_expect(wct.wct_gmtoff == 0, "Unexpected timezone offset: %ld, expected 0", wct.wct_gmtoff);
@@ -158,7 +198,7 @@ Test(wallclocktime, test_strptime_percent_z_parses_rfc822_timezone)
   /* local timezone */
   wct.wct_gmtoff = -1;
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %z", "Jan 16 2019 18:23:12 CET");
-  cr_expect(wct.wct_gmtoff == 1*3600, "Unexpected timezone offset: %ld, expected 1*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 1 * 3600, "Unexpected timezone offset: %ld, expected 1*3600", wct.wct_gmtoff);
 
   /* military zones */
   wct.wct_gmtoff = -1;
@@ -166,10 +206,10 @@ Test(wallclocktime, test_strptime_percent_z_parses_rfc822_timezone)
   cr_expect(wct.wct_gmtoff == 0, "Unexpected timezone offset: %ld, expected 0", wct.wct_gmtoff);
   wct.wct_gmtoff = -1;
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %z", "Jan 16 2019 18:23:12 M");
-  cr_expect(wct.wct_gmtoff == -12*3600, "Unexpected timezone offset: %ld, expected -12*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == -12 * 3600, "Unexpected timezone offset: %ld, expected -12*3600", wct.wct_gmtoff);
   wct.wct_gmtoff = -1;
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %z", "Jan 16 2019 18:23:12 Y");
-  cr_expect(wct.wct_gmtoff == 12*3600, "Unexpected timezone offset: %ld, expected 12*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 12 * 3600, "Unexpected timezone offset: %ld, expected 12*3600", wct.wct_gmtoff);
 
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %z", "Jan 16 2019 18:23:12 J");
   cr_expect(end == NULL);
@@ -177,20 +217,21 @@ Test(wallclocktime, test_strptime_percent_z_parses_rfc822_timezone)
   /* hours only */
   wct.wct_gmtoff = -1;
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %z", "Jan 16 2019 18:23:12 +05");
-  cr_expect(wct.wct_gmtoff == 5*3600, "Unexpected timezone offset: %ld, expected 5*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 5 * 3600, "Unexpected timezone offset: %ld, expected 5*3600", wct.wct_gmtoff);
 
   /* hours & minutes */
   wct.wct_gmtoff = -1;
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %z", "Jan 16 2019 18:23:12 +0500");
-  cr_expect(wct.wct_gmtoff == 5*3600, "Unexpected timezone offset: %ld, expected 5*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 5 * 3600, "Unexpected timezone offset: %ld, expected 5*3600", wct.wct_gmtoff);
   wct.wct_gmtoff = -1;
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %z", "Jan 16 2019 18:23:12 +05:00");
-  cr_expect(wct.wct_gmtoff == 5*3600, "Unexpected timezone offset: %ld, expected 5*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 5 * 3600, "Unexpected timezone offset: %ld, expected 5*3600", wct.wct_gmtoff);
 
   /* non-zero minutes */
   wct.wct_gmtoff = -1;
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %z", "Jan 16 2019 18:23:12 +05:30");
-  cr_expect(wct.wct_gmtoff == 5*3600+30*60, "Unexpected timezone offset: %ld, expected 5*3600+30*60", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 5 * 3600 + 30 * 60, "Unexpected timezone offset: %ld, expected 5*3600+30*60",
+            wct.wct_gmtoff);
 }
 
 Test(wallclocktime, test_strptime_percent_Z_allows_timezone_to_be_optional)
@@ -211,7 +252,7 @@ Test(wallclocktime, test_strptime_percent_Z_allows_timezone_to_be_optional)
   cr_expect(wct.wct_sec == 12);
   cr_expect(wct.wct_usec == 0);
 
-  cr_expect(wct.wct_gmtoff == -8*3600, "Unexpected timezone offset: %ld, expected -8*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == -8 * 3600, "Unexpected timezone offset: %ld, expected -8*3600", wct.wct_gmtoff);
 
   /* initial whitespace is not skipped */
   wct.wct_gmtoff = -1;
@@ -221,7 +262,7 @@ Test(wallclocktime, test_strptime_percent_Z_allows_timezone_to_be_optional)
 
   wct.wct_gmtoff = -1;
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %Z", "Jan 16 2019 18:23:12 PST");
-  cr_expect(wct.wct_gmtoff == -8*3600, "Unexpected timezone offset: %ld, expected -8*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == -8 * 3600, "Unexpected timezone offset: %ld, expected -8*3600", wct.wct_gmtoff);
 
   wct.wct_gmtoff = -1;
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %Z", "Jan 16 2019 18:23:12");
@@ -229,7 +270,7 @@ Test(wallclocktime, test_strptime_percent_Z_allows_timezone_to_be_optional)
 
   wct.wct_gmtoff = -1;
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %Z", "Jan 16 2019 18:23:12 Y");
-  cr_expect(wct.wct_gmtoff == 12*3600, "Unexpected timezone offset: %ld, expected 12*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 12 * 3600, "Unexpected timezone offset: %ld, expected 12*3600", wct.wct_gmtoff);
 
   /* invalid timezone offset, too short */
   wct.wct_gmtoff = -1;
@@ -252,22 +293,22 @@ Test(wallclocktime, test_strptime_percent_Z_numeric_formats)
 
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %Z", "Jan 16 2019 18:23:12 +02:00");
   cr_expect(*end == '\0');
-  cr_expect(wct.wct_gmtoff == 2*3600, "Unexpected timezone offset: %ld, expected 2*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 2 * 3600, "Unexpected timezone offset: %ld, expected 2*3600", wct.wct_gmtoff);
 
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %Z", "Jan 16 2019 18:23:12 +0200");
   cr_expect(*end == '\0');
-  cr_expect(wct.wct_gmtoff == 2*3600, "Unexpected timezone offset: %ld, expected 2*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 2 * 3600, "Unexpected timezone offset: %ld, expected 2*3600", wct.wct_gmtoff);
 
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %Z", "Jan 16 2019 18:23:12 +2:00");
   cr_expect(*end == '\0');
-  cr_expect(wct.wct_gmtoff == 2*3600, "Unexpected timezone offset: %ld, expected 2*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 2 * 3600, "Unexpected timezone offset: %ld, expected 2*3600", wct.wct_gmtoff);
 
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %Z", "Jan 16 2019 18:23:12 +200");
   cr_expect(*end != '\0');
 
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %Z", "Jan 16 2019 18:23:12 +02");
   cr_expect(*end == '\0');
-  cr_expect(wct.wct_gmtoff == 2*3600, "Unexpected timezone offset: %ld, expected 2*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 2 * 3600, "Unexpected timezone offset: %ld, expected 2*3600", wct.wct_gmtoff);
 
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %Z", "Jan 16 2019 18:23:12 +2");
   cr_expect(*end != '\0');
@@ -294,7 +335,7 @@ Test(wallclocktime, test_strptime_zone_parsing_takes_daylight_saving_into_accoun
   cr_expect(wct.wct_usec == 0);
 
   cr_expect(wct.wct_isdst > 0);
-  cr_expect(wct.wct_gmtoff == 2*3600, "Unexpected timezone offset: %ld, expected 2*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 2 * 3600, "Unexpected timezone offset: %ld, expected 2*3600", wct.wct_gmtoff);
 
   end = wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S %z", "Feb  7 2021 09:29:12 CET");
 
@@ -309,7 +350,7 @@ Test(wallclocktime, test_strptime_zone_parsing_takes_daylight_saving_into_accoun
   cr_expect(wct.wct_usec == 0);
 
   cr_expect(wct.wct_isdst == 0);
-  cr_expect(wct.wct_gmtoff == 1*3600, "Unexpected timezone offset: %ld, expected 1*3600", wct.wct_gmtoff);
+  cr_expect(wct.wct_gmtoff == 1 * 3600, "Unexpected timezone offset: %ld, expected 1*3600", wct.wct_gmtoff);
 
 }
 
@@ -454,6 +495,78 @@ Test(wallclocktime, test_strptime_percent_z_is_mandatory)
 
   WallClockTime wct = WALL_CLOCK_TIME_INIT;
   cr_assert_null(wall_clock_time_strptime(&wct, "%Y-%m-%d %T%z", "2011-06-25 20:00:04"));
+}
+
+Test(wallclocktime, test_strftime_percent_f)
+{
+  WallClockTime wct = WALL_CLOCK_TIME_INIT;
+  gchar buf[128];
+
+  wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S.%f %z", "May  7 2021 09:29:12.123456 CEST");
+
+  wall_clock_time_strftime(&wct, buf, sizeof(buf), ".%f");
+  cr_assert_str_eq(buf, ".123456");
+  wall_clock_time_strftime(&wct, buf, sizeof(buf), ".%3f");
+  cr_assert_str_eq(buf, ".123");
+  wall_clock_time_strftime(&wct, buf, sizeof(buf), ".%6f");
+  cr_assert_str_eq(buf, ".123456");
+  wall_clock_time_strftime(&wct, buf, sizeof(buf), ".%9f");
+  cr_assert_str_eq(buf, ".123456");
+
+  wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S.%f %z", "May  7 2021 09:29:12.012345 CEST");
+
+  wall_clock_time_strftime(&wct, buf, sizeof(buf), ".%f");
+  cr_assert_str_eq(buf, ".012345");
+  wall_clock_time_strftime(&wct, buf, sizeof(buf), ".%3f");
+  cr_assert_str_eq(buf, ".012");
+  wall_clock_time_strftime(&wct, buf, sizeof(buf), ".%6f");
+  cr_assert_str_eq(buf, ".012345");
+  wall_clock_time_strftime(&wct, buf, sizeof(buf), ".%9f");
+  cr_assert_str_eq(buf, ".012345");
+}
+
+Test(wallclocktime, test_strftime_can_be_parsed_by_strptime)
+{
+  WallClockTime wct = WALL_CLOCK_TIME_INIT;
+  WallClockTime wct2 = WALL_CLOCK_TIME_INIT;
+  gchar buf[128];
+
+  wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S.%f %z", "May  7 2021 09:29:12.123456+02:00");
+  wall_clock_time_strftime(&wct, buf, sizeof(buf), "%b %d %Y %H:%M:%S.%f %z");
+  wall_clock_time_strptime(&wct2, "%b %d %Y %H:%M:%S.%f %z", buf);
+
+  cr_expect(wct.wct_year == wct2.wct_year);
+  cr_expect(wct.wct_mon == wct2.wct_mon);
+  cr_expect(wct.wct_mday == wct2.wct_mday);
+
+  cr_expect(wct.wct_hour == wct2.wct_hour);
+  cr_expect(wct.wct_min == wct2.wct_min);
+  cr_expect(wct.wct_sec == wct2.wct_sec);
+  cr_expect(wct.wct_usec == wct2.wct_usec);
+
+  cr_expect(wct.wct_isdst == wct2.wct_isdst, "%d != %d", wct.wct_isdst, wct2.wct_isdst);
+  cr_expect(wct.wct_gmtoff == wct2.wct_gmtoff);
+}
+
+Test(wallclocktime, test_strftime_all_format_spec)
+{
+  WallClockTime wct = WALL_CLOCK_TIME_INIT;
+  gchar buf[256];
+
+  const gchar *format =
+    "%a %A %b %B '%c' %C %d '%D' '%e' %f '%F' %g %G %h %H %I %j %m %M %n"
+    " %p %r %R %s %S %t '%T' %u %U %W %V %w %x %X %y %Y %z %Z";
+  const gchar *expected =
+    "Sat Saturday Aug August 'Sat Aug  7 09:29:12 2021' 20 07 '08/07/21' ' 7' 123456 '2021-08-07' 21 2021 Aug 09 09 219 08 29 \n"
+    " AM 09:29:12 AM 09:29 1628324952 12 \t '09:29:12' 6 31 31 31 6 08/07/21 09:29:12 21 2021 -0700 -07:00";
+
+  wall_clock_time_strptime(&wct, "%b %d %Y %H:%M:%S.%f %z", "Aug  7 2021 09:29:12.123456-07:00");
+
+  // Test it twice, so we see if a format has a side effect that would modify the timestamp
+  wall_clock_time_strftime(&wct, buf, sizeof(buf), format);
+  cr_assert_str_eq(buf, expected);
+  wall_clock_time_strftime(&wct, buf, sizeof(buf), format);
+  cr_assert_str_eq(buf, expected);
 }
 
 static void

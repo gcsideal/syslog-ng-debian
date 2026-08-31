@@ -1,11 +1,11 @@
 Name: syslog-ng
-Version: 4.8.1
+Version: 4.12.0
 Release: 2%{?dist}
 Summary: Next-generation syslog server
 
 Group: System Environment/Daemons
 License: GPLv2+
-URL: http://www.balabit.com/network-security/syslog-ng
+URL: http://syslog-ng.com
 Source0: https://github.com/syslog-ng/syslog-ng/releases/download/syslog-ng-%{version}/%{name}-%{version}.tar.gz
 Source1: syslog-ng.conf
 Source2: syslog-ng.logrotate
@@ -19,34 +19,47 @@ Source3: syslog-ng.service
 %bcond_without amqp
 %bcond_without kafka
 %bcond_without afsnmp
-%bcond_without mqtt
 %bcond_without cloudauth
 %bcond_without java
 
-%if 0%{?rhel} == 9
+%if 0%{?fedora} >= 36 || 0%{?rhel} < 10
+%bcond_without mqtt
+%else
+%bcond_with mqtt
+%endif
+
+%if 0%{?rhel} >= 9 || 0%{?rocky} >= 9
 %bcond_with sql
 %else
 %bcond_without sql
 %endif
 
-%if 0%{?fedora} >= 36 || 0%{?rhel} == 9
+%if 0%{?fedora} >= 36 || 0%{?rhel} >= 9
 %bcond_without	grpc
 %else
 %bcond_with grpc
 %endif
 
-%if 0%{?fedora} >= 37 || 0%{?rhel} == 9
+%if 0%{?fedora} >= 37 || 0%{?rhel} >= 9
 %bcond_without bpf
 %else
 %bcond_with bpf
 %endif
 
+# Secure logging (slog) is disabled by default in the official RPM
+# packages. Build with `--with slog` to enable it.
+%bcond_with slog
+
 BuildRequires: pkgconfig
 BuildRequires: libtool
 BuildRequires: bison
 BuildRequires: flex
-BuildRequires: libxslt
 BuildRequires: glib2-devel
+# NOTE: RHEL/Fedora packaging guidelines disallow bundled copies of
+# system libraries, and several large downstream RPM users have
+# explicitly asked us to link against the distro ivykis. Hence
+# --with-ivykis=system below (and the matching runtime Requires:).
+# The Debian build, by contrast, intentionally uses --with-ivykis=internal.
 BuildRequires: ivykis-devel
 BuildRequires: json-c-devel
 BuildRequires: libcap-devel
@@ -90,6 +103,7 @@ BuildRequires:  python3-urllib3
 BuildRequires:  python3-websocket-client
 BuildRequires:  python3-boto3
 BuildRequires:  python3-botocore
+BuildRequires:  python3-tornado
 %endif
 
 %if %{with grpc}
@@ -155,6 +169,8 @@ BuildRequires: clang
 %endif
 
 Requires: logrotate
+# See the BuildRequires: ivykis-devel note above: RPM is built
+# --with-ivykis=system, so the distro ivykis is a hard runtime dep.
 Requires: ivykis >= %{ivykis_ver}
 
 Provides: syslog
@@ -296,7 +312,7 @@ Requires: %{name}%{?_isa} = %{version}-%{release}
 
 %description grpc
 This module supports the GRPC, a common requirement
-for OpenTelemetry and Loki support.
+for OpenTelemetry, Google BigQuery, Google Pub/Sub, Grafana Loki and ClickHouse support.
 
 
 %package opentelemetry
@@ -326,6 +342,24 @@ Requires: %{name}-grpc
 %description bigquery
 This module adds Google BigQuery support.
 
+%package clickhouse
+Summary: ClickHouse support for %{name}
+Group: Development/Libraries
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Requires: %{name}-grpc
+
+%description clickhouse
+This module adds ClickHouse support.
+
+%package pubsub
+Summary: Google Pub/Sub support for %{name}
+Group: Development/Libraries
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Requires: %{name}-grpc
+
+%description pubsub
+This module adds Foofle Pub/Sub support.
+
 %package bpf
 Summary: Faster UDP log collection for %{name}
 Group: Development/Libraries
@@ -334,6 +368,7 @@ Requires: %{name}%{?_isa} = %{version}-%{release}
 %description bpf
 This module provides faster UDP log collection using bpf.
 
+%if %{with slog}
 %package slog
 Summary: $(slog) support for %{name}
 Group: Development/Libraries
@@ -341,6 +376,8 @@ Requires: %{name}%{?_isa} = %{version}-%{release}
 
 %description slog
 This module adds support for the $(slog) template function plus command line utilities.
+
+%endif
 
 %package python
 Summary:        Python support for syslog-ng
@@ -376,6 +413,7 @@ Requires:  python3-urllib3
 Requires:  python3-websocket-client
 Requires:  python3-boto3
 Requires:  python3-botocore
+Requires:  python3-tornado
 %endif
 
 %description python-modules
@@ -414,6 +452,8 @@ ryslog is not on the system.
 
 %build
 
+# See the BuildRequires: ivykis-devel note above for why this is
+# --with-ivykis=system (and asymmetric with the Debian build).
 %configure \
     --prefix=%{_prefix} \
     --sysconfdir=%{_sysconfdir}/%{name} \
@@ -423,9 +463,6 @@ ryslog is not on the system.
     --with-systemdsystemunitdir=%{_unitdir} \
     --with-ivykis=system \
     --disable-tcp-wrapper \
-%if 0%{?rhel} == 9
-    --disable-cpp \
-%endif
 %if %{with cloudauth}
     --enable-cloud-auth \
 %else
@@ -443,11 +480,11 @@ ryslog is not on the system.
     --enable-smtp \
     --enable-shared \
     --disable-static \
-    --enable-dynamic-linking \
     --enable-python \
 %if %{with grpc}
     --enable-cpp --enable-grpc \
 %endif
+    --disable-stackdump \
     --disable-java-modules \
     --with-python=%{py_ver} \
     %{?with_kafka:--enable-kafka} \
@@ -461,7 +498,8 @@ ryslog is not on the system.
     %{?with_amqp:--enable-amqp} \
     %{?with_redis:--enable-redis} \
     %{?with_riemann:--enable-riemann} \
-    %{?with_bpf:--enable-ebpf}
+    %{?with_bpf:--enable-ebpf} \
+    %{?with_slog:--enable-slog} %{!?with_slog:--disable-slog}
 
 # disable broken test by setting a different target
 sed -i 's/libs build/libs assemble/' Makefile
@@ -479,7 +517,7 @@ make DESTDIR=%{buildroot} install
 %if 0%{?rhel} == 8
 %{__install} -p -m 644 %{SOURCE2} %{buildroot}%{_sysconfdir}/logrotate.d/syslog
 %endif
-%if 0%{?fedora} >= 28 || 0%{?rhel} == 9
+%if 0%{?fedora} >= 28 || 0%{?rhel} >= 9 || 0%{?rocky} >= 9
 %{__install} -p -m 644 %{SOURCE2} %{buildroot}%{_sysconfdir}/logrotate.d/syslog-ng
 %endif
 
@@ -620,6 +658,12 @@ fi
 
 %files bigquery
 %{_libdir}/%{name}/libbigquery.so
+
+%files clickhouse
+%{_libdir}/%{name}/libclickhouse.so
+
+%files pubsub
+%{_libdir}/%{name}/libpubsub.so
 %endif
 
 %if %{with amqp}
@@ -686,6 +730,7 @@ fi
 %{_libdir}/%{name}/libhttp.so
 %{_libdir}/%{name}/libazure-auth-header.so
 
+%if %{with slog}
 %files slog
 %{_libdir}/%{name}/libsecure-logging.so
 %{_bindir}/slogkey
@@ -695,6 +740,7 @@ fi
 %{_mandir}/man1/slogencrypt.1*
 %{_mandir}/man1/slogverify.1*
 %{_mandir}/man7/secure-logging.7*
+%endif
 
 %files python
 %{_libdir}/%{name}/libmod-python.so
@@ -740,6 +786,30 @@ fi
 
 
 %changelog
+* Tue Jun 16 2026 github-actions <41898282+github-actions@users.noreply.github.com> - 4.12.0-1
+- updated to 4.12.0
+
+* Tue Feb 24 2026 github-actions <41898282+github-actions@users.noreply.github.com> - 4.11.0-1
+- updated to 4.11.0
+
+* Tue Oct 14 2025 github-actions <41898282+github-actions@users.noreply.github.com> - 4.10.2-1
+- updated to 4.10.2
+
+* Tue Sep 30 2025 github-actions <41898282+github-actions@users.noreply.github.com> - 4.10.1-1
+- updated to 4.10.1
+
+* Mon Sep 22 2025 github-actions <41898282+github-actions@users.noreply.github.com> - 4.10.0-1
+- updated to 4.10.0
+
+* Wed Jul 16 2025 github-actions <41898282+github-actions@users.noreply.github.com> - 4.9.0-1
+- updated to 4.9.0
+
+* Mon May 12 2025 github-actions <41898282+github-actions@users.noreply.github.com> - 4.8.3-1
+- updated to 4.8.3
+
+* Wed May  7 2025 github-actions <41898282+github-actions@users.noreply.github.com> - 4.8.2-1
+- updated to 4.8.2
+
 * Thu Oct  3 2024 github-actions <41898282+github-actions@users.noreply.github.com> - 4.8.1-1
 - updated to 4.8.1
 

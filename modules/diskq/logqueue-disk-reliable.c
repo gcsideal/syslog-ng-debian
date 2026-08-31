@@ -127,8 +127,7 @@ _ack_backlog(LogQueue *s, gint num_msg_to_ack)
               _pop_from_memory_queue_head(self->backlog, &position, &msg, &path_options);
 
               log_queue_memory_usage_sub(s, log_msg_get_size(msg));
-              log_msg_ack(msg, &path_options, AT_PROCESSED);
-              log_msg_unref(msg);
+              log_msg_drop(msg, &path_options, AT_PROCESSED);
             }
         }
 

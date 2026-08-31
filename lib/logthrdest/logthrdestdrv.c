@@ -278,7 +278,7 @@ _process_result_drop(LogThreadedDestWorker *self)
   msg_error("Message(s) dropped while sending message to destination",
             evt_tag_str("driver", self->owner->super.super.id),
             evt_tag_int("worker_index", self->worker_index),
-            evt_tag_int("time_reopen", self->time_reopen),
+            evt_tag_long("time_reopen", self->time_reopen),
             evt_tag_int("batch_size", self->batch_size));
 
   _drop_batch(self);
@@ -308,7 +308,7 @@ _process_result_error(LogThreadedDestWorker *self)
                 log_expr_node_location_tag(self->owner->super.super.super.expr_node),
                 evt_tag_int("worker_index", self->worker_index),
                 evt_tag_int("retries", self->retries_on_error_counter),
-                evt_tag_int("time_reopen", self->time_reopen),
+                evt_tag_long("time_reopen", self->time_reopen),
                 evt_tag_int("batch_size", self->batch_size));
       _rewind_batch(self);
       _disconnect_and_suspend(self);
@@ -322,7 +322,7 @@ _process_result_not_connected(LogThreadedDestWorker *self)
            evt_tag_str("driver", self->owner->super.super.id),
            log_expr_node_location_tag(self->owner->super.super.super.expr_node),
            evt_tag_int("worker_index", self->worker_index),
-           evt_tag_int("time_reopen", self->time_reopen),
+           evt_tag_long("time_reopen", self->time_reopen),
            evt_tag_int("batch_size", self->batch_size));
   self->retries_counter = 0;
   _rewind_batch(self);
@@ -764,6 +764,12 @@ _worker_thread(MainLoopThreadedWorker *s)
 {
   LogThreadedDestWorker *self = (LogThreadedDestWorker *) s->data;
 
+  GString *thread_name = g_string_new(self->owner->super.super.id);
+  if (self->worker_index > 0)
+    g_string_append_printf(thread_name, "[%d]", self->worker_index);
+  set_thread_name(thread_name->str);
+  g_string_free(thread_name, TRUE);
+
   msg_debug("Dedicated worker thread started",
             evt_tag_int("worker_index", self->worker_index),
             evt_tag_str("driver", self->owner->super.super.id),
@@ -871,12 +877,9 @@ _register_worker_stats(LogThreadedDestWorker *self)
     stats_cluster_key_builder_add_label(kb, stats_cluster_label("id", self->owner->super.super.id ? : ""));
     _format_stats_key(self->owner, kb);
 
-    if (self->owner->metrics.raw_bytes_enabled)
-      {
-        stats_cluster_key_builder_set_name(kb, "output_event_bytes_total");
-        self->metrics.output_event_bytes_sc_key = stats_cluster_key_builder_build_single(kb);
-        stats_byte_counter_init(&self->metrics.written_bytes, self->metrics.output_event_bytes_sc_key, level, SBCP_KIB);
-      }
+    stats_cluster_key_builder_set_name(kb, "output_event_bytes_total");
+    self->metrics.output_event_bytes_sc_key = stats_cluster_key_builder_build_single(kb);
+    stats_byte_counter_init(&self->metrics.written_bytes, self->metrics.output_event_bytes_sc_key, level, SBCP_KIB);
   }
   stats_cluster_key_builder_pop(kb);
 
@@ -1482,6 +1485,7 @@ log_threaded_dest_driver_free(LogPipe *s)
   LogThreadedDestDriver *self = (LogThreadedDestDriver *)s;
 
   g_free(self->workers);
+  log_template_unref(self->worker_partition_key);
   log_dest_driver_free((LogPipe *)self);
 }
 

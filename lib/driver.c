@@ -135,6 +135,9 @@ log_driver_free(LogPipe *s)
     g_free(self->group);
   if (self->id)
     g_free(self->id);
+
+  signal_slot_connector_free(self->signal_slot_connector);
+
   log_pipe_free_method(s);
 }
 
@@ -143,12 +146,14 @@ static void
 log_driver_init_instance(LogDriver *self, GlobalConfig *cfg)
 {
   log_pipe_init_instance(&self->super, cfg);
-  self->super.flags |= PIF_CONFIG_RELATED + PIF_SYNC_FILTERX;
+  self->super.flags |= PIF_CONFIG_RELATED;
   self->super.free_fn = log_driver_free;
   self->super.pre_init = log_driver_pre_init_method;
   self->super.init = log_driver_init_method;
   self->super.deinit = log_driver_deinit_method;
   self->super.post_deinit = log_driver_post_deinit_method;
+
+  self->signal_slot_connector = signal_slot_connector_new();
 }
 
 /* LogSrcDriver */
@@ -302,8 +307,14 @@ log_dest_driver_release_queue_method(LogDestDriver *self, LogQueue *q)
   GlobalConfig *cfg = log_pipe_get_config(&self->super.super);
 
   /* we only save the LogQueue instance if it contains data */
-  if (q->persist_name && log_queue_keep_on_reload(q) > 0)
+  if (q->persist_name && log_queue_keep_on_reload(q))
     {
+      /* TAKE CARE: Depending on the queue type, and the driver, marking the queue abandoned here might be important, as its counters
+       *    - might already be maintained in a stop like step, all data at this point might be flushed, and the queues are emptied
+       *    - might be altered again later on (e.g. during state restoration)
+       * see logqueue.c:_unregister_shared_counters(), log_queue_mark_as_abandoned() or diskq.c:_release_queue() for more details
+       */
+
       cfg_persist_config_add(cfg, q->persist_name, q, (GDestroyNotify) log_queue_unref);
     }
   else

@@ -52,6 +52,7 @@ void msg_set_log_level(gint new_log_level);
 gint msg_get_log_level(void);
 void msg_apply_cmdline_log_level(gint new_log_level);
 void msg_apply_config_log_level(gint new_log_level);
+gchar *msg_format_iso8601_timestamp(gchar *buf, gsize buflen);
 
 void msg_init(gboolean interactive);
 void msg_deinit(void);
@@ -80,17 +81,14 @@ void msg_add_option_group(GOptionContext *ctx);
 
 /* just like msg_info, but prepends the message with a timestamp -- useful in interactive
  * tools with long running time to provide some feedback */
-#define msg_progress(desc, tags...)             \
-        do {                    \
-          time_t t;                 \
-          char *timestamp, *newdesc;              \
-                                                                                  \
-          t = time(0);                        \
-          timestamp = ctime(&t);              \
-          timestamp[strlen(timestamp) - 1] = 0;           \
-          newdesc = g_strdup_printf("[%s] %s", timestamp, desc);      \
+#define msg_progress(desc, tags...)                                               \
+        do {                                                                      \
+          char timestamp[32];                                                     \
+          char *newdesc;                                                          \
+          msg_format_iso8601_timestamp(timestamp, sizeof(timestamp));             \
+          newdesc = g_strdup_printf("[%s] %s", timestamp, desc);                  \
           msg_event_send(msg_event_create(EVT_PRI_INFO, newdesc, ##tags, NULL )); \
-          g_free(newdesc);                \
+          g_free(newdesc);                                                        \
         } while (0)
 
 #define msg_verbose(desc, tags...)                                          \
@@ -102,15 +100,15 @@ void msg_add_option_group(GOptionContext *ctx);
 #define msg_debug(desc, tags...)              \
   do {                    \
     if (G_UNLIKELY(debug_flag))                                             \
-      msg_event_suppress_recursions_and_send(                               \
-            msg_event_create(EVT_PRI_DEBUG, desc, ##tags, NULL ));          \
+      CAPTURE_ERRNO(msg_event_suppress_recursions_and_send(                 \
+            msg_event_create(EVT_PRI_DEBUG, desc, ##tags, NULL )));         \
   } while (0)
 
 #define msg_trace(desc, tags...)              \
   do {                    \
     if (G_UNLIKELY(trace_flag))                     \
-      msg_event_suppress_recursions_and_send(                               \
-            msg_event_create(EVT_PRI_DEBUG, desc, ##tags, NULL ));          \
+      CAPTURE_ERRNO(msg_event_suppress_recursions_and_send(                 \
+            msg_event_create(EVT_PRI_DEBUG, desc, ##tags, NULL )));         \
   } while (0)
 
 #define msg_trace_printf(fmt, values...)       \
@@ -122,8 +120,8 @@ void msg_add_option_group(GOptionContext *ctx);
 #define msg_diagnostics(desc, tags...)              \
   do {                    \
     if (G_UNLIKELY(trace_flag))                     \
-      msg_event_print_event_to_stderr(              \
-            msg_event_create(EVT_PRI_DEBUG, desc, ##tags, NULL ));          \
+      CAPTURE_ERRNO(msg_event_print_event_to_stderr(                         \
+            msg_event_create(EVT_PRI_DEBUG, desc, ##tags, NULL )));          \
   } while (0)
 
 #define __once()          \

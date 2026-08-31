@@ -12,14 +12,15 @@ SCL_SUBDIRS	= \
 	elasticsearch	\
 	ewmm		\
 	fortigate	\
+	freebsd-audit	\
 	google	\
 	graphite	\
 	graylog2	\
 	hdfs		\
+	stats-exporter		\
 	iptables	\
 	jellyfin	\
 	junos		\
-	kafka		\
 	linux-audit	\
 	loadbalancer	\
 	loggly		\
@@ -49,7 +50,8 @@ SCL_SUBDIRS	= \
 	system		\
 	websense	\
 	telegram	\
-	windowseventlog
+	windowseventlog \
+	azure
 
 
 SCL_CONFIGS	= scl.conf syslog-ng.conf
@@ -69,6 +71,9 @@ scl-install-data-local:
 		$(install_sh_DATA) $(srcdir)/scl/scl.conf  $(DESTDIR)/$(config_includedir)/scl.conf; \
 	fi
 	(cd $(srcdir)/scl; tar cf - $(SCL_SUBDIRS)) | (cd $(DESTDIR)/$(scldir) && tar xf - --no-same-owner)
+if !ENABLE_SCL_SYSLOGCONF_AWK
+	rm -f $(DESTDIR)/$(scldir)/syslogconf/convert-syslogconf.awk
+endif
 	chmod -R u+rwX $(DESTDIR)/$(scldir)
 
 scl-uninstall-local:

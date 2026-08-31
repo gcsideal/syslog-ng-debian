@@ -508,7 +508,7 @@ python_dd_insert(LogThreadedDestDriver *d, LogMessage *msg)
   if (!_py_construct_message(self, msg, &msg_object))
     goto exit;
 
-  result =_py_invoke_send(self, msg_object);
+  result = _py_invoke_send(self, msg_object);
   Py_DECREF(msg_object);
 
 exit:
@@ -656,8 +656,6 @@ python_dd_new(GlobalConfig *cfg)
   self->super.super.super.super.deinit = python_dd_deinit;
   self->super.super.super.super.free_fn = python_dd_free;
   self->super.super.super.super.generate_persist_name = python_dd_format_persist_name;
-
-  self->super.metrics.raw_bytes_enabled = TRUE;
 
   self->super.worker.connect = python_dd_connect;
   self->super.worker.disconnect = python_dd_disconnect;

@@ -95,12 +95,12 @@ TLS_BLOCK_END;
 StatsCounterItem *stats_scratch_buffers_count;
 StatsCounterItem *stats_scratch_buffers_bytes;
 
-#define scratch_buffers       __tls_deref(scratch_buffers)
-#define scratch_buffers_used  __tls_deref(scratch_buffers_used)
-#define scratch_buffers_bytes_reported  __tls_deref(scratch_buffers_bytes_reported)
-#define scratch_buffers_time_of_last_maintenance  __tls_deref(scratch_buffers_time_of_last_maintenance)
-#define scratch_buffers_gc  __tls_deref(scratch_buffers_gc)
-#define scratch_buffers_gc_executed  __tls_deref(scratch_buffers_gc_executed)
+#define scratch_buffers       __slng_tls_deref(scratch_buffers)
+#define scratch_buffers_used  __slng_tls_deref(scratch_buffers_used)
+#define scratch_buffers_bytes_reported  __slng_tls_deref(scratch_buffers_bytes_reported)
+#define scratch_buffers_time_of_last_maintenance  __slng_tls_deref(scratch_buffers_time_of_last_maintenance)
+#define scratch_buffers_gc  __slng_tls_deref(scratch_buffers_gc)
+#define scratch_buffers_gc_executed  __slng_tls_deref(scratch_buffers_gc_executed)
 
 /* update allocation counters once every period, in seconds */
 #define SCRATCH_BUFFERS_MAINTENANCE_PERIOD 5
@@ -207,6 +207,8 @@ scratch_buffers_allocator_deinit(void)
                   evt_tag_long("bytes", scratch_buffers_bytes_reported));
     }
 
+  /* apply possibly pending stat updates before removing our values */
+  scratch_buffers_update_stats();
   /* remove our values from stats */
   stats_counter_sub(stats_scratch_buffers_count, scratch_buffers->len);
   stats_counter_sub(stats_scratch_buffers_bytes, scratch_buffers_bytes_reported);
@@ -230,8 +232,8 @@ _thread_maintenance_period_elapsed(void)
   if (!scratch_buffers_time_of_last_maintenance)
     return TRUE;
 
-  iv_validate_now();
-  if (scratch_buffers_time_of_last_maintenance - iv_now.tv_sec >= SCRATCH_BUFFERS_MAINTENANCE_PERIOD)
+  time_t now = get_cached_realtime_sec();
+  if (scratch_buffers_time_of_last_maintenance - now >= SCRATCH_BUFFERS_MAINTENANCE_PERIOD)
     return TRUE;
   return FALSE;
 }
@@ -239,16 +241,23 @@ _thread_maintenance_period_elapsed(void)
 static void
 _thread_maintenance_update_time(void)
 {
-  scratch_buffers_time_of_last_maintenance = iv_now.tv_sec;
+  scratch_buffers_time_of_last_maintenance = get_cached_realtime_sec();
 }
 
 void
 scratch_buffers_lazy_update_stats(void)
 {
-  if (_thread_maintenance_period_elapsed())
+  if (iv_inited())
+    {
+      if (_thread_maintenance_period_elapsed())
+        {
+          scratch_buffers_update_stats();
+          _thread_maintenance_update_time();
+        }
+    }
+  else
     {
       scratch_buffers_update_stats();
-      _thread_maintenance_update_time();
     }
 }
 

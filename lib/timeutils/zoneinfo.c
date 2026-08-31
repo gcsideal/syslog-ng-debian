@@ -164,7 +164,7 @@ readbool(unsigned char **input)
   c = **input;
   *input += 1;
 
-  if (c!=0 && c!=1)
+  if (c != 0 && c != 1)
     {
       msg_error("Error while processing the time zone file",
                 evt_tag_str("message", "Boolean value out-of-range"),
@@ -296,14 +296,14 @@ zone_info_parser(unsigned char **input, gboolean is64bitData, gint *version)
           msg_warning("Error in the time zone file",
                       evt_tag_str("message", "Illegal type number"),
                       evt_tag_printf("val", "%ld", (long) t),
-                      evt_tag_printf("expected", "[0, %" G_GINT64_FORMAT "]", typecnt-1));
+                      evt_tag_printf("expected", "[0, %" G_GINT64_FORMAT "]", typecnt - 1));
           goto error;
         }
       transition_types[i] = t;
     }
 
   /* Read types (except for the isstd and isut flags, which come later (why??)) */
-  for (i = 0; i<typecnt; ++i)
+  for (i = 0; i < typecnt; ++i)
     {
       gint offs = 24;
 
@@ -370,7 +370,7 @@ zone_info_parser(unsigned char **input, gboolean is64bitData, gint *version)
                * If there are any transitions before the 32bit minimum time,
                * put the type information with the 32bit minimum time
                */
-              memmove(&info->transitions[1], &info->transitions[0], sizeof(Transition) * (timecnt-1));
+              memmove(&info->transitions[1], &info->transitions[0], sizeof(Transition) * (timecnt - 1));
               info->transitions[0].time = LOWEST_TIME32;
               info->transitions[0].gmtoffset = gmt_offsets[transition_types[minidx]];
               info->timecnt -= minidx;
@@ -402,7 +402,7 @@ zone_info_parser(unsigned char **input, gboolean is64bitData, gint *version)
       info->transitions = g_renew(Transition, info->transitions, timecnt);
 
       /* Add the initial type associated with the lowest int32 time */
-      memmove(&info->transitions[1], &info->transitions[0], sizeof(Transition) * (timecnt-1));
+      memmove(&info->transitions[1], &info->transitions[0], sizeof(Transition) * (timecnt - 1));
       info->transitions[0].time = LOWEST_TIME32;
       info->transitions[0].gmtoffset = gmt_offsets[0];
     }
@@ -412,9 +412,9 @@ zone_info_parser(unsigned char **input, gboolean is64bitData, gint *version)
     *input += charcnt;
 
   /* ignore leap second info, if any */
-  for (i=0; i<leapcnt; ++i)
+  for (i = 0; i < leapcnt; ++i)
     {
-      if(is64bitData)
+      if (is64bitData)
         readcoded64(input, G_MININT64, G_MAXINT64);/* leap second transition time */
       else
         readcoded32(input, G_MININT64, G_MAXINT64);/* leap second transition time */
@@ -425,11 +425,11 @@ zone_info_parser(unsigned char **input, gboolean is64bitData, gint *version)
   /* We don't need this flags to compute the wall time of the timezone*/
 
   /* Ignore isstd flags */
-  for (i=0; i<isstdcnt; i++)
+  for (i = 0; i < isstdcnt; i++)
     readbool(input);
 
   /* Ignore isut flags */
-  for (i=0; i<isutcnt; i++)
+  for (i = 0; i < isutcnt; i++)
     readbool(input);
 
 error:
@@ -459,7 +459,7 @@ zone_info_get_offset(ZoneInfo *self, gint64 timestamp)
     {
       for (i = 0; i < (self->timecnt - 1); i++)
         if (self->transitions[i].time <= timestamp &&
-            self->transitions[i+1].time > timestamp)
+            self->transitions[i + 1].time > timestamp)
           break;
 
       self->last_transitions_index  = i;
@@ -471,9 +471,7 @@ zone_info_get_offset(ZoneInfo *self, gint64 timestamp)
 static gboolean
 zone_info_read(const gchar *zonename, ZoneInfo **zone, ZoneInfo **zone64)
 {
-  unsigned char *buff = NULL;
   gchar *filename = NULL;
-  int byte_read = 0;
   int version;
   GError *error = NULL;
   GMappedFile *file_map = NULL;
@@ -493,9 +491,7 @@ zone_info_read(const gchar *zonename, ZoneInfo **zone, ZoneInfo **zone64)
       return FALSE;
     }
 
-  byte_read = g_mapped_file_get_length(file_map);
-  buff = (unsigned char *)g_mapped_file_get_contents(file_map);
-
+  int byte_read = g_mapped_file_get_length(file_map);
   if (byte_read == -1)
     {
       msg_error("Failed to read the time zone file", evt_tag_str("filename", filename));
@@ -505,6 +501,7 @@ zone_info_read(const gchar *zonename, ZoneInfo **zone, ZoneInfo **zone64)
     }
 
   msg_debug("Processing the time zone file (32bit part)", evt_tag_str("filename", filename));
+  unsigned char *buff = (unsigned char *)g_mapped_file_get_contents(file_map);
   *zone = zone_info_parser(&buff, FALSE, &version);
   if (version == 2)
     {
@@ -546,17 +543,17 @@ time_zone_info_new(const gchar *tz)
     return self;
 
   if ((*tz == '+' || *tz == '-') && strlen(tz) == 6 &&
-      isdigit((int) *(tz+1)) && isdigit((int) *(tz+2)) &&
-      (*(tz+3) == ':') && isdigit((int) *(tz+4)) &&
-      isdigit((int) *(tz+5)))
+      isdigit((int) * (tz + 1)) && isdigit((int) * (tz + 2)) &&
+      (*(tz + 3) == ':') && isdigit((int) * (tz + 4)) &&
+      isdigit((int) * (tz + 5)))
     {
       /* timezone offset */
       gint sign = *tz == '-' ? -1 : 1;
       gint hours, mins;
       tz++;
 
-      hours = (*tz - '0') * 10 + *(tz+1) - '0';
-      mins = (*(tz+3) - '0') * 10 + *(tz+4) - '0';
+      hours = (*tz - '0') * 10 + *(tz + 1) - '0';
+      mins = (*(tz + 3) - '0') * 10 + *(tz + 4) - '0';
       if ((hours < 24 && mins <= 60) || (hours == 24 && mins == 0))
         {
           self->zone_offset = sign * (hours * 3600 + mins * 60);

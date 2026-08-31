@@ -39,17 +39,23 @@
 
 TestSuite(filter, .init = setup, .fini = teardown);
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS.
+ * Use "__NULL__" in test tables when a checked value must be NULL.
+ */
 typedef struct _FilterParamRegexp
 {
-  const gchar *msg;
+  gchar msg[256];
   gint field;
-  const gchar *regexp;
+  gchar regexp[256];
   gint flags;
-  const gchar *regexp2;
+  gchar regexp2[256];
   gint flags2;
   gboolean expected_result;
-  const gchar *name;
-  const gchar *value;
+  gchar name[64];
+  gchar value[128];
 } FilterParamRegexp;
 
 Test(filter, create_pcre_regexp_filter)
@@ -86,17 +92,17 @@ ParameterizedTestParameters(filter, test_filter_regexp_backref_chk)
   {
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: al fa", .field = LM_V_MESSAGE, .regexp = "(a)(l) (fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "1", .value = "a"},
     {.msg = "<15>Oct 15 16:17:02 host openvpn[2499]: al fa", .field = LM_V_MESSAGE, .regexp = "(a)(l) (fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "0", .value = "al fa"},
-    {.msg = "<15>Oct 15 16:17:03 host openvpn[2499]: al fa", .field = LM_V_MESSAGE, .regexp = "(a)(l) (fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "232", .value = NULL},
+    {.msg = "<15>Oct 15 16:17:03 host openvpn[2499]: al fa", .field = LM_V_MESSAGE, .regexp = "(a)(l) (fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "232", .value = "__NULL__"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: alma fa", .field = LM_V_MESSAGE, .regexp = "(?P<a>a)(?P<l>l)(?P<MM>m)(?P<aa>a) (?P<fa>fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "MM", .value = "m"},
-    {.msg = "<15>Oct 15 16:17:02 host openvpn[2499]: alma fa", .field = LM_V_MESSAGE, .regexp = "(?P<a>a)(?P<l>l)(?P<MM>m)(?P<aa>a) (?P<fa>fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "aaaa", .value = NULL},
+    {.msg = "<15>Oct 15 16:17:02 host openvpn[2499]: alma fa", .field = LM_V_MESSAGE, .regexp = "(?P<a>a)(?P<l>l)(?P<MM>m)(?P<aa>a) (?P<fa>fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "aaaa", .value = "__NULL__"},
     {.msg = "<15>Oct 15 16:17:03 host openvpn[2499]: alma fa", .field = LM_V_MESSAGE, .regexp = "(?P<a>a)(?P<l>l)(?P<MM>m)(?P<aa>a) (?P<fa_name>fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "fa_name", .value = "fa"},
     {.msg = "<15>Oct 15 16:17:04 host openvpn[2499]: al fa", .field = LM_V_MESSAGE, .regexp = "(a)(l) (fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "2", .value = "l"},
     {.msg = "<15>Oct 15 16:17:04 host openvpn[2499]: al fa", .field = LM_V_MESSAGE, .regexp = "(a)(l) (fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "3", .value = "fa"},
     {.msg = "<15>Oct 15 16:17:05 host openvpn[2499]: al fa", .field = LM_V_MESSAGE, .regexp = "(a)(l) (fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "0", .value = "al fa"},
-    {.msg = "<15>Oct 15 16:17:06 host openvpn[2499]: al fa", .field = LM_V_MESSAGE, .regexp = "(a)(l) (fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "233", .value = NULL},
+    {.msg = "<15>Oct 15 16:17:06 host openvpn[2499]: al fa", .field = LM_V_MESSAGE, .regexp = "(a)(l) (fa)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "233", .value = "__NULL__"},
     {.msg = "<15>Oct 15 16:17:06 host openvpn[2499]: foobar bar", .field = LM_V_MESSAGE, .regexp = "(?<foobar>foobar) (?<foo>foo)?(?<bar>bar)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "bar", .value = "bar"},
     {.msg = "<15>Oct 15 16:17:06 host openvpn[2499]: foobar bar", .field = LM_V_MESSAGE, .regexp = "(?<foobar>foobar) (?<foo>foo)?(?<bar>bar)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "foobar", .value = "foobar"},
-    {.msg = "<15>Oct 15 16:17:06 host openvpn[2499]: foobar bar", .field = LM_V_MESSAGE, .regexp = "(?<foobar>foobar) (?<foo>foo)?(?<bar>bar)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "foo", .value = NULL},
+    {.msg = "<15>Oct 15 16:17:06 host openvpn[2499]: foobar bar", .field = LM_V_MESSAGE, .regexp = "(?<foobar>foobar) (?<foo>foo)?(?<bar>bar)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "foo", .value = "__NULL__"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: abc", .field = LM_V_MESSAGE, .regexp = "((a))", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "1", .value = "a"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: abc", .field = LM_V_MESSAGE, .regexp = "((a))", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "2", .value = "a"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: ab", .field = LM_V_MESSAGE, .regexp = "(a+|b)*", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "1", .value = "b"},
@@ -117,13 +123,13 @@ ParameterizedTestParameters(filter, test_filter_regexp_backref_chk)
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: abcd", .field = LM_V_MESSAGE, .regexp = "a([bc]+)(c*d)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "2", .value = "d"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: abcd", .field = LM_V_MESSAGE, .regexp = "a([bc]*)(c+d)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "2", .value = "cd"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: alpha", .field = LM_V_MESSAGE, .regexp = "[a-zA-Z_][a-zA-Z0-9_]*", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "0", .value = "alpha"},
-    {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: abh", .field = LM_V_MESSAGE, .regexp = "^a(bc+|b[eh])g|.h$", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "1", .value = NULL},
+    {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: abh", .field = LM_V_MESSAGE, .regexp = "^a(bc+|b[eh])g|.h$", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "1", .value = "__NULL__"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: effgz", .field = LM_V_MESSAGE, .regexp = "(bc+d$|ef*g.|h?i(j|k))", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "1", .value = "effgz"},
-    {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: effgz", .field = LM_V_MESSAGE, .regexp = "(bc+d$|ef*g.|h?i(j|k))", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "2", .value = NULL},
+    {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: effgz", .field = LM_V_MESSAGE, .regexp = "(bc+d$|ef*g.|h?i(j|k))", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "2", .value = "__NULL__"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: ij", .field = LM_V_MESSAGE, .regexp = "(bc+d$|ef*g.|h?i(j|k))", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "1", .value = "ij"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: ij", .field = LM_V_MESSAGE, .regexp = "(bc+d$|ef*g.|h?i(j|k))", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "2", .value = "j"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: reffgz", .field = LM_V_MESSAGE, .regexp = "(bc+d$|ef*g.|h?i(j|k))", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "1", .value = "effgz"},
-    {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: reffgz", .field = LM_V_MESSAGE, .regexp = "(bc+d$|ef*g.|h?i(j|k))", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "2", .value = NULL},
+    {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: reffgz", .field = LM_V_MESSAGE, .regexp = "(bc+d$|ef*g.|h?i(j|k))", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "2", .value = "__NULL__"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: a", .field = LM_V_MESSAGE, .regexp = "((((((((((a))))))))))", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "10", .value = "a"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: aa", .field = LM_V_MESSAGE, .regexp = "((((((((((a))))))))))\\10", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "0", .value = "aa"},
     {.msg = "<15>Oct 15 16:17:01 host openvpn[2499]: abcde", .field = LM_V_MESSAGE, .regexp = "(.*)c(.*)", .flags = LMF_STORE_MATCHES, .expected_result = TRUE, .name = "1", .value = "ab"},
@@ -152,7 +158,9 @@ ParameterizedTestParameters(filter, test_filter_regexp_backref_chk)
 ParameterizedTest(FilterParamRegexp *param, filter, test_filter_regexp_backref_chk)
 {
   FilterExprNode *filter = create_pcre_regexp_filter(param->field, param->regexp, param->flags);
-  testcase_with_backref_chk(param->msg, filter, param->expected_result, param->name, param->value);
+  /* "__NULL__" is a table sentinel: convert it back to NULL for assertions. */
+  testcase_with_backref_chk(param->msg, filter, param->expected_result, param->name,
+                            strcmp(param->value, "__NULL__") == 0 ? NULL : param->value);
 }
 
 ParameterizedTestParameters(filter, test_filter_regexp_filter)

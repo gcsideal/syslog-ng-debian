@@ -23,7 +23,7 @@
 
 #include "glib.h"
 
-#ifndef SYSLOG_NG_HAVE_G_LIST_COPY_DEEP
+#if ! SYSLOG_NG_HAVE_G_LIST_COPY_DEEP
 
 /*
   Less efficient than the original implementation in glib 2.53.2 that
@@ -58,7 +58,7 @@ g_list_copy_deep(GList     *list,
 
 #endif
 
-#ifndef SYSLOG_NG_HAVE_G_PTR_ARRAY_FIND_WITH_EQUAL_FUNC
+#if ! SYSLOG_NG_HAVE_G_PTR_ARRAY_FIND_WITH_EQUAL_FUNC
 gboolean
 g_ptr_array_find_with_equal_func (GPtrArray     *haystack,
                                   gconstpointer  needle,
@@ -86,7 +86,7 @@ g_ptr_array_find_with_equal_func (GPtrArray     *haystack,
 }
 #endif
 
-#ifndef SYSLOG_NG_HAVE_G_CANONICALIZE_FILENAME
+#if ! SYSLOG_NG_HAVE_G_CANONICALIZE_FILENAME
 #include <string.h>
 /**
  * g_canonicalize_filename:
@@ -166,7 +166,7 @@ g_canonicalize_filename (const gchar *filename,
     {
       i -= 1;
       start -= i;
-      memmove (start, start+i, strlen (start+i) + 1);
+      memmove (start, start + i, strlen (start + i) + 1);
     }
 
   /* Make sure we're using the canonical dir separator */
@@ -179,7 +179,7 @@ g_canonicalize_filename (const gchar *filename,
     {
       if (p[0] == '.' && (p[1] == 0 || G_IS_DIR_SEPARATOR (p[1])))
         {
-          memmove (p, p+1, strlen (p+1)+1);
+          memmove (p, p + 1, strlen (p + 1) + 1);
         }
       else if (p[0] == '.' && p[1] == '.' && (p[2] == 0 || G_IS_DIR_SEPARATOR (p[2])))
         {
@@ -192,7 +192,7 @@ g_canonicalize_filename (const gchar *filename,
             p--;
           if (G_IS_DIR_SEPARATOR (*p))
             *p++ = G_DIR_SEPARATOR;
-          memmove (p, q, strlen (q)+1);
+          memmove (p, q, strlen (q) + 1);
         }
       else
         {
@@ -217,8 +217,8 @@ g_canonicalize_filename (const gchar *filename,
     }
 
   /* Remove trailing slashes */
-  if (p > start && G_IS_DIR_SEPARATOR (*(p-1)))
-    *(p-1) = 0;
+  if (p > start && G_IS_DIR_SEPARATOR (*(p - 1)))
+    *(p - 1) = 0;
 
   return canon;
 }
@@ -292,7 +292,7 @@ g_utf8_get_char_validated_fixed(const gchar *p, gssize max_len)
 
 #undef g_utf8_get_char_validated
   if (*p == '\0' && max_len > 0)
-    return (gunichar)-2;
+    return (gunichar) -2;
 
   return g_utf8_get_char_validated(p, max_len);
 }

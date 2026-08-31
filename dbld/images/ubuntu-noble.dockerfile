@@ -1,13 +1,15 @@
 FROM ubuntu:noble
-LABEL maintainer="Laszlo Varady <laszlo.varady@axoflow.com>"
-ENV OS_DISTRIBUTION=ubuntu
-ENV OS_DISTRIBUTION_CODE_NAME=noble
-
 ARG ARG_IMAGE_PLATFORM
 ARG COMMIT
-ENV IMAGE_PLATFORM ${ARG_IMAGE_PLATFORM}
+ARG JENKINS_URL
+
+LABEL maintainer="kira.syslogng@gmail.com"
+LABEL org.opencontainers.image.authors="kira.syslogng@gmail.com"
 LABEL COMMIT=${COMMIT}
 
+ENV OS_DISTRIBUTION=ubuntu
+ENV OS_DISTRIBUTION_CODE_NAME=noble
+ENV IMAGE_PLATFORM ${ARG_IMAGE_PLATFORM}
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
 ENV LANG C.UTF-8

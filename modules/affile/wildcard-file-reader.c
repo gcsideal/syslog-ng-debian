@@ -105,7 +105,7 @@ _notify(LogPipe *s, gint notify_code, gpointer user_data)
 {
   WildcardFileReader *self = (WildcardFileReader *)s;
   gint result = NR_OK;
-  switch(notify_code)
+  switch (notify_code)
     {
     case NC_FILE_DELETED:
       _set_deleted(self);
@@ -159,14 +159,17 @@ wildcard_file_reader_is_deleted(WildcardFileReader *self)
 
 WildcardFileReader *
 wildcard_file_reader_new(const gchar *filename, FileReaderOptions *options, FileOpener *opener, LogSrcDriver *owner,
-                         GlobalConfig *cfg)
+                         GlobalConfig *cfg, gboolean monitor_can_notify_file_changes)
 {
   WildcardFileReader *self = g_new0(WildcardFileReader, 1);
   file_reader_init_instance(&self->super, filename, options, opener, owner, cfg, "wildcard_file_sd");
   self->super.super.init = _init;
   self->super.super.notify = _notify;
   self->super.super.deinit = _deinit;
+
   self->super.on_file_moved = _on_file_moved;
+  self->super.monitor_can_notify_file_changes = monitor_can_notify_file_changes;
+
   IV_TASK_INIT(&self->file_state_event_handler);
   self->file_state_event_handler.cookie = self;
   self->file_state_event_handler.handler = _handle_file_state_event;

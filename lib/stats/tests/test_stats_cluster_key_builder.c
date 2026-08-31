@@ -38,7 +38,7 @@ _assert_built_sc_key_equals(const StatsClusterKeyBuilder *builder, KeyType type,
                             StatsClusterLabel *labels, gssize labels_len)
 {
   StatsClusterKey expected_sc_key;
-  StatsClusterKey *built_key;
+  StatsClusterKey *built_key = NULL;
 
   if (type == TEST_LOGPIPE)
     {
@@ -91,7 +91,7 @@ _assert_built_sc_key_equals_with_legacy(const StatsClusterKeyBuilder *builder, K
                                         const gchar *legacy_name)
 {
   StatsClusterKey expected_sc_key;
-  StatsClusterKey *built_key;
+  StatsClusterKey *built_key = NULL;
 
   if (type == TEST_LOGPIPE)
     {

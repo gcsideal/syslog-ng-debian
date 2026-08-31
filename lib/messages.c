@@ -53,7 +53,7 @@ enum
 typedef struct _MsgContext
 {
   guint16 recurse_state;
-  guint recurse_warning:1;
+  guint recurse_warning: 1;
   gchar recurse_trigger[128];
 } MsgContext;
 
@@ -129,8 +129,8 @@ msg_limit_internal_message(const gchar *msg)
   return TRUE;
 }
 
-static gchar *
-msg_format_timestamp(gchar *buf, gsize buflen)
+gchar *
+msg_format_iso8601_timestamp(gchar *buf, gsize buflen)
 {
   UnixTime now;
   WallClockTime wct_now;
@@ -154,7 +154,7 @@ msg_send_formatted_message_to_stderr(const char *msg)
   if (skip_timestamp_on_stderr)
     fprintf(stderr, "%s\n", msg);
   else
-    fprintf(stderr, "[%s] %s\n", msg_format_timestamp(tmtime, sizeof(tmtime)), msg);
+    fprintf(stderr, "[%s] %s\n", msg_format_iso8601_timestamp(tmtime, sizeof(tmtime)), msg);
 }
 
 void
@@ -215,7 +215,8 @@ msg_event_send(EVTREC *e)
 void
 msg_event_suppress_recursions_and_send(EVTREC *e)
 {
-  msg_event_send_with_suppression(e, msg_limit_internal_message);
+  if (G_LIKELY(e != NULL))
+    msg_event_send_with_suppression(e, msg_limit_internal_message);
 }
 
 void
@@ -235,6 +236,11 @@ msg_event_create(gint prio, const gchar *desc, EVTTAG *tag1, ...)
 {
   EVTREC *e;
   va_list va;
+
+  if (G_UNLIKELY(evt_context == NULL))
+    {
+      return NULL;
+    }
 
   g_mutex_lock(&evtlog_lock);
   e = evt_rec_init(evt_context, prio, desc);

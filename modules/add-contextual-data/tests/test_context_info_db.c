@@ -385,65 +385,49 @@ struct TestNVPairPrefix
   const gchar *prefix;
 };
 
-ParameterizedTestParameters(add_contextual_data, test_import_with_prefix)
+/* Keep this as a plain Test + loop (not ParameterizedTest + ParameterizedTestParameters)
+ * the cases are pointer-based iovec entries, and we must avoid pointer payload transport through
+ * Criterion parameterization on macOS.
+ */
+Test(add_contextual_data, test_import_with_prefix)
 {
   static struct TestNVPairPrefix params[] =
   {
-    {
-      .expected = {.name = "name1", .value = "value1"},
-      .prefix = NULL
-    },
-    {
-      .expected = {.name = "name1", .value = "value1"},
-      .prefix = ""
-    },
-    {
-      .expected = {.name = "aaaname1", .value = "value1"},
-      .prefix = "aaa"
-    },
-    {
-      .expected = {.name = "aaa.name1", .value = "value1"},
-      .prefix = "aaa."
-    },
-    {
-      .expected = {.name = ".aaa.name1", .value = "value1"},
-      .prefix = ".aaa."
-    },
-    {
-      .expected = {.name = ".name1", .value = "value1"},
-      .prefix = "."
-    },
-    {
-      .expected = {.name = "....name1", .value = "value1"},
-      .prefix = "...."
-    }
+    { .expected = {.name = "name1", .value = "value1"}, .prefix = NULL },
+    { .expected = {.name = "name1", .value = "value1"}, .prefix = "" },
+    { .expected = {.name = "aaaname1", .value = "value1"}, .prefix = "aaa" },
+    { .expected = {.name = "aaa.name1", .value = "value1"}, .prefix = "aaa." },
+    { .expected = {.name = ".aaa.name1", .value = "value1"}, .prefix = ".aaa." },
+    { .expected = {.name = ".name1", .value = "value1"}, .prefix = "." },
+    { .expected = {.name = "....name1", .value = "value1"}, .prefix = "...." }
   };
-  size_t nb_params = sizeof (params) / sizeof (struct TestNVPairPrefix);
-  return cr_make_param_array(struct TestNVPairPrefix, params, nb_params);
-}
 
+  for (gsize i = 0; i < G_N_ELEMENTS(params); i++)
+    {
+      struct TestNVPairPrefix *param = &params[i];
+      gchar csv_content[] = "selector1,name1,value1";
 
-ParameterizedTest(struct TestNVPairPrefix *param, add_contextual_data, test_import_with_prefix)
-{
-  gchar csv_content[] = "selector1,name1,value1";
+      FILE *fp = fmemopen(csv_content, sizeof(csv_content), "r");
+      ContextInfoDB *db = context_info_db_new(FALSE);
+      ContextualDataRecordScanner *scanner =
+        contextual_data_record_scanner_new(configuration, param->prefix);
 
-  FILE *fp = fmemopen(csv_content, sizeof(csv_content), "r");
-  ContextInfoDB *db = context_info_db_new(FALSE);
-  ContextualDataRecordScanner *scanner =
-    contextual_data_record_scanner_new(configuration, param->prefix);
+      cr_assert(context_info_db_import(db, fp, "dummy.csv", scanner),
+                "Failed to import valid CSV file.");
+      cr_assert(context_info_db_is_loaded(db),
+                "The context_info_db_is_loaded reports False after a successful import operation. ");
+      cr_assert(context_info_db_is_indexed(db),
+                "The context_info_db_is_indexed reports False after successful import&load operations.");
+      fclose(fp);
 
-  cr_assert(context_info_db_import(db, fp, "dummy.csv", scanner),
-            "Failed to import valid CSV file.");
-  cr_assert(context_info_db_is_loaded(db),
-            "The context_info_db_is_loaded reports False after a successful import operation. ");
-  cr_assert(context_info_db_is_indexed(db),
-            "The context_info_db_is_indexed reports False after successful import&load operations.");
-  fclose(fp);
+      _assert_context_info_db_contains_name_value_pairs_by_selector(db,
+          "selector1",
+          &param->expected,
+          1);
 
-  _assert_context_info_db_contains_name_value_pairs_by_selector(db,
-      "selector1",
-      &param->expected,
-      1);
+      contextual_data_record_scanner_free(scanner);
+      context_info_db_unref(db);
+    }
 }
 
 Test(add_contextual_data, test_ignore_case_on)
@@ -557,4 +541,4 @@ teardown(void)
   app_shutdown();
 }
 
-TestSuite(add_contextual_data, .init=setup, .fini=teardown);
+TestSuite(add_contextual_data, .init = setup, .fini = teardown);

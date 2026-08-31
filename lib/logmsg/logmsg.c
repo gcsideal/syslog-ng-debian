@@ -141,12 +141,12 @@ TLS_BLOCK_START
 }
 TLS_BLOCK_END;
 
-#define logmsg_current              __tls_deref(logmsg_current)
-#define logmsg_cached_refs          __tls_deref(logmsg_cached_refs)
-#define logmsg_cached_acks          __tls_deref(logmsg_cached_acks)
-#define logmsg_cached_ack_needed    __tls_deref(logmsg_cached_ack_needed)
-#define logmsg_cached_abort         __tls_deref(logmsg_cached_abort)
-#define logmsg_cached_suspend       __tls_deref(logmsg_cached_suspend)
+#define logmsg_current              __slng_tls_deref(logmsg_current)
+#define logmsg_cached_refs          __slng_tls_deref(logmsg_cached_refs)
+#define logmsg_cached_acks          __slng_tls_deref(logmsg_cached_acks)
+#define logmsg_cached_ack_needed    __slng_tls_deref(logmsg_cached_ack_needed)
+#define logmsg_cached_abort         __slng_tls_deref(logmsg_cached_abort)
+#define logmsg_cached_suspend       __slng_tls_deref(logmsg_cached_suspend)
 
 #define LOGMSG_REFCACHE_SUSPEND_SHIFT                 31 /* number of bits to shift to get the SUSPEND flag */
 #define LOGMSG_REFCACHE_SUSPEND_MASK          0x80000000 /* bit mask to extract the SUSPEND flag */
@@ -171,33 +171,6 @@ TLS_BLOCK_END;
 /**********************************************************************
  * LogMessage
  **********************************************************************/
-
-gboolean
-log_msg_is_handle_macro(NVHandle handle)
-{
-  guint16 flags;
-
-  flags = nv_registry_get_handle_flags(logmsg_registry, handle);
-  return !!(flags & LM_VF_MACRO);
-}
-
-gboolean
-log_msg_is_handle_sdata(NVHandle handle)
-{
-  guint16 flags;
-
-  flags = nv_registry_get_handle_flags(logmsg_registry, handle);
-  return !!(flags & LM_VF_SDATA);
-}
-
-gboolean
-log_msg_is_handle_match(NVHandle handle)
-{
-  guint16 flags;
-
-  flags = nv_registry_get_handle_flags(logmsg_registry, handle);
-  return !!(flags & LM_VF_MATCH);
-}
 
 static inline gboolean
 log_msg_chk_flag(const LogMessage *self, gint32 flag)
@@ -407,7 +380,7 @@ log_msg_update_sdata_slow(LogMessage *self, NVHandle handle, const gchar *name, 
 
   if (i >= 0)
     {
-      memmove(&self->sdata[i+1], &self->sdata[i], (self->num_sdata - i) * sizeof(self->sdata[0]));
+      memmove(&self->sdata[i + 1], &self->sdata[i], (self->num_sdata - i) * sizeof(self->sdata[0]));
       self->sdata[i] = handle;
     }
   else
@@ -616,6 +589,7 @@ log_msg_set_value_with_type(LogMessage *self, NVHandle handle,
   if (value_len < 0)
     value_len = strlen(value);
 
+  self->generation++;
   if (_log_name_value_updates(self))
     {
       msg_trace("Setting value",
@@ -651,7 +625,7 @@ log_msg_set_value_with_type(LogMessage *self, NVHandle handle,
         }
       guint32 new_size = self->payload->size;
       self->allocated_bytes += (new_size - old_size);
-      stats_counter_add(count_allocated_bytes, new_size-old_size);
+      stats_counter_add(count_allocated_bytes, new_size - old_size);
       stats_counter_inc(count_payload_reallocs);
     }
 
@@ -674,6 +648,7 @@ log_msg_unset_value(LogMessage *self, NVHandle handle)
 {
   g_assert(!log_msg_is_write_protected(self));
 
+  self->generation++;
   if (_log_name_value_updates(self))
     {
       msg_trace("Unsetting value",
@@ -702,7 +677,7 @@ log_msg_unset_value(LogMessage *self, NVHandle handle)
         }
       guint32 new_size = self->payload->size;
       self->allocated_bytes += (new_size - old_size);
-      stats_counter_add(count_allocated_bytes, new_size-old_size);
+      stats_counter_add(count_allocated_bytes, new_size - old_size);
       stats_counter_inc(count_payload_reallocs);
     }
 
@@ -735,6 +710,7 @@ log_msg_set_value_indirect_with_type(LogMessage *self, NVHandle handle,
   name_len = 0;
   name = log_msg_get_value_name(handle, &name_len);
 
+  self->generation++;
   if (_log_name_value_updates(self))
     {
       msg_trace("Setting indirect value",
@@ -974,6 +950,7 @@ log_msg_set_tag_by_id_onoff(LogMessage *self, LogTagId id, gboolean on)
 
   g_assert(!log_msg_is_write_protected(self));
 
+  self->generation++;
   msg_trace("Setting tag",
             evt_tag_str("name", log_tags_get_by_id(id)),
             evt_tag_int("value", on),
@@ -1214,7 +1191,7 @@ log_msg_append_format_sdata(const LogMessage *self, GString *result,  guint32 se
         }
       /* if message hasn't sequenceId and the cur_elem is the meta block Append the sequenceId for the result
          if seq_num isn't 0 */
-      if (!has_seq_num && seq_num!=0 && strncmp(sdata_elem, "meta.", 5) == 0)
+      if (!has_seq_num && seq_num != 0 && strncmp(sdata_elem, "meta.", 5) == 0)
         {
           GString *sequence_id = scratch_buffers_alloc();
           format_uint64_padded(sequence_id, 0, 0, 10, seq_num);
@@ -1244,7 +1221,7 @@ log_msg_append_format_sdata(const LogMessage *self, GString *result,  guint32 se
     There was no meta block and if sequenceId must be added (seq_num!=0)
     create the whole meta block with sequenceId
   */
-  if (!has_seq_num && seq_num!=0)
+  if (!has_seq_num && seq_num != 0)
     {
       GString *sequence_id = scratch_buffers_alloc();
       format_uint64_padded(sequence_id, 0, 0, 10, seq_num);
@@ -1381,9 +1358,11 @@ log_msg_clear(LogMessage *self)
 {
   g_assert(!log_msg_is_write_protected(self));
 
-  if(log_msg_chk_flag(self, LF_STATE_OWN_PAYLOAD))
+  self->generation++;
+  if (log_msg_chk_flag(self, LF_STATE_OWN_PAYLOAD))
     nv_table_unref(self->payload);
   self->payload = nv_table_new(LM_V_MAX, 16, 256);
+  log_msg_set_flag(self, LF_STATE_OWN_PAYLOAD);
 
   if (log_msg_chk_flag(self, LF_STATE_OWN_TAGS) && self->tags)
     {
@@ -1480,6 +1459,24 @@ log_msg_clone_ack(LogMessage *msg, AckType ack_type)
   log_msg_ack(msg->original, &path_options, ack_type);
 }
 
+static inline LogMessage *
+log_msg_alloc_clone(LogMessage *original)
+{
+  LogMessage *msg;
+
+  /* NOTE: logmsg_node_max is updated from parallel threads without locking. */
+  gint nodes = (volatile gint) logmsg_queue_node_max;
+
+  gsize alloc_size = sizeof(LogMessage) + sizeof(LogMessageQueueNode) * nodes;
+  msg = g_malloc(alloc_size);
+
+  memcpy(msg, original, sizeof(*msg));
+  msg->num_nodes = nodes;
+  msg->allocated_bytes = alloc_size;
+  stats_counter_add(count_allocated_bytes, msg->allocated_bytes);
+  return msg;
+}
+
 /*
  * log_msg_clone_cow:
  *
@@ -1488,14 +1485,10 @@ log_msg_clone_ack(LogMessage *msg, AckType ack_type)
 LogMessage *
 log_msg_clone_cow(LogMessage *msg, const LogPathOptions *path_options)
 {
-  LogMessage *self = log_msg_alloc(0);
-  gsize allocated_bytes = self->allocated_bytes;
+  LogMessage *self = log_msg_alloc_clone(msg);
 
   stats_counter_inc(count_msg_clones);
   log_msg_write_protect(msg);
-
-  memcpy(self, msg, sizeof(*msg));
-  msg->allocated_bytes = allocated_bytes;
 
   msg_trace("Message was cloned",
             evt_tag_printf("original_msg", "%p", msg),
@@ -1514,7 +1507,7 @@ log_msg_clone_cow(LogMessage *msg, const LogPathOptions *path_options)
   log_msg_add_ack(self, path_options);
   if (!path_options->ack_needed)
     {
-      self->ack_func  = NULL;
+      self->ack_func = NULL;
     }
   else
     {
@@ -1862,10 +1855,10 @@ log_msg_refcache_start_producer(LogMessage *self)
 
   self->ack_and_ref_and_abort_and_suspended = (self->ack_and_ref_and_abort_and_suspended & ~LOGMSG_REFCACHE_REF_MASK) +
                                               LOGMSG_REFCACHE_REF_TO_VALUE((LOGMSG_REFCACHE_VALUE_TO_REF(self->ack_and_ref_and_abort_and_suspended) +
-                                                  LOGMSG_REFCACHE_BIAS));
+                                                LOGMSG_REFCACHE_BIAS));
   self->ack_and_ref_and_abort_and_suspended = (self->ack_and_ref_and_abort_and_suspended & ~LOGMSG_REFCACHE_ACK_MASK) +
                                               LOGMSG_REFCACHE_ACK_TO_VALUE((LOGMSG_REFCACHE_VALUE_TO_ACK(self->ack_and_ref_and_abort_and_suspended) +
-                                                  LOGMSG_REFCACHE_BIAS));
+                                                LOGMSG_REFCACHE_BIAS));
 
   logmsg_cached_refs = -LOGMSG_REFCACHE_BIAS;
   logmsg_cached_acks = -LOGMSG_REFCACHE_BIAS;
@@ -2018,6 +2011,7 @@ log_msg_tags_init(void)
   log_tags_register_predefined_tag("syslog.invalid_hostname", LM_T_SYSLOG_INVALID_HOSTNAME);
   log_tags_register_predefined_tag("syslog.unexpected_framing", LM_T_SYSLOG_UNEXPECTED_FRAMING);
   log_tags_register_predefined_tag("syslog.rfc3164_missing_header", LM_T_SYSLOG_RFC3164_MISSING_HEADER);
+  log_tags_register_predefined_tag("syslog.rfc3164_invalid_program", LM_T_SYSLOG_RFC_3164_INVALID_PROGRAM);
 
   log_tags_register_predefined_tag("syslog.rfc5424_missing_hostname", LM_T_SYSLOG_RFC5424_MISSING_HOSTNAME);
   log_tags_register_predefined_tag("syslog.rfc5424_missing_app_name", LM_T_SYSLOG_RFC5424_MISSING_APP_NAME);
@@ -2043,6 +2037,8 @@ log_msg_registry_init(void)
   nv_registry_add_predefined(logmsg_registry, LM_V_TRANSPORT, "TRANSPORT");
   nv_registry_add_predefined(logmsg_registry, LM_V_MSGFORMAT, "MSGFORMAT");
   nv_registry_add_predefined(logmsg_registry, LM_V_FILE_NAME, "FILE_NAME");
+  nv_registry_add_predefined(logmsg_registry, LM_V_PEER_IP, "PEERIP");
+  nv_registry_add_predefined(logmsg_registry, LM_V_PEER_PORT, "PEERPORT");
 
   nv_registry_assert_next_handle(logmsg_registry, LM_V_PREDEFINED_MAX);
 

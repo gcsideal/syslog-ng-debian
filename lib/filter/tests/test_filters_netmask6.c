@@ -45,8 +45,8 @@ _replace_last_zero_with_wildcard(gchar *ipv6)
   if (!ipv6)
     return;
   gsize n = strlen(ipv6);
-  if ((n >= 2) && (ipv6[n-2] == ':') && (ipv6[n-1] == '0'))
-    ipv6[n-1] = ':';
+  if ((n >= 2) && (ipv6[n - 2] == ':') && (ipv6[n - 1] == '0'))
+    ipv6[n - 1] = ':';
 }
 
 gchar *
@@ -64,10 +64,15 @@ calculate_network6(const gchar *ipv6, int prefix, gchar *calculated_network)
   return calculated_network;
 }
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 struct netmask6_tuple
 {
   gint prefix;
-  const gchar *expected_network;
+  gchar expected_network[64];
 };
 
 ParameterizedTestParameters(netmask6, test_filter)
@@ -136,12 +141,17 @@ ParameterizedTest(struct netmask6_tuple *tup, netmask6, test_filter)
 }
 
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct _FilterParamNetmask
 {
-  const gchar *msg;
-  const gchar *sockaddr;
-  const gchar *cidr;
-  gboolean    expected_result;
+  gchar    msg[128];
+  gchar    sockaddr[64];
+  gchar    cidr[64];
+  gboolean expected_result;
 } FilterParamNetmask;
 
 ParameterizedTestParameters(filter, test_filter_netmask_ip6_socket)

@@ -23,6 +23,8 @@
 #include "example_destination_worker.h"
 #include "example_destination.h"
 #include "thread-utils.h"
+#include "cfg.h"
+#include "file-perms.h"
 
 #include <stdio.h>
 
@@ -68,7 +70,18 @@ _connect(LogThreadedDestWorker *s)
   ExampleDestinationWorker *self = (ExampleDestinationWorker *)s;
   ExampleDestinationDriver *owner = (ExampleDestinationDriver *) s->owner;
 
-  self->file = fopen(owner->filename->str, "a");
+  /*
+   * Prefer file_perm_options_fopen() over a bare fopen()/open() whenever a
+   * destination writes to a local file -- see the function's documentation
+   * in lib/file-perms.c for the rationale (honours perm()/owner()/group(),
+   * tight-default creation mode, O_NOFOLLOW, O_CLOEXEC).
+   *
+   * A real driver should expose its own FilePermOptions through grammar
+   * (like affile does). Here we just honour the global perm()/owner()/group()
+   * defaults via the GlobalConfig reachable from the owning LogPipe.
+   */
+  GlobalConfig *cfg = log_pipe_get_config(&s->owner->super.super.super);
+  self->file = file_perm_options_fopen(&cfg->file_perm_options, owner->filename->str, "a");
   if (!self->file)
     {
       msg_error("Could not open file", evt_tag_error("error"));

@@ -136,8 +136,7 @@ _move_messages_from_overflow(LogQueueDiskNonReliable *self)
             {
               log_queue_disk_update_disk_related_counters(&self->super);
               log_queue_memory_usage_sub(&self->super.super, log_msg_get_size(msg));
-              log_msg_ack(msg, &path_options, AT_PROCESSED);
-              log_msg_unref(msg);
+              log_msg_drop(msg, &path_options, AT_PROCESSED);
             }
           else
             {
@@ -210,8 +209,7 @@ _ack_backlog(LogQueue *s, gint num_msg_to_ack)
       msg = g_queue_pop_head(self->backlog);
       POINTER_TO_LOG_PATH_OPTIONS(g_queue_pop_head(self->backlog), &path_options);
       log_queue_memory_usage_sub(&self->super.super, log_msg_get_size(msg));
-      log_msg_ack(msg, &path_options, AT_PROCESSED);
-      log_msg_unref(msg);
+      log_msg_drop(msg, &path_options, AT_PROCESSED);
     }
 }
 
@@ -414,10 +412,7 @@ _push_tail_disk(LogQueueDiskNonReliable *self, LogMessage *msg, const LogPathOpt
 {
   gboolean result = _ensure_serialized_and_write_to_disk(self, msg, serialized_msg);
   if (result)
-    {
-      log_msg_ack(msg, path_options, AT_PROCESSED);
-      log_msg_unref(msg);
-    }
+    log_msg_drop(msg, path_options, AT_PROCESSED);
 
   log_queue_disk_update_disk_related_counters(&self->super);
 
@@ -500,8 +495,7 @@ _empty_queue(LogQueueDiskNonReliable *self, GQueue *q)
 
       log_queue_memory_usage_sub(&self->super.super, log_msg_get_size(lm));
 
-      log_msg_ack(lm, &path_options, AT_PROCESSED);
-      log_msg_unref(lm);
+      log_msg_drop(lm, &path_options, AT_PROCESSED);
     }
 }
 

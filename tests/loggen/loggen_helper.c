@@ -220,7 +220,7 @@ time_val_diff_in_sec(struct timeval *t1, struct timeval *t2)
 {
   struct timeval res;
   time_val_diff_in_timeval(&res, t1, t2);
-  return (double)res.tv_sec + (double)res.tv_usec/USEC_PER_SEC;
+  return (double)res.tv_sec + (double)res.tv_usec / USEC_PER_SEC;
 }
 
 size_t
@@ -273,6 +273,7 @@ open_ssl_connection(int sock_fd)
   if (NULL == (ssl = SSL_new(ctx)))
     {
       ERROR("error creating SSL\n");
+      SSL_CTX_free(ctx);
       return NULL;
     }
 
@@ -281,6 +282,8 @@ open_ssl_connection(int sock_fd)
     {
       ERROR("SSL connect failed\n");
       ERR_print_errors_fp(stderr);
+      SSL_CTX_free(ctx);
+      SSL_free(ssl);
       return NULL;
     }
 
@@ -389,7 +392,7 @@ generate_proxy_header_v2(char *buffer, int buffer_size, int thread_id, const cha
   gint src_port, dst_port;
 
   struct proxy_hdr_v2 *proxy_hdr = (struct proxy_hdr_v2 *) buffer;
-  union proxy_addr *proxy_adr = (union proxy_addr *) (proxy_hdr+1);
+  union proxy_addr *proxy_adr = (union proxy_addr *) (proxy_hdr + 1);
 
   g_assert(buffer_size > sizeof(*proxy_hdr) + sizeof(*proxy_adr));
 

@@ -106,7 +106,7 @@ _normalize_path(const gchar *path)
 {
   const int length = strlen(path);
 
-  if ('/' == path[length-1] || '\\' == path[length-1])
+  if ('/' == path[length - 1] || '\\' == path[length - 1])
     return g_path_get_dirname(path);
 
   return g_strdup(path);
@@ -129,6 +129,7 @@ disk_queue_options_set_default_options(DiskQueueOptions *self)
   self->capacity_bytes = -1;
   self->flow_control_window_size = -1;
   self->reliable = FALSE;
+  self->compaction = FALSE;
   self->flow_control_window_bytes = -1;
   self->front_cache_size = -1;
   self->dir = g_strdup(get_installation_path_for(SYSLOG_NG_PATH_LOCALSTATEDIR));

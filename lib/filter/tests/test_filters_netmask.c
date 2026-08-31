@@ -40,11 +40,16 @@
 
 TestSuite(filter, .init = setup, .fini = teardown);
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct _FilterParamNetmask
 {
-  const gchar *msg;
-  const gchar *sockaddr;
-  const gchar *cidr;
+  gchar msg[128];
+  gchar sockaddr[64];
+  gchar cidr[64];
   gboolean    expected_result;
 } FilterParamNetmask;
 

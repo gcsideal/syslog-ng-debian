@@ -47,7 +47,7 @@
 #include "stats/stats-control.h"
 #include "healthcheck/healthcheck-control.h"
 #include "signal-handler.h"
-#include "cfg-monitor.h"
+#include "file-monitor.h"
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -167,7 +167,7 @@ struct _MainLoop
 
   MainLoopOptions *options;
   ControlServer *control_server;
-  CfgMonitor *cfg_monitor;
+  FileMonitor *cfg_monitor;
 
   struct
   {
@@ -248,8 +248,8 @@ main_loop_reload_config_revert(gpointer user_data)
 {
   MainLoop *self = (MainLoop *) user_data;
 
-  cfg_persist_config_move(self->new_config, self->old_config);
   cfg_deinit(self->new_config);
+  cfg_persist_config_move(self->new_config, self->old_config);
   if (!cfg_init(self->old_config))
     {
       /* hmm. hmmm, error reinitializing old configuration, we're hosed.
@@ -280,7 +280,7 @@ main_loop_reload_config_apply(gpointer user_data)
           cfg_free(self->new_config);
           self->new_config = NULL;
         }
-      is_reloading_scheduled = FALSE;
+      set_reloading_scheduled(FALSE);
       return;
     }
 
@@ -292,8 +292,7 @@ main_loop_reload_config_apply(gpointer user_data)
    * self->current_configuration still points to the old config.  We either
    * go to the new config if cfg_init() is successful (just below) or revert
    * to the old one if it's not.
-   * */
-
+   */
   app_config_stopped();
 
   self->last_config_reload_successful = cfg_init(self->new_config);
@@ -311,14 +310,13 @@ main_loop_reload_config_apply(gpointer user_data)
   cfg_free(self->old_config);
   self->current_configuration = self->new_config;
   service_management_clear_status();
-  msg_notice("Configuration reload request received, reloading configuration");
+  msg_notice("Loading the new configuration");
 
   stats_counter_set(self->metrics.last_successful_reload, (gsize) self->last_config_reload_time);
 
   /* this is already running with the new config in place */
   main_loop_reload_config_finished(self);
 }
-
 
 /* initiate configuration reload */
 gboolean
@@ -335,7 +333,7 @@ main_loop_reload_config_prepare(MainLoop *self, GError **error)
                   "Unable to trigger a reload while a termination is in progress");
       return FALSE;
     }
-  if (is_reloading_scheduled)
+  if (is_reloading_scheduled())
     {
       g_set_error(error, MAIN_LOOP_ERROR, MAIN_LOOP_ERROR_RELOAD_FAILED,
                   "Unable to trigger a reload while another reload attempt is in progress");
@@ -357,14 +355,14 @@ main_loop_reload_config_prepare(MainLoop *self, GError **error)
                   "Syntax error parsing configuration file");
       return FALSE;
     }
-  is_reloading_scheduled = TRUE;
+  set_reloading_scheduled(TRUE);
   return TRUE;
 }
 
 void
 main_loop_reload_config_commence(MainLoop *self)
 {
-  g_assert(is_reloading_scheduled == TRUE);
+  g_assert(is_reloading_scheduled() == TRUE);
   main_loop_worker_sync_call(main_loop_reload_config_apply, self);
 }
 
@@ -395,7 +393,7 @@ block_till_workers_exit(void)
         {
           /* timeout has passed. */
           fprintf(stderr, "Main thread timed out (15s) while waiting workers threads to exit. "
-                  "workers_running: %d. Continuing ...\n", main_loop_workers_running);
+                          "workers_running: %d. Continuing ...\n", main_loop_workers_running);
           break;
         }
     }
@@ -475,7 +473,7 @@ main_loop_exit_initiate(gpointer user_data)
   if (main_loop_is_terminating(self))
     return;
 
-  control_server_cancel_workers(self->control_server);
+  control_server_cancel_all_workers(self->control_server);
 
   app_pre_shutdown();
 
@@ -562,7 +560,6 @@ _register_signal_handler(struct iv_signal *signal_poll, gint signum, void (*hand
 {
   IV_SIGNAL_INIT(signal_poll);
   signal_poll->signum = signum;
-  signal_poll->flags = IV_SIGNAL_FLAG_EXCLUSIVE;
   signal_poll->cookie = user_data;
   signal_poll->handler = handler;
   iv_signal_register(signal_poll);
@@ -640,12 +637,14 @@ _unregister_metrics(MainLoop *self)
   stats_unlock();
 }
 
-static void
-_cfg_file_modified(const CfgMonitorEvent *event, gpointer c)
+static gboolean
+_cfg_file_modified(const FileMonitorEvent *event, gpointer c)
 {
   MainLoop *self = (MainLoop *) c;
+  if (event->event == MODIFIED)
+    stats_counter_set(self->metrics.last_cfgfile_mtime, (gsize) event->st.st_mtime);
 
-  stats_counter_set(self->metrics.last_cfgfile_mtime, (gsize) event->st.st_mtime);
+  return TRUE;
 }
 
 void
@@ -716,9 +715,9 @@ main_loop_read_and_init_config(MainLoop *self)
 
   self->control_server = control_init(resolved_configurable_paths.ctlfilename);
 
-  self->cfg_monitor = cfg_monitor_new();
-  cfg_monitor_add_watch(self->cfg_monitor, _cfg_file_modified, self);
-  cfg_monitor_start(self->cfg_monitor);
+  self->cfg_monitor = file_monitor_new(resolved_configurable_paths.cfgfilename);
+  file_monitor_add_watch(self->cfg_monitor, _cfg_file_modified, self);
+  file_monitor_start_and_check(self->cfg_monitor);
 
   main_loop_register_control_commands(self);
   stats_register_control_commands();
@@ -740,8 +739,8 @@ main_loop_deinit(MainLoop *self)
 
   if (self->cfg_monitor)
     {
-      cfg_monitor_stop(self->cfg_monitor);
-      cfg_monitor_free(self->cfg_monitor);
+      file_monitor_stop(self->cfg_monitor);
+      file_monitor_free(self->cfg_monitor);
     }
 
   control_deinit(self->control_server);

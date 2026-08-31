@@ -29,10 +29,11 @@
 typedef struct _FileReaderOptions
 {
   gint follow_freq;
+  gboolean follow_always_reads;
+  FollowMethod follow_method;
   gint multi_line_timeout;
   gboolean restore_state;
   LogReaderOptions reader_options;
-  gboolean exit_on_eof;
 } FileReaderOptions;
 
 typedef struct _FileReader FileReader;
@@ -44,16 +45,18 @@ struct _FileReader
   FileReaderOptions *options;
   FileOpener *opener;
   LogReader *reader;
+  gboolean can_check_eof;
   const gchar *persist_name;
   const gchar *persist_name_prefix;
+  gboolean monitor_can_notify_file_changes;
 
   void (*on_file_moved)(FileReader *);
 };
 
-static inline LogProtoFileReaderOptions *
+static inline LogProtoFileReaderOptionsStorage *
 file_reader_options_get_log_proto_options(FileReaderOptions *options)
 {
-  return (LogProtoFileReaderOptions *) &options->reader_options.proto_options;
+  return (LogProtoFileReaderOptionsStorage *) &options->reader_options.proto_options;
 }
 
 FileReader *file_reader_new(const gchar *filename, FileReaderOptions *options, FileOpener *opener, LogSrcDriver *owner,
@@ -73,6 +76,8 @@ void file_reader_stop_follow_file(FileReader *self);
 void file_reader_cue_buffer_flush(FileReader *self);
 
 void file_reader_options_set_follow_freq(FileReaderOptions *options, gint follow_freq);
+void file_reader_options_set_follow_always_reads(FileReaderOptions *options, gboolean follow_always_reads);
+gboolean file_reader_options_set_follow_method(FileReaderOptions *options, const gchar *follow_method);
 void file_reader_options_set_multi_line_timeout(FileReaderOptions *options, gint multi_line_timeout);
 
 void file_reader_options_defaults(FileReaderOptions *options);

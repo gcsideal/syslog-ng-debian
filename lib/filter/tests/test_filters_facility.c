@@ -36,10 +36,15 @@
 
 TestSuite(filter, .init = setup, .fini = teardown);
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct _FilterParamBits
 {
-  const gchar *msg;
-  const gchar *fac_str;
+  gchar       msg[128];
+  gchar       fac_str[32];
   gboolean    expected_result;
 } FilterParamBits;
 
@@ -67,9 +72,14 @@ ParameterizedTest(FilterParamBits *param, filter, test_filter_facility_str)
   testcase(param->msg, filter, param->expected_result);
 }
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct _FilterParamFacilities
 {
-  const gchar *msg;
+  gchar       msg[128];
   guint32     facilities;
   gboolean    expected_result;
 } FilterParamFacilities;

@@ -76,7 +76,7 @@ struct _JournalReader
   struct iv_event schedule_wakeup;
   struct iv_task restart_task;
   MainLoopIOWorkerJob io_job;
-  guint watches_running:1, suspended:1;
+  guint watches_running: 1, suspended: 1;
   gint notify_code;
   gboolean immediate_check;
 
@@ -205,22 +205,27 @@ _format_value_name_with_prefix(gchar *buf, gsize buf_len,
                                JournalReaderOptions *options,
                                const gchar *key, gssize key_len)
 {
-  gsize cont = 0;
+  /* NOTE: key is usually not NUL terminated (except if we are mapping it
+   * from the journald native key to syslog-ng field name) */
 
+  gsize cont = 0;
   if (key_len < 0)
     key_len = strlen(key);
 
   if (options->prefix)
     cont = g_strlcpy(buf, options->prefix, buf_len);
-  gsize left = buf_len - cont;
+  gssize left = buf_len - cont;
   if (left >= key_len + 1)
     {
-      strncpy(buf + cont, key, key_len);
+      /* we have more than enough space in buf */
+      memcpy(buf + cont, key, key_len);
       buf[cont + key_len] = 0;
     }
-  else
+  else if (left > 0)
     {
-      g_strlcpy(buf + cont, key, buf_len - cont);
+      /* truncate key */
+      memcpy(buf + cont, key, left - 1);
+      buf[cont + left - 1] = 0;
     }
 }
 
@@ -406,7 +411,7 @@ _skip_old_records(JournalReader *self)
   int rc = sd_journal_next(self->journal);
   if (rc < 0)
     {
-      msg_error("systemd-journal: Error processing read-old-records(no), sd_journal_next() failed after sd_journal_seek_tail()",
+      msg_error("systemd-journal: Error skipping old records, sd_journal_next() failed after sd_journal_seek_tail()",
                 evt_tag_errno("error", -rc));
       return FALSE;
     }
@@ -473,10 +478,12 @@ _seek_to_saved_state(JournalReader *self)
     {
       persist_state_unmap_entry(self->persist_state, self->persist_handle);
 
-      return _seek_to_head(self);
+      msg_error("systemd-journal: Failed to seek the journal to the last saved cursor position.",
+                evt_tag_str("cursor", state->cursor));
+      return self->options->read_old_records_on_error ? _seek_to_head(self) : _skip_old_records(self);
     }
 
-  msg_debug("systemd-journal: Seeking the journal to the last cursor position",
+  msg_debug("systemd-journal: Seeking the journal to the last saved cursor position",
             evt_tag_str("cursor", state->cursor));
 
   persist_state_unmap_entry(self->persist_state, self->persist_handle);
@@ -504,8 +511,9 @@ _set_starting_position(JournalReader *self)
 static gchar *
 _get_cursor(JournalReader *self)
 {
-  gchar *cursor;
-  sd_journal_get_cursor(self->journal, &cursor);
+  gchar *cursor = NULL;
+  if (sd_journal_get_cursor(self->journal, &cursor) < 0)
+    msg_warning("systemd-journal: Failed to get cursor position for bookmark saving", evt_tag_errno("error", errno));
   return cursor;
 }
 
@@ -514,7 +522,10 @@ _reader_save_state(Bookmark *bookmark)
 {
   JournalBookmarkData *bookmark_data = (JournalBookmarkData *)(&bookmark->container);
   JournalReaderState *state = persist_state_map_entry(bookmark->persist_state, bookmark_data->persist_handle);
-  strcpy(state->cursor, bookmark_data->cursor);
+  if (bookmark_data->cursor != NULL)
+    strcpy(state->cursor, bookmark_data->cursor);
+  else
+    strcpy(state->cursor, "");
   persist_state_unmap_entry(bookmark->persist_state, bookmark_data->persist_handle);
 }
 
@@ -772,7 +783,7 @@ _init(LogPipe *s)
 {
   JournalReader *self = (JournalReader *)s;
 
-#ifndef SYSLOG_NG_HAVE_JOURNAL_NAMESPACES
+#if ! SYSLOG_NG_HAVE_JOURNAL_NAMESPACES
   if (journal_reader_initialized)
     {
       msg_error("The configuration must not contain more than one systemd-journal() source");
@@ -814,7 +825,7 @@ _init(LogPipe *s)
     }
 
   self->immediate_check = TRUE;
-#ifndef SYSLOG_NG_HAVE_JOURNAL_NAMESPACES
+#if ! SYSLOG_NG_HAVE_JOURNAL_NAMESPACES
   journal_reader_initialized = TRUE;
 #endif
   _update_watches(self);
@@ -1017,6 +1028,12 @@ journal_reader_options_set_match_boot(JournalReaderOptions *self, gboolean enabl
 }
 
 void
+journal_reader_options_set_read_old_records_on_error(JournalReaderOptions *self, gboolean enable)
+{
+  self->read_old_records_on_error = enable;
+}
+
+void
 journal_reader_options_defaults(JournalReaderOptions *options)
 {
   log_source_options_defaults(&options->super);
@@ -1027,6 +1044,7 @@ journal_reader_options_defaults(JournalReaderOptions *options)
   options->max_field_size = DEFAULT_FIELD_SIZE;
   options->match_boot = FALSE;
   options->super.read_old_records = TRUE;
+  options->read_old_records_on_error = options->super.read_old_records;
 }
 
 void

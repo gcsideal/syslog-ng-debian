@@ -1,0 +1,268 @@
+/*
+ * Copyright (c) 2002-2012 Balabit
+ * Copyright (c) 1998-2012 Balázs Scheidler
+ * Copyright (c) 2024 Balázs Scheidler <balazs.scheidler@axoflow.com>
+ * Copyright (c) 2025 Hofi <hofione@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ * As an additional exemption you are allowed to compile & link against the
+ * OpenSSL libraries as published by the OpenSSL project. See the file
+ * COPYING for details.
+ *
+ */
+#include "console.h"
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <syslog.h>
+#include <errno.h>
+
+GMutex console_lock;
+gboolean using_initial_console = TRUE;
+gboolean console_destroyed = FALSE;
+const gchar *console_prefix;
+gint initial_console_fds[3];
+gint stolen_fds;
+
+static const gint std_fds[] = { STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO };
+static const gint std_fd_count = G_N_ELEMENTS(std_fds);
+
+/* NOTE: this is not synced with any changes and is just an indication whether we already acquired the console */
+static gboolean
+_console_is_initial(void)
+{
+  gboolean result;
+
+  /* the lock only serves a memory barrier but is not a real synchronization */
+  g_mutex_lock(&console_lock);
+  result = using_initial_console && FALSE == console_destroyed;
+  g_mutex_unlock(&console_lock);
+  return result;
+}
+
+GString *
+_get_fn_names(gint fns)
+{
+  GString *result = g_string_new(NULL);
+
+  if (fns & (1 << STDIN_FILENO))
+    g_string_append(result, "stdin");
+  if (fns & (1 << STDOUT_FILENO))
+    {
+      if (result->len > 0)
+        g_string_append_c(result, ',');
+      g_string_append(result, "stdout");
+    }
+  if (fns & (1 << STDERR_FILENO))
+    {
+      if (result->len > 0)
+        g_string_append_c(result, ',');
+      g_string_append(result, "stderr");
+    }
+
+  return result;
+}
+
+static void
+_console_release(void)
+{
+  if (using_initial_console)
+    return;
+
+  for (int i = 0; i < std_fd_count; i++)
+    if (initial_console_fds[i] >= 0)
+      {
+        dup2(initial_console_fds[i], std_fds[i]);
+        close(initial_console_fds[i]);
+        initial_console_fds[i] = -1;
+      }
+
+  using_initial_console = TRUE;
+}
+
+/**
+ * This function sends a message to the client preferring to use the stderr
+ * channel as long as it is available and switching to using syslog() if it
+ * isn't. Generally the stderr channell will be available in the startup
+ * process and in the beginning of the first startup in the
+ * supervisor/daemon processes. Later on the stderr fd will be closed and we
+ * have to fall back to using the system log.
+ **/
+void
+console_printf(const gchar *fmt, ...)
+{
+  gchar buf[2048];
+  va_list ap;
+
+  va_start(ap, fmt);
+  g_vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  if (_console_is_initial())
+    fprintf(stderr, "%s: %s\n", console_prefix, buf);
+  else
+    {
+      openlog(console_prefix, LOG_PID, LOG_DAEMON);
+      syslog(LOG_CRIT, "%s\n", buf);
+      closelog();
+    }
+}
+
+/* re-acquire a console after startup using an array of fds */
+gboolean
+console_acquire_from_fds(gint fds[3], gint fds_to_steal)
+{
+  gboolean result = FALSE;
+
+  g_mutex_lock(&console_lock);
+
+  /* NOTE: It is intentional using `using_initial_console` directly here which let us attach to a demonized instance std handlers too,
+   *       using _console_is_initial() would prevent that.
+   *       However, starting demonized will destroy (redirect to /dev/null) the std fds, it might make sense to change
+   *       the log-level via syslog-ng-ctl to debug or trace, and then redirect the output to a console.
+   */
+  if (FALSE == using_initial_console)
+    goto exit;
+
+  gboolean failed = FALSE;
+  GString *stolen_fn_names = _get_fn_names(fds_to_steal);
+  gchar *takeover_message_on_old_console = g_strdup_printf("[Console(%s) taken over, no further output here]\n",
+                                                           stolen_fn_names->str);
+  ssize_t ret = write(STDOUT_FILENO, takeover_message_on_old_console, strlen(takeover_message_on_old_console));
+  (void) ret; /* silence unused result (and this way variable) warning */
+  g_free(takeover_message_on_old_console);
+  g_string_free(stolen_fn_names, TRUE);
+
+  stolen_fds = fds_to_steal;
+
+  /* Duplicate original console fds for restoration later */
+  if ((stolen_fds & (1 << STDIN_FILENO)) && (initial_console_fds[0] = dup(STDIN_FILENO)) == -1)
+    failed = TRUE;
+  if (FALSE == failed && (stolen_fds & (1 << STDOUT_FILENO)) && (initial_console_fds[1] = dup(STDOUT_FILENO)) == -1)
+    failed = TRUE;
+  if (FALSE == failed && (stolen_fds & (1 << STDERR_FILENO)) && (initial_console_fds[2] = dup(STDERR_FILENO)) == -1)
+    failed = TRUE;
+
+  /* If any backup dup() failed, clean up and abort. */
+  if (failed)
+    {
+      console_printf("console_acquire_from_fds(): dup() failed while backing up original std fds: %s", g_strerror(errno));
+      for (int i = 0; i < std_fd_count; i++)
+        if (initial_console_fds[i] >= 0)
+          {
+            close(initial_console_fds[i]);
+            initial_console_fds[i] = -1;
+          }
+      goto exit;
+    }
+
+  /* If any replacement dup() failed, try to restore them and abort. */
+  if ((stolen_fds & (1 << STDIN_FILENO)) && dup2(fds[0], STDIN_FILENO) == -1)
+    failed = TRUE;
+  if (FALSE == failed && (stolen_fds & (1 << STDOUT_FILENO)) && dup2(fds[1], STDOUT_FILENO) == -1)
+    failed = TRUE;
+  if (FALSE == failed && (stolen_fds & (1 << STDERR_FILENO)) && dup2(fds[2], STDERR_FILENO) == -1)
+    failed = TRUE;
+
+  if (failed)
+    {
+      console_printf("console_acquire_from_fds(): dup2() failed while replacing std fds to steal: %s", g_strerror(errno));
+      _console_release();
+      goto exit;
+    }
+
+  /* At this point dup2() succeeded for all requested streams; we can close the incoming fds[] */
+  for (int i = 0; i < std_fd_count; i++)
+    if (stolen_fds & (1 << i))
+      close(fds[i]);
+
+  using_initial_console = FALSE;
+  result = TRUE;
+
+exit:
+  g_mutex_unlock(&console_lock);
+  return result;
+}
+
+/**
+ * Restore input/output/error. This function is idempotent, can be
+ * called any number of times without harm.
+ **/
+void
+console_release(void)
+{
+  g_mutex_lock(&console_lock);
+
+  gint fds_to_restore = stolen_fds;
+
+  _console_release();
+
+  GString *stolen_fn_names = _get_fn_names(fds_to_restore);
+  gchar *restore_message_on_orig_console = g_strdup_printf("[Console(%s) restored]\n",
+                                                           stolen_fn_names->str);
+  ssize_t ret = write(STDOUT_FILENO, restore_message_on_orig_console, strlen(restore_message_on_orig_console));
+  (void) ret; /* silence unused result (and this way variable) warning */
+  g_free(restore_message_on_orig_console);
+  g_string_free(stolen_fn_names, TRUE);
+
+  g_mutex_unlock(&console_lock);
+}
+
+void
+console_destroy(void)
+{
+  g_mutex_lock(&console_lock);
+
+  if (console_destroyed)
+    goto exit;
+
+  gint devnull_fd = open("/dev/null", O_RDONLY);
+  if (devnull_fd >= 0)
+    {
+      dup2(devnull_fd, STDIN_FILENO);
+      close(devnull_fd);
+    }
+  devnull_fd = open("/dev/null", O_WRONLY);
+  if (devnull_fd >= 0)
+    {
+      dup2(devnull_fd, STDOUT_FILENO);
+      dup2(devnull_fd, STDERR_FILENO);
+      close(devnull_fd);
+    }
+  clearerr(stdin);
+  clearerr(stdout);
+  clearerr(stderr);
+
+  console_destroyed = TRUE;
+
+exit:
+  g_mutex_unlock(&console_lock);
+}
+
+void
+console_global_init(const gchar *console_prefix_)
+{
+  g_mutex_init(&console_lock);
+  console_prefix = console_prefix_;
+  initial_console_fds[0] = -1;
+  initial_console_fds[1] = -1;
+  initial_console_fds[2] = -1;
+}
+
+void
+console_global_deinit(void)
+{
+  g_mutex_clear(&console_lock);
+}

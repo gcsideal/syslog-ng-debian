@@ -29,17 +29,27 @@
 
 GString *value;
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct _EncodeTestStr
 {
-  const gchar *actual;
-  const gchar *expected;
+  gchar actual[64];
+  gchar expected[64];
 } EncodeTestStr;
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct _EncodeTestForbidden
 {
-  const gchar *actual;
-  const gchar *forbidden;
-  const gchar *expected;
+  gchar actual[64];
+  gchar forbidden[16];
+  gchar expected[64];
 } EncodeTestForbidden;
 
 static void

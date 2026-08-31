@@ -69,6 +69,7 @@ struct _LogQueue
   gchar *persist_name;
 
   LogQueueMetrics metrics;
+  gboolean abandoned;
 
   GMutex lock;
   LogQueuePushNotifyFunc parallel_push_notify;
@@ -77,6 +78,7 @@ struct _LogQueue
 
   /* queue management */
   gboolean (*keep_on_reload)(LogQueue *self);
+  gboolean (*flush_on_shutdown)(LogQueue *self);
   gint64 (*get_length)(LogQueue *self);
   gboolean (*is_empty_racy)(LogQueue *self);
   void (*push_tail)(LogQueue *self, LogMessage *msg, const LogPathOptions *path_options);
@@ -94,6 +96,14 @@ log_queue_keep_on_reload(LogQueue *self)
 {
   if (self->keep_on_reload)
     return self->keep_on_reload(self);
+  return TRUE;
+}
+
+static inline gboolean
+log_queue_flush_on_shutdown(LogQueue *self)
+{
+  if (self->flush_on_shutdown)
+    return self->flush_on_shutdown(self);
   return TRUE;
 }
 
@@ -218,6 +228,9 @@ void log_queue_set_parallel_push(LogQueue *self, LogQueuePushNotifyFunc parallel
                                  GDestroyNotify user_data_destroy);
 gboolean log_queue_check_items(LogQueue *self, gint *timeout, LogQueuePushNotifyFunc parallel_push_notify,
                                gpointer user_data, GDestroyNotify user_data_destroy);
+
+void log_queue_mark_as_abandoned(LogQueue *self);
+
 void log_queue_init_instance(LogQueue *self, const gchar *persist_name, gint stats_level,
                              StatsClusterKeyBuilder *driver_sck_builder,
                              StatsClusterKeyBuilder *queue_sck_builder);

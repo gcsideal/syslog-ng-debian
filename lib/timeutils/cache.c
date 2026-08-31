@@ -76,11 +76,11 @@ TLS_BLOCK_END;
 /* this indicates that a test program is faking the current time */
 static gboolean faking_time;
 
-#define current_realtime     __tls_deref(current_realtime)
-#define invalidate_time_task __tls_deref(invalidate_time_task)
-#define local_gencounter     __tls_deref(local_gencounter)
-#define cache                __tls_deref(cache)
-#define state                __tls_deref(state)
+#define current_realtime     __slng_tls_deref(current_realtime)
+#define invalidate_time_task __slng_tls_deref(invalidate_time_task)
+#define local_gencounter     __slng_tls_deref(local_gencounter)
+#define cache                __slng_tls_deref(cache)
+#define state                __slng_tls_deref(state)
 
 static struct
 {
@@ -114,7 +114,7 @@ static GMutex localtime_lock;
 long
 get_local_timezone_ofs(time_t when)
 {
-#ifdef SYSLOG_NG_HAVE_STRUCT_TM_TM_GMTOFF
+#if SYSLOG_NG_HAVE_STRUCT_TM_TM_GMTOFF
   struct tm ltm;
 
   cached_localtime(&when, &ltm);
@@ -145,10 +145,10 @@ get_local_timezone_ofs(time_t when)
 static glong
 _get_system_tzofs(void)
 {
-#ifdef SYSLOG_NG_HAVE_TIMEZONE
+#if SYSLOG_NG_HAVE_TIMEZONE
   /* global variable */
   return (glong) timezone;
-#elif SYSLOG_NG_HAVE_STRUCT_TM_TM_GMTOFF
+#elif defined SYSLOG_NG_HAVE_STRUCT_TM_TM_GMTOFF
   time_t t = time(NULL);
   struct tm *tm;
 
@@ -267,11 +267,20 @@ _validate_current_time(void)
     }
 }
 
+/* Threads using their own GThread run loop will/can not feed/pump the ivykis loop (no public ivykis API anymore for that) */
+#if ! defined(USE_IV_FOR_TIME_INVALIDATION)
+# define USE_IV_FOR_TIME_INVALIDATION 1
+#endif
+
 static void
 _invalidate_current_time(void)
 {
   if (G_UNLIKELY(faking_time))
     return;
+  else if (FALSE == USE_IV_FOR_TIME_INVALIDATION)
+    {
+      invalidate_cached_realtime();
+    }
   else if (iv_inited())
     {
       if (invalidate_time_task.handler == NULL)
@@ -345,7 +354,7 @@ cached_localtime(time_t *when, struct tm *tm)
     }
   else
     {
-#ifdef SYSLOG_NG_HAVE_LOCALTIME_R
+#if SYSLOG_NG_HAVE_LOCALTIME_R
       localtime_r(when, tm);
 #else
       struct tm *ltm;
@@ -373,7 +382,7 @@ cached_gmtime(time_t *when, struct tm *tm)
     }
   else
     {
-#ifdef SYSLOG_NG_HAVE_GMTIME_R
+#if SYSLOG_NG_HAVE_GMTIME_R
       gmtime_r(when, tm);
 #else
       struct tm *ltm;
@@ -408,5 +417,5 @@ const gchar *const *
 cached_get_system_tznames(void)
 {
   _validate_timeutils_cache();
-  return (const gchar *const *) &state.tzname;
+  return (const gchar * const *) &state.tzname;
 }

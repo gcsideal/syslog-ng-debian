@@ -182,11 +182,16 @@ Test(test_snmp_dest, check_required_params)
   cr_assert(snmpdest_check_required_params(driver, err_msg));
 }
 
-typedef struct _snmp_obj_test_param
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
+typedef struct _SnmpObjTestParam
 {
-  const gchar *objectid;
-  const gchar *type;
-  const gchar *value;
+  gchar objectid[128];
+  gchar type[32];
+  gchar value[128];
   gboolean  expected_result;
 } SnmpObjTestParam;
 

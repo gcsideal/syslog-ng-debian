@@ -17,8 +17,14 @@ function copy_rpm_packaging_src_files_to_build_folder() {
     find /build/syslog-ng-${VERSION}/packaging/rhel/ -type f | grep --invert-match '\.spec$' | xargs -i cp {} /build/
 }
 
+function patch_source()
+{
+    echo "No patching configured for ${IMAGE_PLATFORM}"
+}
+
 function prepare_source() {
     copy_rpm_packaging_src_files_to_build_folder
+    patch_source
     cp syslog-ng-${VERSION}.tar.gz $RPMBUILD_SOURCES
 }
 

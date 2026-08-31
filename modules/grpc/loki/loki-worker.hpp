@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) 2024 Axoflow
+ * Copyright (c) 2024 Attila Szakacs <attila.szakacs@axoflow.com>
  * Copyright (c) 2023 László Várady
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -23,8 +25,8 @@
 #ifndef LOKI_WORKER_HPP
 #define LOKI_WORKER_HPP
 
-#include "loki-worker.h"
 #include "loki-dest.hpp"
+#include "grpc-dest-worker.hpp"
 
 #include "compat/cpp-start.h"
 #include "messages.h"
@@ -35,39 +37,43 @@
 #include <string>
 #include <memory>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch-default"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #include "push.grpc.pb.h"
+#pragma GCC diagnostic pop
 
 namespace syslogng {
 namespace grpc {
 namespace loki {
 
-class DestinationWorker final
+class DestinationWorker final: public syslogng::grpc::DestWorker
 {
 public:
-  DestinationWorker(LokiDestWorker *s);
-  ~DestinationWorker();
+  DestinationWorker(GrpcDestWorker *s) : syslogng::grpc::DestWorker(s) {};
+  ~DestinationWorker() {};
 
-  bool init();
-  void deinit();
-  bool connect();
-  void disconnect();
-  LogThreadedResult insert(LogMessage *msg);
-  LogThreadedResult flush(LogThreadedFlushMode mode);
+  bool init() override;
+  bool connect() override;
+  void disconnect() override;
+  LogThreadedResult insert(LogMessage *msg) override;
+  LogThreadedResult flush(LogThreadedFlushMode mode) override;
 
 private:
   void prepare_batch();
+  bool should_initiate_flush();
   void set_labels(LogMessage *msg);
   void set_timestamp(logproto::EntryAdapter *entry, LogMessage *msg);
   DestinationDriver *get_owner();
 
 private:
-  LokiDestWorker *super;
-
   bool connected;
 
   std::shared_ptr<::grpc::Channel> channel;
+  std::unique_ptr<::grpc::ClientContext> client_context;
   std::unique_ptr<logproto::Pusher::Stub> stub;
   logproto::PushRequest current_batch;
+  size_t current_batch_bytes = 0;
 };
 
 }

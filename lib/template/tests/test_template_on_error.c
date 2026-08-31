@@ -29,9 +29,14 @@
 #include "apphook.h"
 #include <libgen.h>
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct _TemplateTestCase
 {
-  const gchar *actual;
+  gchar actual[64];
   gint expected;
 } TemplateTestCase;
 

@@ -24,6 +24,7 @@
 #include "afuser.h"
 #include "messages.h"
 #include "compat/getutent.h"
+#include "template/escaping.h"
 #include "timeutils/format.h"
 
 #include <string.h>
@@ -35,11 +36,12 @@ typedef struct _AFUserDestDriver
 {
   LogDestDriver super;
   GString *username;
+  gboolean escaping;
   time_t disable_until;
   time_t time_reopen;
 } AFUserDestDriver;
 
-#ifdef SYSLOG_NG_HAVE_UTMPX_H
+#if SYSLOG_NG_HAVE_UTMPX_H
 
 typedef struct utmpx UtmpEntry;
 
@@ -76,7 +78,7 @@ _close_utmp(void)
 static gboolean
 _utmp_entry_matches(UtmpEntry *ut, GString *username)
 {
-#ifdef SYSLOG_NG_HAVE_MODERN_UTMP
+#if SYSLOG_NG_HAVE_MODERN_UTMP
   if (ut->ut_type != USER_PROCESS)
     return FALSE;
 #endif
@@ -85,7 +87,7 @@ _utmp_entry_matches(UtmpEntry *ut, GString *username)
     return TRUE;
 
   /* ut_user/ut_name may not be null-terminated */
-#ifdef SYSLOG_NG_HAVE_MODERN_UTMP
+#if SYSLOG_NG_HAVE_MODERN_UTMP
   if (strncmp(username->str, ut->ut_user, G_N_ELEMENTS(ut->ut_user)) == 0)
 #else
   if (strncmp(username->str, ut->ut_name, G_N_ELEMENTS(ut->ut_name)) == 0)
@@ -96,6 +98,14 @@ _utmp_entry_matches(UtmpEntry *ut, GString *username)
 }
 
 G_LOCK_DEFINE_STATIC(utmp_lock);
+
+void
+afuser_dd_set_escaping(LogDriver *s, gboolean enable)
+{
+  AFUserDestDriver *self = (AFUserDestDriver *) s;
+
+  self->escaping = enable;
+}
 
 void
 afuser_dd_set_time_reopen(LogDriver *s, time_t time_reopen)
@@ -109,7 +119,7 @@ static EVTTAG *
 _evt_tag_utmp_username(UtmpEntry *ut)
 {
   /* ut_user/ut_name may not be null-terminated */
-#ifdef SYSLOG_NG_HAVE_MODERN_UTMP
+#if SYSLOG_NG_HAVE_MODERN_UTMP
   return evt_tag_mem("user", ut->ut_user, G_N_ELEMENTS(ut->ut_user));
 #else
   return evt_tag_mem("user", ut->ut_name, G_N_ELEMENTS(ut->ut_name));
@@ -117,11 +127,39 @@ _evt_tag_utmp_username(UtmpEntry *ut)
 }
 
 static void
+_format_message(AFUserDestDriver *self, LogMessage *msg, GString *formatted_message)
+{
+  GString *timestamp = g_string_sized_new(0);
+  gssize message_len;
+  const gchar *message = log_msg_get_value(msg, LM_V_MESSAGE, &message_len);
+
+  format_unix_time(&msg->timestamps[LM_TS_STAMP], timestamp, TS_FMT_FULL, -1, 0);
+  g_string_append_printf(formatted_message, "%s %s ",
+                         timestamp->str,
+                         log_msg_get_value(msg, LM_V_HOST, NULL));
+  if (self->escaping)
+    log_template_default_escape_method(formatted_message, message, message_len);
+  else
+    g_string_append_len(formatted_message, message, message_len);
+  g_string_append_c(formatted_message, '\n');
+
+  g_string_free(timestamp, TRUE);
+}
+
+void
+afuser_dd_format_message(LogDriver *s, LogMessage *msg, GString *formatted_message)
+{
+  AFUserDestDriver *self = (AFUserDestDriver *) s;
+
+  g_string_truncate(formatted_message, 0);
+  _format_message(self, msg, formatted_message);
+}
+
+static void
 afuser_dd_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
 {
   AFUserDestDriver *self = (AFUserDestDriver *) s;
-  gchar buf[8192];
-  GString *timestamp;
+  GString *formatted_message;
   UtmpEntry *ut;
   time_t now;
 
@@ -129,13 +167,8 @@ afuser_dd_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
   if (self->disable_until && self->disable_until > now)
     goto finish;
 
-  timestamp = g_string_sized_new(0);
-  format_unix_time(&msg->timestamps[LM_TS_STAMP], timestamp, TS_FMT_FULL, -1, 0);
-  g_snprintf(buf, sizeof(buf), "%s %s %s\n",
-             timestamp->str,
-             log_msg_get_value(msg, LM_V_HOST, NULL),
-             log_msg_get_value(msg, LM_V_MESSAGE, NULL));
-  g_string_free(timestamp, TRUE);
+  formatted_message = g_string_sized_new(0);
+  _format_message(self, msg, formatted_message);
 
   G_LOCK(utmp_lock);
   while ((ut = _fetch_utmp_entry()))
@@ -165,12 +198,12 @@ afuser_dd_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
               msg_error("Opening tty device failed, disabling usertty() for time-reopen seconds",
                         _evt_tag_utmp_username(ut),
                         evt_tag_str("line", line),
-                        evt_tag_int("time_reopen", self->time_reopen),
+                        evt_tag_long("time_reopen", self->time_reopen),
                         evt_tag_error("errno"));
               self->disable_until = now + self->time_reopen;
               continue;
             }
-          if (write(fd, buf, strlen(buf)) < 0 && errno == EAGAIN)
+          if (write(fd, formatted_message->str, formatted_message->len) < 0 && errno == EAGAIN)
             {
               msg_notice("Writing to the user terminal has blocked for writing, disabling for time-reopen seconds",
                          evt_tag_str("user", self->username->str),
@@ -182,6 +215,7 @@ afuser_dd_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
     }
   _close_utmp();
   G_UNLOCK(utmp_lock);
+  g_string_free(formatted_message, TRUE);
 finish:
   log_dest_driver_queue_method(s, msg, path_options);
 }

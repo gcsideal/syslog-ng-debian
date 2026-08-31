@@ -8,7 +8,6 @@ include lib/logproto/Makefile.am
 include lib/rewrite/Makefile.am
 include lib/parser/Makefile.am
 include lib/filter/Makefile.am
-include lib/filterx/Makefile.am
 include lib/template/Makefile.am
 include lib/value-pairs/Makefile.am
 include lib/stats/Makefile.am
@@ -55,7 +54,7 @@ lib_libsyslog_ng_la_LIBADD		= @CORE_DEPS_LIBS@ $(libsystemd_LIBS) $(top_builddir
 lib_libsyslog_ng_la_LDFLAGS		= -no-undefined -release ${LSNG_RELEASE} \
 					  -version-info ${LSNG_CURRENT}:${LSNG_REVISION}:${LSNG_AGE}
 
-lib_test_subdirs			= lib_filter lib_filterx lib_logproto lib_parser lib_rewrite lib_template lib_stats lib_control
+lib_test_subdirs			= lib_filter lib_logproto lib_parser lib_rewrite lib_template lib_stats lib_control
 
 EXTRA_lib_libsyslog_ng_la_DEPENDENCIES       = lib/eventlog/src/libevtlog.la lib/secret-storage/libsecret-storage.la
 
@@ -97,6 +96,7 @@ pkginclude_HEADERS			+= \
 	lib/atomic-gssize.h \
 	lib/block-ref-parser.h		\
 	lib/cache.h			\
+	lib/console.h			\
 	lib/cfg.h			\
 	lib/cfg-grammar.h		\
 	lib/cfg-grammar-internal.h	\
@@ -112,14 +112,15 @@ pkginclude_HEADERS			+= \
 	lib/cfg-tree.h			\
 	lib/cfg-walker.h		\
 	lib/cfg-persist.h		\
-	lib/cfg-monitor.h		\
 	lib/children.h			\
+	lib/crypto-utils.h	\
 	lib/crypto.h			\
 	lib/dnscache.h			\
 	lib/driver.h			\
 	lib/dynamic-window-pool.h \
 	lib/dynamic-window.h \
 	lib/fdhelpers.h			\
+	lib/file-monitor.h		\
 	lib/file-perms.h		\
 	lib/find-crlf.h			\
 	lib/generic-number.h		\
@@ -152,6 +153,7 @@ pkginclude_HEADERS			+= \
 	lib/ml-batched-timer.h		\
 	lib/msg-format.h		\
 	lib/msg-stats.h			\
+	lib/notified-fd-events.h		\
 	lib/on-error.h			\
 	lib/parse-number.h		\
 	lib/pathutils.h         \
@@ -172,6 +174,7 @@ pkginclude_HEADERS			+= \
 	lib/service-management.h	\
 	lib/seqnum.h			\
 	lib/signal-handler.h		\
+	lib/stackdump.h			\
 	lib/str-format.h		\
 	lib/str-utils.h			\
 	lib/syslog-names.h		\
@@ -197,6 +200,7 @@ lib_libsyslog_ng_la_SOURCES		= \
 	lib/apphook.c			\
 	lib/block-ref-parser.c		\
 	lib/cache.c			\
+	lib/console.c			\
 	lib/cfg.c			\
 	lib/cfg-args.c			\
 	lib/cfg-block.c			\
@@ -210,13 +214,15 @@ lib_libsyslog_ng_la_SOURCES		= \
 	lib/cfg-tree.c			\
 	lib/cfg-walker.c		\
 	lib/cfg-persist.c		\
-	lib/cfg-monitor.c		\
+	lib/crypto.c			\
+	lib/crypto-utils.c	\
 	lib/children.c			\
 	lib/dnscache.c			\
 	lib/driver.c			\
 	lib/dynamic-window.c \
 	lib/dynamic-window-pool.c \
 	lib/fdhelpers.c			\
+	lib/file-monitor.c 		\
 	lib/file-perms.c		\
 	lib/find-crlf.c			\
 	lib/generic-number.c		\
@@ -265,12 +271,12 @@ lib_libsyslog_ng_la_SOURCES		= \
 	lib/scratch-buffers.c		\
 	lib/serialize.c			\
 	lib/service-management.c	\
+	lib/stackdump.c			\
 	lib/str-format.c		\
 	lib/str-utils.c			\
 	lib/syslog-names.c		\
 	lib/string-list.c		\
 	lib/ringbuffer.c		\
-	lib/crypto.c			\
 	lib/uuid.c			\
 	lib/userdb.c			\
 	lib/utf8utils.c			\
@@ -291,7 +297,6 @@ lib_libsyslog_ng_la_SOURCES		= \
 	$(transport_sources)		\
 	$(logproto_sources)		\
 	$(filter_sources)		\
-	$(filterx_sources)		\
 	$(parser_sources)		\
 	$(rewrite_sources)		\
 	$(template_sources)		\
@@ -313,7 +318,6 @@ lib_libsyslog_ng_la_SOURCES		= \
 lib_libsyslog_ng_la_CFLAGS		= \
 	$(AM_CFLAGS) \
 	$(libsystemd_CFLAGS)
-lib_libsyslog_ng_la_LIBADD		+= @OPENSSL_LIBS@
 
 # each line with closely related files (e.g. the ones generated from the same source)
 BUILT_SOURCES += lib/cfg-lex.c lib/cfg-lex.h						\
@@ -332,8 +336,11 @@ EXTRA_DIST += \
 
 lib/plugin-types.h: lib/cfg-grammar.h
 
+%.table: %.gperf
+	$(GPERF) --language=ANSI-C $< --output $@
+
 %.h: %.table
-	$(GPERF) $< --output $@
+	$(GPERF) --language=ANSI-C $< --output $@
 
 lib/ libsyslog-ng: lib/libsyslog-ng.la
 if IVYKIS_INTERNAL

@@ -28,10 +28,15 @@
 CacheResolver *path_resolver;
 Cache *path_cache;
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct _LookupParameter
 {
-  const gchar *template;
-  const gchar *expected;
+  gchar template[128];
+  gchar expected[128];
 } LookupParameter;
 
 ParameterizedTestParameters(reloc, test_path)

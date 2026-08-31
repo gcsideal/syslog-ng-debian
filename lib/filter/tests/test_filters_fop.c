@@ -48,9 +48,14 @@ _compile_standalone_filter(gchar *config_snippet)
   return tmp;
 }
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct _FilterParams
 {
-  gchar *config_snippet;
+  gchar config_snippet[128];
   gboolean expected_result;
 } FilterParams;
 

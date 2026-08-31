@@ -92,4 +92,7 @@ class SecureLogging():
 
 @pytest.fixture
 def slog(testcase_parameters):
+    instance_paths = SyslogNgPaths(testcase_parameters).set_syslog_ng_paths("server")
+    if not Path(instance_paths.get_slogkey_bin()).exists():
+        pytest.skip("secure logging (slog) was not built into syslog-ng")
     yield SecureLogging(testcase_parameters)

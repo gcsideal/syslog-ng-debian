@@ -1,0 +1,454 @@
+.TH pdbtool 1 "18 December 2025" 4.10.2 "The pdbtool manual page"
+.SH NAME
+.PP
+pdbtool \-\-\- An application to test and convert {{ site.product.short_name }} pattern database rules
+.SH SYNOPSIS
+.PP
+pdbtool [command] [options]
+.SH DESCRIPTION
+.PP
+This manual page is only an abstract.
+.PP
+The syslog\-ng OSE application can match the contents of the log messages
+to a database of predefined message patterns (also called patterndb). By
+comparing the messages to the known patterns, syslog\-ng OSE is able to
+identify the exact type of the messages, tag the messages, and sort them
+into message classes. The message classes can be used to classify the
+type of the event described in the log message. The functionality of the
+pattern database is similar to that of the logcheck project, but the
+syslog\-ng OSE approach is faster, scales better, and is much easier to
+maintain compared to the regular expressions of logcheck.
+.PP
+The pdbtool application is a utility that can be used to:
+.RS
+.IP \(bu 2
+\fB\fCtest messages\fR, or \fB\fCspecific rules\fR
+.IP \(bu 2
+convert an older pattern database to the latest database format
+.IP \(bu 2
+\fB\fCmerge pattern databases\fR into a single file
+.IP \(bu 2
+\fB\fCautomatically create pattern databases\fR from a
+large amount of log messages
+.IP \(bu 2
+\fB\fCdump the RADIX tree\fR built from the pattern database
+(or a part of it) to explore how the pattern matching works.
+.RE
+.SH THE DICTIONARY COMMAND
+.PP
+dictionary [options]
+.PP
+Lists every name\-value pair that can be set by the rules of the pattern
+database.
+.PP
+\fB\fC\-\-dump\-tag\fR or \fB\fC\-T\fR
+.PP
+.RS
+.nf
+List the tags instead of the names of the name\-value pairs.
+.fi
+.RE
+.PP
+\fB\fC\-\-pdb <path\-to\-file>\fR or \fB\fC\-p <path\-to\-file>\fR
+.PP
+.RS
+.nf
+Name of the pattern database file to use.
+.fi
+.RE
+.PP
+\fB\fC\-\-program <programname>\fR or \fB\fC\-P <programname>\fR
+.PP
+.RS
+.nf
+List only the name\-value pairs that can be set for the messages of
+the specified ${PROGRAM} application.
+.fi
+.RE
+.SH THE DUMP COMMAND
+.PP
+dump [options]
+.PP
+Display the RADIX tree built from the patterns. This shows how are the
+patterns represented in syslog\-ng OSE and it might also help to track
+down pattern\-matching problems. The dump utility can dump the tree used
+for matching the \fB\fCPROGRAM\fR or the \fB\fCMSG\fR parts.
+.PP
+\fB\fC\-\-debug\fR or \fB\fC\-d\fR
+.PP
+.RS
+.nf
+Enable debug/diagnostic messages on stderr.
+.fi
+.RE
+.PP
+\fB\fC\-\-pdb\fR or \fB\fC\-p\fR
+.PP
+.RS
+.nf
+Name of the pattern database file to use.
+.fi
+.RE
+.PP
+\fB\fC\-\-program\fR or \fB\fC\-P\fR
+.PP
+.RS
+.nf
+Displays the RADIX tree built from the patterns belonging to the
+${PROGRAM} application.
+.fi
+.RE
+.PP
+\fB\fC\-\-program\-tree\fR or \fB\fC\-T\fR
+.PP
+.RS
+.nf
+Display the ${PROGRAM} tree.
+.fi
+.RE
+.PP
+\fB\fC\-\-verbose\fR or \fB\fC\-v\fR
+.PP
+.RS
+.nf
+Enable verbose messages on stderr.
+.fi
+.RE
+.SS EXAMPLE:
+.PP
+.RS
+.nf
+pdbtool dump \-p patterndb.xml  \-P 'sshd'
+.fi
+.RE
+.PP
+.RS
+.nf
+\&'p'
+    'assword for'
+    @QSTRING:@
+        'from'
+        @QSTRING:@
+            'port '
+            @NUMBER:@ rule_id='fc49054e\-75fd\-11dd\-9bba\-001e6806451b'
+                ' ssh' rule_id='fc55cf86\-75fd\-11dd\-9bba\-001e6806451b'
+                    '2' rule_id='fc4b7982\-75fd\-11dd\-9bba\-001e6806451b'
+    'ublickey for'
+    @QSTRING:@
+        'from'
+        @QSTRING:@
+            'port '
+            @NUMBER:@ rule_id='fc4d377c\-75fd\-11dd\-9bba\-001e6806451b'
+                ' ssh' rule_id='fc5441ac\-75fd\-11dd\-9bba\-001e6806451b'
+                    '2' rule_id='fc44a9fe\-75fd\-11dd\-9bba\-001e6806451b'
+.fi
+.RE
+.SH THE MATCH COMMAND
+.PP
+match [options]
+.PP
+Use the match command to test the rules in a pattern database. The
+command tries to match the specified message against the patterns of the
+database, evaluates the parsers of the pattern, and also displays which
+part of the message was parsed successfully. The command returns with a
+0 (success) or 1 (no match) return code and displays the following
+information:
+.RS
+.IP \(bu 2
+the class assigned to the message (that is, system, violation, and
+so on),
+.IP \(bu 2
+the ID of the rule that matched the message, and
+.IP \(bu 2
+the values of the parsers (if there were parsers in the matching
+pattern).
+.RE
+.PP
+The match command has the following options:
+.PP
+\fB\fC\-\-color\-out\fR or \fB\fC\-c\fR
+.PP
+.RS
+.nf
+Color the terminal output to highlight the part of the message that
+was successfully parsed.
+.fi
+.RE
+.PP
+\fB\fC\-\-debug\fR or \fB\fC\-d\fR
+.PP
+.RS
+.nf
+Enable debug/diagnostic messages on stderr.
+.fi
+.RE
+.PP
+\fB\fC\-\-debug\-csv\fR or \fB\fC\-C\fR
+.PP
+.RS
+.nf
+Print the debugging information returned by the `\-\-debug\-pattern`
+option as comma\-separated values.
+.fi
+.RE
+.PP
+\fB\fC\-\-debug\-pattern\fR or \fB\fC\-D\fR
+.PP
+.RS
+.nf
+Print debugging information about the pattern matching. See also the
+`\-\-debug\-csv` option.
+.fi
+.RE
+.PP
+\fB\fC\-\-file=<filename\-with\-path>\fR or \fB\fC\-f\fR
+.PP
+.RS
+.nf
+Process the messages of the specified log file with the pattern
+database. This option allows to classify messages offline, and to
+apply the pattern database to already existing logfiles. To read the
+messages from the standard input (stdin), specify a hyphen (\-)
+character instead of a filename.
+.fi
+.RE
+.PP
+\fB\fC\-\-filter=<filter\-expression>\fR or \fB\fC\-F\fR
+.PP
+.RS
+.nf
+Print only messages matching the specified syslog\-ng OSE filter
+expression.
+.fi
+.RE
+.PP
+\fB\fC\-\-message\fR or \fB\fC\-M\fR
+.PP
+.RS
+.nf
+The text of the log message to match (only the `MESSAGE` part
+without the syslog headers).
+.fi
+.RE
+.PP
+\fB\fC\-\-pdb\fR or \fB\fC\-p\fR
+.PP
+.RS
+.nf
+Name of the pattern database file to use.
+.fi
+.RE
+.PP
+\fB\fC\-\-program\fR or \fB\fC\-P\fR
+.PP
+.RS
+.nf
+Name of the program to use, as contained in the `PROGRAM` part of
+the syslog message.
+.fi
+.RE
+.PP
+\fB\fC\-\-template=<template\-expression>\fR or \fB\fC\-T\fR
+.PP
+.RS
+.nf
+A syslog\-ng OSE template expression that is used to format the output
+messages.
+.fi
+.RE
+.PP
+\fB\fC\-\-verbose\fR or \fB\fC\-v\fR
+.PP
+.RS
+.nf
+Enable verbose messages on stderr.
+.fi
+.RE
+.SS EXAMPLE: CHECK
+.PP
+The following command checks if the patterndb.xml file recognizes the
+Accepted publickey for myuser from 127.0.0.1 port 59357 ssh6 message:
+.PP
+.RS
+.nf
+pdbtool match \-p patterndb.xml \-P sshd \-M "Accepted publickey for myuser from 127.0.0.1 port 59357 ssh6"
+.fi
+.RE
+.SS EXAMPLE: APPLY
+.PP
+The following example applies the sshd.pdb pattern database file to the
+log messages stored in the /var/log/messages file, and displays only the
+messages that received a useracct tag.
+.PP
+.RS
+.nf
+pdbtool match \-p sshd.pdb \\
+    –file /var/log/messages \\
+    –filter ‘tags(“usracct”);’
+.fi
+.RE
+.SH THE MERGE COMMAND
+.PP
+merge [options]
+.PP
+Use the merge command to combine separate pattern database files into a
+single file (pattern databases are usually stored in separate files per
+applications to simplify maintenance). If a file uses an older database
+format, it is automatically updated to the latest format (V3). See the
+The syslog\-ng OSE Administrator Guide for
+details on the different pattern database versions.
+.PP
+\fB\fC\-\-debug\fR or \fB\fC\-d\fR
+    Enable debug/diagnostic messages on stderr.
+.PP
+\fB\fC\-\-directory\fR or \fB\fC\-D\fR
+    The directory that contains the pattern database XML files to be
+    merged.
+.PP
+\fB\fC\-\-glob\fR or \fB\fC\-G\fR
+    Specify filenames to be merged using a glob pattern, for example,
+    using wildcards. For details on glob patterns, see man glob. This
+    pattern is applied only to the filenames, and not on directory
+    names.
+.PP
+\fB\fC\-\-pdb\fR or \fB\fC\-p\fR
+    Name of the output pattern database file.
+.PP
+\fB\fC\-\-recursive\fR or \fB\fC\-r\fR
+    Merge files from subdirectories as well.
+.PP
+\fB\fC\-\-sort\fR or \fB\fC\-s\fR
+    Sort files into alphabetic order during the merge (first sort by
+    filename, then by directory name).
+.PP
+\fB\fC\-\-verbose\fR or \fB\fC\-v\fR
+    Enable verbose messages on stderr.
+.SS EXAMPLE: MERGE
+.PP
+.RS
+.nf
+pdbtool merge \-\-recursive \-\-directory /home/me/mypatterns/  \-\-pdb /var/lib/syslog\-ng/patterndb.xml
+.fi
+.RE
+.PP
+Currently it is not possible to convert a file without merging, so if
+you only want to convert an older pattern database file to the latest
+format, you have to copy it into an empty directory.
+.SH THE PATTERNIZE COMMAND
+.PP
+.RS
+.nf
+patternize [options]
+.fi
+.RE
+.PP
+Automatically create a pattern database from a log file containing a
+large number of log messages. The resulting pattern database is printed
+to the standard output (stdout). The pdbtool patternize command uses a
+data clustering technique to find similar log messages and replacing the
+differing parts with @ESTRING:: @ parsers. For details on pattern
+databases and message parsers, see the The syslog\-ng OSE Administrator Guide \[la]https://www.syslog-ng.com/\[ra]\&. The patternize command is available
+only in version 3.2 and later.
+.PP
+\fB\fC\-\-debug\fR or \fB\fC\-d\fR
+    Enable debug/diagnostic messages on stderr.
+.PP
+\fB\fC\-\-file=<path>\fR or \fB\fC\-f\fR
+    The logfile containing the log messages to create patterns from. To
+    receive the log messages from the standard input (stdin), use \-.
+.PP
+\fB\fC\-\-iterate\-outliers\fR or \fB\fC\-o\fR
+    Recursively iterate on the log lines to cover as many log messages
+    with patterns as possible.
+.PP
+\fB\fC\-\-named\-parsers\fR or \fB\fC\-n\fR
+    The number of example log messages to include in the pattern
+    database for every pattern. Default value: 1
+.PP
+\fB\fC\-\-no\-parse\fR or \fB\fC\-p\fR
+    Do not parse the input file, treat every line as the message part of
+    a log message.
+.PP
+\fB\fC\-\-samples=<number\-of\-samples>\fR
+    Include a generated name in the parsers, for example,
+    \fB\&.dict.string1\fP, \fB\&.dict.string2\fP, and so on.
+.PP
+\fB\fC\-\-support=<number>\fR or \fB\fC\-S\fR
+    A pattern is added to the output pattern database if at least the
+    specified percentage of log messages from the input logfile match
+    the pattern. For example, if the input logfile contains 1000 log
+    messages and the \fB\fC\-\-support=3.0\fR option is used, a pattern is created
+    only if the pattern matches at least 3 percent of the log messages
+    (that is, 30 log messages). If patternize does not create enough
+    patterns, try to decrease the support value.
+    Default value: 4.0
+.PP
+\fB\fC\-\-verbose\fR or \fB\fC\-v\fR
+    Enable verbose messages on stderr.
+.SS EXAMPLE: PATTERINZE
+.PP
+.RS
+.nf
+pdbtool patternize \-\-support=2.5 \-\-file=/var/log/messages
+.fi
+.RE
+.SH THE TEST COMMAND
+.PP
+.RS
+.nf
+test [options]
+.fi
+.RE
+.PP
+Use the test command to validate a pattern database XML file. Note that
+you must have the xmllint application installed. The test command is
+available only in syslog\-ng OSE version 3.2 and later.
+.PP
+\fB\fC\-\-color\-out\fR or \fB\fC\-c\fR
+    Enable coloring in terminal output.
+.PP
+\fB\fC\-\-debug\fR or \fB\fC\-d\fR
+    Enable debug/diagnostic messages on stderr.
+.PP
+\fB\fC\-\-debug\fR or \fB\fC\-D\fR
+    Print debugging information on non\-matching patterns.
+.PP
+\fB\fC\-\-rule\-id\fR or \fB\fC\-r\fR
+    Test only the patterndb rule (specified by its rule id) against its
+    example.
+.PP
+\fB\fC\-\-validate\fR
+    Validate a pattern database XML file.
+.PP
+\fB\fC\-\-verbose\fR or \fB\fC\-v\fR
+    Enable verbose messages on stderr.
+.SS EXAMPLE: TEST
+.PP
+.RS
+.nf
+pdbtool test \-\-validate /home/me/mypatterndb.pdb
+.fi
+.RE
+.SH FILES
+.PP
+/Users/hofi/Develop/Balabit/syslog-ng/build/install/
+.PP
+/Users/hofi/Develop/Balabit/syslog-ng/build/install/etc/syslog\-ng.conf
+.PP
+\fBNOTE:\fP
+If you experience any problems or need help with syslog\-ng OSE, see the \fIsyslog\-ng OSE Administration Guide\fP[1], or visit the \fIsyslog\-ng OSE mailing list\fP[2].
+For news and notifications about syslog\-ng OSE, visit the \fIsyslog\-ng OSE blogs\fP[3].
+.SH AUTHOR
+.PP
+This manual page was generated from the \fIsyslog\-ng OSE Administration Guide\fP[1], which was written by several contributors to whom we'd like to extend our sincere thanks.
+.SH COPYRIGHT
+.SH NOTES
+.PP
+[1] \fB\fCsyslog\-ng OSE Administration Guide\fR
+    \[la]https://syslog-ng.github.io/admin-guide/README\[ra]
+.PP
+[2] \fB\fCsyslog\-ng OSE mailing list\fR
+    \[la]https://lists.balabit.hu/mailman/listinfo/syslog-ng\[ra]
+.PP
+[3] \fB\fCsyslog\-ng OSE blogs\fR
+    \[la]https://syslog-ng.com/blog/\[ra]

@@ -56,11 +56,19 @@ _invoke_parser(gboolean (*parser)(gchar *str, gint *len, const gchar *param, gpo
   return result;
 }
 
-typedef struct _parser_test_param
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS.
+ * has_* members preserve NULL-vs-set semantics for optional string fields.
+ */
+typedef struct _ParserTestParam
 {
-  gchar *str;
-  gpointer param;
-  gchar *expected_string;
+  gchar str[32];
+  gchar param[32];
+  gboolean has_param;
+  gchar expected_string[32];
+  gboolean has_expected_string;
   gboolean expected_result;
 } ParserTestParam;
 
@@ -68,14 +76,14 @@ ParameterizedTestParameters(parser, test_string_parser)
 {
   static ParserTestParam parser_params[] =
   {
-    {.str = "foo", .param = NULL, .expected_string = "foo", .expected_result = TRUE},
-    {.str = "foo bar", .param = NULL, .expected_string = "foo", .expected_result = TRUE},
-    {.str = "foo123 bar", .param = NULL, .expected_string = "foo123", .expected_result = TRUE},
-    {.str = "foo{}", .param = NULL, .expected_string = "foo", .expected_result = TRUE},
-    {.str = "foo[]", .param = NULL, .expected_string = "foo", .expected_result = TRUE},
-    {.str = "foo", .param = "X", .expected_string = "foo", .expected_result = TRUE},
-    {.str = "foo=bar", .param = "=", .expected_string = "foo=bar", .expected_result = TRUE},
-    {.str = "", .param = NULL, .expected_string = NULL, .expected_result = FALSE},
+    {.str = "foo", .param = "", .has_param = FALSE, .expected_string = "foo", .has_expected_string = TRUE, .expected_result = TRUE},
+    {.str = "foo bar", .param = "", .has_param = FALSE, .expected_string = "foo", .has_expected_string = TRUE, .expected_result = TRUE},
+    {.str = "foo123 bar", .param = "", .has_param = FALSE, .expected_string = "foo123", .has_expected_string = TRUE, .expected_result = TRUE},
+    {.str = "foo{}", .param = "", .has_param = FALSE, .expected_string = "foo", .has_expected_string = TRUE, .expected_result = TRUE},
+    {.str = "foo[]", .param = "", .has_param = FALSE, .expected_string = "foo", .has_expected_string = TRUE, .expected_result = TRUE},
+    {.str = "foo", .param = "X", .has_param = TRUE, .expected_string = "foo", .has_expected_string = TRUE, .expected_result = TRUE},
+    {.str = "foo=bar", .param = "=", .has_param = TRUE, .expected_string = "foo=bar", .has_expected_string = TRUE, .expected_result = TRUE},
+    {.str = "", .param = "", .has_param = FALSE, .expected_string = "", .has_expected_string = FALSE, .expected_result = FALSE},
   };
 
   return cr_make_param_array(ParserTestParam, parser_params, G_N_ELEMENTS(parser_params));
@@ -86,10 +94,12 @@ ParameterizedTest(ParserTestParam *param, parser, test_string_parser)
   gchar *result_string = NULL;
   gboolean result;
 
-  result = _invoke_parser(r_parser_string, param->str, param->param, NULL, &result_string);
+  result = _invoke_parser(r_parser_string, param->str, param->has_param ? (gpointer) param->param : NULL, NULL,
+                          &result_string);
   if (param->expected_result == TRUE)
     {
       cr_assert(result, "Mismatching parser result (true expected)");
+      cr_assert(param->has_expected_string, "Expected parser output is missing");
       cr_assert_str_eq(result_string, param->expected_string, "Mismatching parser result (exp:%s, res:%s)",
                        param->expected_string, result_string);
       g_free(result_string);
@@ -100,11 +110,16 @@ ParameterizedTest(ParserTestParam *param, parser, test_string_parser)
     }
 }
 
-typedef struct _parser_test_qstring_param
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
+typedef struct _ParserQStringTestParam
 {
-  gchar *str;
-  gchar *quotes;
-  gchar *expected_string;
+  gchar str[32];
+  gchar quotes[8];
+  gchar expected_string[32];
 } ParserQStringTestParam;
 
 ParameterizedTestParameters(parser, test_qstring_parser)

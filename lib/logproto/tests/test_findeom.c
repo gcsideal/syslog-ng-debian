@@ -28,9 +28,14 @@
 #include "logmsg/logmsg.h"
 #include <stdlib.h>
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 struct testcase_tuple
 {
-  gchar *msg;
+  gchar msg[64];
   gsize msg_len;
   gint eom_ofs;
 };

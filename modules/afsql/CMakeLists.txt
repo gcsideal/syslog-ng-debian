@@ -1,19 +1,24 @@
-if (NOT DEFINED ENABLE_SQL OR ENABLE_SQL)
+if(NOT DEFINED ENABLE_SQL OR ENABLE_SQL)
   find_package(LIBDBI)
   find_package(OpenSSL)
 endif()
 
 module_switch(ENABLE_SQL "Enable SQL plugin" LIBDBI_FOUND)
-if (NOT ENABLE_SQL)
+
+if(ENABLE_SQL AND NOT LIBDBI_FOUND)
+  message(FATAL_ERROR "SQL module was explicitly enabled, but the required libdbi or openssl dependency could not be found")
+endif()
+
+if(NOT ENABLE_SQL)
   return()
 endif()
 
 set(AFSQL_SOURCES
-    afsql.c
-    afsql.h
-    afsql-parser.c
-    afsql-parser.h
-    afsql-plugin.c
+  afsql.c
+  afsql.h
+  afsql-parser.c
+  afsql-parser.h
+  afsql-plugin.c
 )
 
 add_module(
@@ -24,3 +29,4 @@ add_module(
   SOURCES ${AFSQL_SOURCES}
 )
 
+add_test_subdirectory(tests)

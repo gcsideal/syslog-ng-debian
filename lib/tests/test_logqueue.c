@@ -59,7 +59,7 @@ _threaded_feed(gpointer args)
   LogPathOptions path_options = LOG_PATH_OPTIONS_INIT;
   LogMessage *msg, *tmpl;
   struct timespec start, end;
-  glong diff;
+  gint64 diff;
 
   iv_init();
   /* emulate main loop for LogQueue */
@@ -106,7 +106,7 @@ _threaded_consume(gpointer st)
       gint slept = 0;
       msg = NULL;
 
-      while((msg = log_queue_pop_head(q, &path_options)) == NULL)
+      while ((msg = log_queue_pop_head(q, &path_options)) == NULL)
         {
           struct timespec ns;
 
@@ -123,8 +123,7 @@ _threaded_consume(gpointer st)
             }
         }
 
-      log_msg_ack(msg, &path_options, AT_PROCESSED);
-      log_msg_unref(msg);
+      log_msg_drop(msg, &path_options, AT_PROCESSED);
       msg_count++;
     }
 
@@ -193,7 +192,7 @@ Test(logqueue, test_zero_diskbuf_and_normal_acks)
     feed_some_messages(q, 10);
 
   cr_assert_eq(stats_counter_get(q->metrics.shared.queued_messages), 101);
-  cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), 101*size_when_single_msg);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), 101 * size_when_single_msg);
 
   send_some_messages(q, fed_messages, TRUE);
 
@@ -274,12 +273,12 @@ Test(logqueue, log_queue_fifo_rewind_all_and_memory_usage)
   gint size_when_single_msg = stats_counter_get(q->metrics.shared.memory_usage);
 
   feed_some_messages(q, 9);
-  cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), 10*size_when_single_msg);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), 10 * size_when_single_msg);
 
   send_some_messages(q, 10, FALSE);
   cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), 0);
   log_queue_rewind_backlog_all(q);
-  cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), 10*size_when_single_msg);
+  cr_assert_eq(stats_counter_get(q->metrics.shared.memory_usage), 10 * size_when_single_msg);
 
   log_queue_unref(q);
 }

@@ -12,6 +12,8 @@ modules_affile_libaffile_la_SOURCES	=			\
 	modules/affile/transport-prockmsg.h			\
 	modules/affile/file-reader.c				\
 	modules/affile/file-reader.h				\
+	modules/affile/file-monitor-factory.h			\
+	modules/affile/file-monitor-factory.c			\
 	modules/affile/wildcard-file-reader.c		\
 	modules/affile/wildcard-file-reader.h		\
 	modules/affile/wildcard-source.h			\
@@ -47,27 +49,28 @@ modules_affile_libaffile_la_SOURCES	=			\
 	modules/affile/affile-plugin.c \
 	modules/affile/file-list.h				\
 	modules/affile/file-list.c				\
-  modules/affile/affile-dest-internal-queue-filter.h
+	modules/affile/affile-dest-internal-queue-filter.h \
+	modules/affile/logrotate.h \
+	modules/affile/logrotate.c
 
-if HAVE_INOTIFY
-  modules_affile_libaffile_la_SOURCES +=      \
-  modules/affile/directory-monitor-inotify.h  \
-  modules/affile/directory-monitor-inotify.c
-else
-  EXTRA_DIST +=                               \
-  modules/affile/directory-monitor-inotify.h  \
-  modules/affile/directory-monitor-inotify.c
-endif
-
+# Use only one of them if both are present, such as on FreeBSD, where the inotify wrapper has started to be distributed.
+# Prioritize kqueue, as inotify is just a wrapper around it when both are available.
 if HAVE_KQUEUE
-  modules_affile_libaffile_la_SOURCES +=      \
-  modules/affile/directory-monitor-kqueue.h  \
-  modules/affile/directory-monitor-kqueue.c
+modules_affile_libaffile_la_SOURCES += \
+	modules/affile/directory-monitor-kqueue.h \
+	modules/affile/directory-monitor-kqueue.c
 else
-  EXTRA_DIST +=                               \
-  modules/affile/directory-monitor-kqueue.h  \
-  modules/affile/directory-monitor-kqueue.c
+if HAVE_INOTIFY
+modules_affile_libaffile_la_SOURCES += \
+	modules/affile/directory-monitor-inotify.h \
+	modules/affile/directory-monitor-inotify.c
 endif
+endif
+EXTRA_DIST += \
+	modules/affile/directory-monitor-inotify.h \
+	modules/affile/directory-monitor-inotify.c \
+	modules/affile/directory-monitor-kqueue.h \
+	modules/affile/directory-monitor-kqueue.c
 
 BUILT_SOURCES				+= 			\
 	modules/affile/affile-grammar.y				\

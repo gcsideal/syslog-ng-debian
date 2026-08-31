@@ -207,8 +207,11 @@ LogMacroDef macros[] =
   { "SDATA", M_SDATA },
   { "MSGHDR", M_MSGHDR },
   { "SOURCEIP", M_SOURCE_IP },
+  { "SOURCEPORT", M_SOURCE_PORT },
   { "DESTIP", M_DEST_IP },
   { "DESTPORT", M_DEST_PORT },
+  { "PEERIP", M_PEER_IP },
+  { "PEERPORT", M_PEER_PORT },
   { "IP_PROTO", M_IP_PROTOCOL },
   { "PROTO", M_PROTOCOL },
   { "RAWMSG_SIZE", M_RAWMSG_SIZE },
@@ -406,7 +409,7 @@ log_macro_expand_date_time(gint id,
       format_uint32_padded(result, 2, '0', 10, wct.wct_sec);
       break;
     case M_MSEC:
-      format_uint32_padded(result, 3, '0', 10, stamp->ut_usec/1000);
+      format_uint32_padded(result, 3, '0', 10, stamp->ut_usec / 1000);
       break;
     case M_USEC:
       format_uint32_padded(result, 6, '0', 10, stamp->ut_usec);
@@ -590,6 +593,17 @@ log_macro_expand(gint id, LogTemplateEvalOptions *options, const LogMessage *msg
       _result_append_value(result, msg, LM_V_MESSAGE, &t);
       break;
     }
+    case M_PEER_IP:
+    {
+      if (log_msg_is_value_set(msg, LM_V_PEER_IP))
+        {
+          gssize len;
+          const gchar *ip = log_msg_get_value(msg, LM_V_PEER_IP, &len);
+          g_string_append_len(result, ip, len);
+          break;
+        }
+      /* fallthrough */
+    }
     case M_SOURCE_IP:
     {
       gchar *ip;
@@ -631,6 +645,34 @@ log_macro_expand(gint id, LogTemplateEvalOptions *options, const LogMessage *msg
       if (_is_message_dest_an_ip_address(msg))
         {
           port = g_sockaddr_get_port(msg->daddr);
+        }
+      else
+        {
+          port = 0;
+        }
+      t = LM_VT_INTEGER;
+      format_uint32_padded(result, 0, 0, 10, port);
+      break;
+    }
+    case M_PEER_PORT:
+    {
+      if (log_msg_is_value_set(msg, LM_V_PEER_PORT))
+        {
+          gssize len;
+          const gchar *port = log_msg_get_value(msg, LM_V_PEER_PORT, &len);
+          t = LM_VT_INTEGER;
+          g_string_append_len(result, port, len);
+          break;
+        }
+      /* fallthrough */
+    }
+    case M_SOURCE_PORT:
+    {
+      gint port;
+
+      if (_is_message_dest_an_ip_address(msg))
+        {
+          port = g_sockaddr_get_port(msg->saddr);
         }
       else
         {
@@ -751,7 +793,7 @@ log_macro_lookup(const gchar *macro, gint len)
   gint macro_id;
 
   g_assert(macro_hash);
-  g_strlcpy(buf, macro, MIN(sizeof(buf), len+1));
+  g_strlcpy(buf, macro, MIN(sizeof(buf), len + 1));
   gpointer hash_key = g_hash_table_lookup(macro_hash, buf);
   macro_id = GPOINTER_TO_INT(hash_key);
 

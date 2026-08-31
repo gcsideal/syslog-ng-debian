@@ -64,8 +64,8 @@ assert_if_tokenizer_concatenated_result_not_match(STRTOK_R_FUN tokenizer,
                                                   const char *expected)
 {
   gchar *token;
-  gchar *saveptr;
-  gchar *result = (char *)g_malloc(strlen(input)+1);
+  gchar *saveptr = NULL;
+  gchar *result = (char *)g_malloc(strlen(input) + 1);
   gchar *raw_string;
   gchar *result_ref = NULL;
   int result_idx = 0;
@@ -94,32 +94,40 @@ assert_if_tokenizer_concatenated_result_not_match(STRTOK_R_FUN tokenizer,
   g_free(result);
 }
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS; expected_is_null preserves the original
+ * NULL-vs-empty-string expectation for cases with no tokens.
+ */
 struct strtok_params
 {
-  char *delim;
-  char *input;
-  char *expected;
+  char delim[16];
+  char input[128];
+  char expected[128];
+  gboolean expected_is_null;
 };
 
 ParameterizedTestParameters(strtok, with_literals)
 {
   static struct strtok_params params[] =
   {
-    { ".",       "token1.token2", "token1token2" },
-    { ".",       ".token", "token" },
-    { ".",       "token.", "token" },
-    { ".",       ".", NULL },
-    { "...",     ".", NULL },
-    { "... ",    "      ", NULL },
-    { "..*,;-",  ";-*token1...*****token2**,;;;.", "token1token2" },
-    { "..*,;- ", ";-*token1...*****token2**,;;;.token3", "token1token2token3" },
-    { "..*,;- ", ";-*token1...*****token2**,;;;.token3 ", "token1token2token3" }
+    { ".",       "token1.token2", "token1token2", FALSE },
+    { ".",       ".token", "token", FALSE },
+    { ".",       "token.", "token", FALSE },
+    { ".",       ".", "", TRUE },
+    { "...",     ".", "", TRUE },
+    { "... ",    "      ", "", TRUE },
+    { "..*,;-",  ";-*token1...*****token2**,;;;.", "token1token2", FALSE },
+    { "..*,;- ", ";-*token1...*****token2**,;;;.token3", "token1token2token3", FALSE },
+    { "..*,;- ", ";-*token1...*****token2**,;;;.token3 ", "token1token2token3", FALSE }
   };
 
-  return cr_make_param_array(struct strtok_params, params, sizeof(params)/sizeof(params[0]));
+  return cr_make_param_array(struct strtok_params, params, sizeof(params) / sizeof(params[0]));
 }
 
 ParameterizedTest(struct strtok_params *param, strtok, with_literals)
 {
-  assert_if_tokenizer_concatenated_result_not_match(__test_strtok_r, param->delim, param->input, param->expected);
+  assert_if_tokenizer_concatenated_result_not_match(__test_strtok_r, param->delim, param->input,
+                                                    param->expected_is_null ? NULL : param->expected);
 }

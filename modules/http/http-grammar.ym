@@ -35,6 +35,7 @@
 #include "response-handler.h"
 #include "autodetect-ca-location.h"
 #include "plugin.h"
+#include "string-list.h"
 
 #include <string.h>
 
@@ -52,7 +53,6 @@ HttpResponseHandler last_response_handler;
 %parse-param {LogDriver **instance}
 %parse-param {gpointer arg}
 
-%token KW_HTTP
 %token KW_URL
 %token KW_USER
 %token KW_PASSWORD
@@ -71,6 +71,7 @@ HttpResponseHandler last_response_handler;
 %token KW_USE_SYSTEM_CERT_STORE
 %token KW_SSL_VERSION
 %token KW_PEER_VERIFY
+%token KW_SEND_MSG_DATA_IN_HEADER
 %token KW_TIMEOUT
 %token KW_OCSP_STAPLING_VERIFY
 %token KW_TLS
@@ -148,7 +149,7 @@ http_option
       {
         GError *error = NULL;
         CHECK_ERROR_GERROR(http_dd_set_urls(last_driver, $3, &error), @3, error, "Error setting url");
-        g_list_free_full($3, free);
+        string_list_free($3);
       }
     | KW_USER       '(' string ')'            { http_dd_set_user(last_driver, $3); free($3); }
     | KW_PASSWORD   '(' string ')'            { http_dd_set_password(last_driver, $3); free($3); }
@@ -206,6 +207,7 @@ http_tls_option
           }
       }
     | KW_PEER_VERIFY '(' yesno ')'            { http_dd_set_peer_verify(last_driver, $3); }
+    | KW_SEND_MSG_DATA_IN_HEADER '(' yesno ')' { http_dd_set_send_message_data_in_header(last_driver, $3); }
     | KW_OCSP_STAPLING_VERIFY '(' yesno ')'
       {
         CHECK_ERROR(http_dd_set_ocsp_stapling_verify(last_driver, $3), @3,

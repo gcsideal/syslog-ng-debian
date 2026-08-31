@@ -32,9 +32,14 @@
 
 #define strchr_under_test _strchr_optimized_for_single_char_haystack
 
+/*
+ * Criterion parameter payloads must be self-contained here.
+ * We use fixed-size arrays (not pointers) to avoid pointer invalidation across
+ * worker process boundaries on macOS
+ */
 typedef struct _StrChrTestData
 {
-  gchar *str;
+  gchar str[32];
   int c;
   int ofs;
 } StrChrTestData;
