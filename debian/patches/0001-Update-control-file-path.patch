@@ -1,23 +1,23 @@
-From: Attila Szalay <sasa@ubainba.hu>
-Date: Sun, 18 Sep 2022 15:22:32 +0100
+From: SZALAY Attila <sasa@debian.org>
+Date: Mon, 31 Aug 2026 16:39:09 +0100
 Subject: Update control file path
 
 In Debian, the localstatedir is set to /var/lib/syslog-ng instead of the
 upstream default /var/run
 ---
- doc/man/syslog-ng.8.xml | 2 +-
+ doc/man/local/syslog-ng.8 | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/doc/man/syslog-ng.8.xml b/doc/man/syslog-ng.8.xml
-index 030d434..4df5702 100644
---- a/doc/man/syslog-ng.8.xml
-+++ b/doc/man/syslog-ng.8.xml
-@@ -103,7 +103,7 @@
-           <term><command>--control &lt;file&gt; </command> or <command>-c &lt;file&gt;</command>
-                     </term>
-           <listitem>
--            <para>Set the location of the syslog-ng control socket. Default value: <filename>/var/run/syslog-ng.ctl</filename></para>
-+            <para>Set the location of the syslog-ng control socket. Default value: <filename>/var/lib/syslog-ng/syslog-ng.ctl</filename></para>
-           </listitem>
-         </varlistentry>
-         <varlistentry>
+diff --git a/doc/man/local/syslog-ng.8 b/doc/man/local/syslog-ng.8
+index 02ff633..5b0b8e1 100644
+--- a/doc/man/local/syslog-ng.8
++++ b/doc/man/local/syslog-ng.8
+@@ -60,7 +60,7 @@ For details on the capability flags, see the following man pages: \fB\fCcap_from
+ \fBNOTE:\fP This option is highly likely to fail if another syslog\-ng OSE instance is running in the background, since it initializes several processes, such as network listeners. In such a case, the network address would already be in use.
+ .PP
+ \fB\fC\-\-control <file>\fR or \fB\fC\-c <file>\fR
+-    Set the location of the syslog\-ng OSE control socket. Default value: \fI/var/run/syslog\-ng.ctl\fP
++    Set the location of the syslog\-ng OSE control socket. Default value: \fI/var/lib/syslog\-ng/syslog\-ng.ctl\fP
+ .PP
+ \fB\fC\-\-debug\fR or \fB\fC\-d\fR
+     Start syslog\-ng OSE in debug mode.
