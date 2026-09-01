@@ -545,6 +545,7 @@ Depends: syslog-ng-scl, ${misc:Depends}
 Architecture: all
 Priority: optional
 Section: oldlibs
+Multi-Arch: foreign
 Description: transitional package
  This is a transitional package. It can safely be removed.
 
