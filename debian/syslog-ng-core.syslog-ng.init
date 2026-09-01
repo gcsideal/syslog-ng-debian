@@ -8,7 +8,7 @@
 # Short-Description: Starting system logging daemon
 # Description:       Starting syslog-NG, the next generation
 #  syslog daemon.
-### END INIT INFO#
+### END INIT INFO
 
 set -e
 
