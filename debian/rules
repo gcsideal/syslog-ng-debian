@@ -201,7 +201,7 @@ override_dh_python3:
 ##
 
 override_dh_missing:
-	dh_missing $(shell awk '{sub(/.*\//, "", $$1); print "-X"$$2$$1}' debian/syslog-ng-scl.install) --fail-missing
+	dh_missing $(shell awk '{sub(/.*\//, "", $$1); print "-X"$$2$$1}' debian/syslog-ng-scl.install)
 
 # By default, the arch:all syslog-ng package does not need anything
 # built, so build-indep shall be empty. This avoids triggering another
@@ -212,4 +212,4 @@ build-indep: ;
 
 # And for the rest, there is debhelper!
 %:
-	dh $@ --with autoreconf,python3
+	dh $@ --with python3

@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: syslog-ng maintainers <syslog-ng-maintainers@alioth-lists.debian.net>
 Uploaders: Laszlo Boszormenyi (GCS) <gcs@debian.org>,
            SZALAY Attila <sasa@debian.org>
-Build-Depends: debhelper (>= 10~),
+Build-Depends: debhelper-compat (= 13),
                automake,
                autoconf-archive,
                tzdata,
@@ -40,7 +40,7 @@ Build-Depends: debhelper (>= 10~),
                python3-pip,
                gperf
 Build-Conflicts: autoconf2.13
-Standards-Version: 4.5.0
+Standards-Version: 4.6.2
 Homepage: https://www.syslog-ng.com/
 Vcs-Git: https://github.com/gcsideal/syslog-ng-debian.git
 Vcs-Browser: https://github.com/gcsideal/syslog-ng-debian
@@ -543,7 +543,6 @@ Description: Enhanced system logging daemon (Kafka destination, based on librdka
 Package: syslog-ng-mod-extra
 Depends: syslog-ng-scl, ${misc:Depends}
 Architecture: all
-Priority: optional
 Section: oldlibs
 Description: transitional package
  This is a transitional package. It can safely be removed.
