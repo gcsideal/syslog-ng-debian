@@ -12,8 +12,6 @@ scl/collectd/plugin.conf usr/share/syslog-ng/include/scl/collectd/
 scl/telegram/telegram.conf usr/share/syslog-ng/include/scl/telegram/
 scl/pacct/plugin.conf usr/share/syslog-ng/include/scl/pacct/
 scl/loggly/loggly.conf usr/share/syslog-ng/include/scl/loggly/
-scl/kafka/kafka-java.conf usr/share/syslog-ng/include/scl/kafka/
-scl/kafka/kafka.conf usr/share/syslog-ng/include/scl/kafka/
 scl/junos/plugin.conf usr/share/syslog-ng/include/scl/junos/
 scl/snmptrap/snmptrapd-source.conf usr/share/syslog-ng/include/scl/snmptrap/
 scl/discord/discord.conf usr/share/syslog-ng/include/scl/discord/
@@ -44,7 +42,6 @@ scl/loadbalancer/gen-loadbalancer.sh usr/share/syslog-ng/include/scl/loadbalance
 scl/loadbalancer/plugin.conf usr/share/syslog-ng/include/scl/loadbalancer/
 scl/fortigate/fortigate.conf usr/share/syslog-ng/include/scl/fortigate/
 scl/default-network-drivers/plugin.conf usr/share/syslog-ng/include/scl/default-network-drivers/
-scl/elasticsearch/elastic-java.conf usr/share/syslog-ng/include/scl/elasticsearch/
 scl/elasticsearch/elastic-http.conf usr/share/syslog-ng/include/scl/elasticsearch/
 scl/graphite/README usr/share/syslog-ng/include/scl/graphite/
 scl/graphite/plugin.conf usr/share/syslog-ng/include/scl/graphite/
