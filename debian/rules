@@ -109,6 +109,7 @@ override_dh_auto_configure:
 		--enable-kafka \
 		--disable-cloud-auth \
 		--disable-mqtt \
+		--enable-slog \
 		\
 		--with-mongoc=system \
 		--with-ivykis=system \
