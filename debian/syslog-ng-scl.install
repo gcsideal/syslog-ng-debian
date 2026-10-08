@@ -57,3 +57,6 @@ scl/openobserve/openobserve.conf usr/share/syslog-ng/include/scl/openobserve/
 scl/pgsql/pgsql.conf usr/share/syslog-ng/include/scl/pgsql/
 scl/pihole/pihole.conf usr/share/syslog-ng/include/scl/pihole/
 scl/qbittorrent/qbittorrent.conf usr/share/syslog-ng/include/scl/qbittorrent/
+scl/azure/azure-monitor.conf usr/share/syslog-ng/include/scl/azure/
+scl/freebsd-audit/plugin.conf usr/share/syslog-ng/include/scl/freebsd-audit/
+scl/stats-exporter/plugin.conf usr/share/syslog-ng/include/scl/stats-exporter/
