@@ -1,0 +1,68 @@
+#!/bin/sh
+
+set -e
+
+CONFIG_FILE=/etc/syslog-ng/syslog-ng.conf
+DIST_CONFIG="${CONFIG_FILE}.dpkg-dist"
+
+if [ "$1" = configure ] && [ -n "$2" ] && [ -f "$CONFIG_FILE" ]; then
+
+    # If the new syslog-ng could not start because of the config file, we have to fix it
+    if ! /usr/sbin/syslog-ng -s -f "$CONFIG_FILE"; then
+        # First thing is to fix some well-known isssues with older versions of
+        # configuration files, or habits which was acceptable on older
+        # syslog-ng version but not any more.
+        #
+        # * Removing inclduing the tty10.conf any more, that does not exists in the new config
+        # * Replace direct link to tty10 with getvirtualconsole
+        # * Delete all backtick (from comments)
+        perl -0pi -e '
+            s/^[ \t]*\@include[ \t]+"`scl-root`\/system\/tty10\.conf"[ \t]*\r?\n//mg;
+            s/file\(`tty10`\)/getvirtconsole()/g;
+            s/`([^`]+)`/\$($1)/g;
+        ' "$CONFIG_FILE"
+
+        # If the config file still not good enough, we need to do more
+        # desperate actions.
+        if ! /usr/sbin/syslog-ng -s -f "$CONFIG_FILE"; then
+
+            # If there is no other config file we can use, we have no option
+            # but bail out.
+            if [ ! -f "$DIST_CONFIG" ]; then
+                echo "syslog-ng: configuration is invalid after upgrade; preserving $CONFIG_FILE" >&2
+                exit 1
+            fi
+
+            # if that other file also not usable, again we have no other
+            # option but to give up.
+            if ! /usr/sbin/syslog-ng -s -f "$DIST_CONFIG"; then
+                echo "syslog-ng: packaged replacement configuration is also invalid; preserving $CONFIG_FILE" >&2
+                exit 1
+            fi
+
+            # Find an available file name
+            BACKUP_FILE="${CONFIG_FILE}.dpkg-old"
+            while [ -e "$BACKUP_FILE" ]; do
+                BACKUP_FILE="${BACKUP_FILE}.old"
+            done
+
+            # ANd now we move out the broken file and use the working one
+            mv "$CONFIG_FILE" "$BACKUP_FILE"
+            if ! mv "$DIST_CONFIG" "$CONFIG_FILE"; then
+                if ! mv "$BACKUP_FILE" "$CONFIG_FILE"; then
+                    echo "syslog-ng: failed to restore $CONFIG_FILE from $BACKUP_FILE" >&2
+                    exit 1
+                fi
+                echo "syslog-ng: failed to install packaged configuration; restored $CONFIG_FILE" >&2
+                exit 1
+            fi
+
+            echo "syslog-ng: previous configuration was saved as $BACKUP_FILE" >&2
+            echo "syslog-ng: using the packaged replacement configuration" >&2
+        fi
+    fi
+fi
+
+#DEBHELPER#
+
+exit 0
