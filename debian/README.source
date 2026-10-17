@@ -78,6 +78,12 @@ We use the `debian/tools/list-modules.sh` script to construct these
 lists for us, and in `debian/rules`, we override `dh_gencontrol` to
 pass these along.
 
+### GRPC Module
+
+The GRPC module could not be compiled without downloading the opentelemetry
+git tree from the internet. Because that is not possible in the Debian build
+system, without further changes the grpc module cannot be enabled
+
  -- Gergely Nagy <algernon@madhouse-project.org>  Fri, 07 Nov 2014 08:44:36 +0100
 
 <!--
