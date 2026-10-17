@@ -2,7 +2,8 @@ syslog-ng (4.12.0-1~1.gbpd360bd) UNRELEASED; urgency=medium
 
   ** SNAPSHOT build @d360bddfc5cddabd2cd9694fc6ca1e564ae0457a **
 
-  * New upstream version 4.12.0
+  * New upstream version 4.12.0 (Closes: #1143061, #1138428)
+  * Clean up old and obsolated bugs (Closes: #831908, #844372, #970355, #992428, #996246)
 
  -- SZALAY Attila <sasa@debian.org>  Mon, 31 Aug 2026 15:45:44 +0100
 
