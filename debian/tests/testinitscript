@@ -7,9 +7,19 @@ then
     apt install --assume-yes --allow-remove-essential sysvinit-core systemd-sysv- runit-init-
     cp /usr/share/sysvinit/inittab /etc/inittab
     sed -i "/ttyS0/ s/^#//" /etc/inittab
+    if [ -e /usr/local/sbin/reboot ]; then
+        echo "/usr/local/sbin/reboot already exists; cannot install reboot workaround" >&2
+        exit 1
+    fi
+    cat > /usr/local/sbin/reboot <<'EOF'
+#!/bin/sh
+exec /usr/bin/systemctl reboot "$@"
+EOF
+    chmod 0755 /usr/local/sbin/reboot
     /tmp/autopkgtest-reboot "fixinit"
 else
     echo $ADT_REBOOT_MARK
+    rm -f /usr/local/sbin/reboot
 fi
 
 is_syslogng_run()
