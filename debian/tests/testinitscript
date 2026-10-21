@@ -1,10 +1,12 @@
 #!/bin/sh
 
 
-echo "First reboot the host to activate SystemV init system"
-if [ -z "$ADT_REBOOT_MARK" ]
-then
+case "${ADT_REBOOT_MARK:-}" in
+"")
+    echo "First reboot the host to activate SystemV init system"
     apt install --assume-yes --allow-remove-essential sysvinit-core systemd-sysv- runit-init-
+    echo "Downloading packages needed after the SystemV init switch"
+    apt-get --download-only --assume-yes install elogind libpam-elogind orphan-sysvinit-scripts systemctl procps strace less
     cp /usr/share/sysvinit/inittab /etc/inittab
     sed -i "/ttyS0/ s/^#//" /etc/inittab
     if [ -e /usr/local/sbin/reboot ]; then
@@ -17,10 +19,22 @@ exec /usr/bin/systemctl reboot "$@"
 EOF
     chmod 0755 /usr/local/sbin/reboot
     /tmp/autopkgtest-reboot "fixinit"
-else
-    echo $ADT_REBOOT_MARK
+    ;;
+fixinit)
+    echo "Installing packages required after the SystemV init switch"
     rm -f /usr/local/sbin/reboot
-fi
+    apt-get --no-download --assume-yes install elogind libpam-elogind orphan-sysvinit-scripts systemctl procps strace less
+    echo "Second reboot to activate the installed packages"
+    /tmp/autopkgtest-reboot "elogind"
+    ;;
+elogind)
+    echo "$ADT_REBOOT_MARK"
+    ;;
+*)
+    echo "Unexpected autopkgtest reboot marker: $ADT_REBOOT_MARK" >&2
+    exit 1
+    ;;
+esac
 
 is_syslogng_run()
 {
