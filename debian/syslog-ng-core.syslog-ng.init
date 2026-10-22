@@ -137,12 +137,8 @@ case "$1" in
     syslogng_start || exit 1
     ;;
   try-restart)
-    set +e
-    killproc -p "$PIDFILE" "$SYSLOGNG" 0
-    ISRUNNING=$?
-    set -e
-    if [ $ISRUNNING -eq 0 ]
-    then
+    if start-stop-daemon --stop --test --quiet --exec "$SYSLOGNG" \
+                         --pidfile "$PIDFILE"; then
       # The syslog is currently running, so we restart it
       syslogng_stop
       syslogng_start || exit 1
