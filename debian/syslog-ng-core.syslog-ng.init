@@ -97,7 +97,7 @@ syslogng_start() {
 
 syslogng_stop() {
     log_daemon_msg "Stopping system logging" "$NAME"
-    start-stop-daemon --stop --oknodo --quiet --name "$NAME" --retry 3 \
+    start-stop-daemon --stop --oknodo --quiet --exec "$SYSLOGNG" --retry 3 \
                       --pidfile "$PIDFILE"
     syslogng_wait 0 $?
     RET="$?"
