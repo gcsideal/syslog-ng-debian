@@ -79,6 +79,12 @@ criterion = $(wildcard /usr/lib/*/pkgconfig/criterion.pc)
 # This also sets SOURCE_REVISION to the debian package version.
 override_dh_auto_configure:
 	install -d debian/build-tree
+	if [ ! -e modules/grpc/protos/opentelemetry-proto/opentelemetry/proto ]; then \
+		if [ -d modules/grpc/protos/opentelemetry-proto ] && [ ! -L modules/grpc/protos/opentelemetry-proto ]; then \
+			rmdir modules/grpc/protos/opentelemetry-proto; \
+		fi; \
+		ln -s /usr/include modules/grpc/protos/opentelemetry-proto; \
+	fi
 	-rm -rf doc/man/*.?
 	SOURCE_REVISION="${DEB_VERSION}"; \
 	dh_auto_configure -- \
@@ -110,6 +116,7 @@ override_dh_auto_configure:
 		--disable-cloud-auth \
 		--disable-mqtt \
 		--enable-slog \
+		--enable-grpc \
 		\
 		--with-mongoc=system \
 		--with-ivykis=system \
@@ -123,6 +130,12 @@ override_dh_auto_configure:
 		SOURCE_REVISION="$${SOURCE_REVISION}" \
 		${SYSTEMD_CONFIGURE_OPTS} \
 		${EXTRA_CONFIGURE_OPTS}
+
+override_dh_auto_clean:
+	if [ "$$(readlink modules/grpc/protos/opentelemetry-proto)" = /usr/include ]; then \
+		rm modules/grpc/protos/opentelemetry-proto; \
+	fi
+	dh_auto_clean
 
 # The pkg-config .pc file is installed into ${libdir}/pkgconfig, but
 # we override libdir above to place everything useful there. We want
