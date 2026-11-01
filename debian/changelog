@@ -1,3 +1,9 @@
+syslog-ng (4.12.0-3) unstable; urgency=medium
+
+  * Enable gprc module (Closes: #1072321)
+
+ -- SZALAY Attila <sasa@debian.org>  Sun, 01 Nov 2026 16:29:28 +0000
+
 syslog-ng (4.12.0-2) unstable; urgency=medium
 
   * Add a workaround to reboot after init.d install.
