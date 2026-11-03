@@ -1,3 +1,6 @@
-version=3
+Version: 5
 
-https://github.com/syslog-ng/syslog-ng/tags .*/syslog-ng-([\d\.]+)\.tar\.gz
+Template: Github
+Owner: syslog-ng
+Project: syslog-ng
+Matching-Pattern: /@PACKAGE@-(\d\.[\d\.]+)
