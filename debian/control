@@ -1,6 +1,5 @@
 Source: syslog-ng
 Section: admin
-Priority: optional
 Maintainer: syslog-ng maintainers <syslog-ng-maintainers@alioth-lists.debian.net>
 Uploaders: Laszlo Boszormenyi (GCS) <gcs@debian.org>,
            SZALAY Attila <sasa@debian.org>
@@ -46,7 +45,7 @@ Build-Depends: debhelper-compat (= 13),
                gperf,
                opentelemetry-proto
 Build-Conflicts: autoconf2.13
-Standards-Version: 4.5.0
+Standards-Version: 4.7.4
 Homepage: https://www.syslog-ng.com/
 Vcs-Git: https://github.com/gcsideal/syslog-ng-debian.git
 Vcs-Browser: https://github.com/gcsideal/syslog-ng-debian
